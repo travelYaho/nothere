@@ -1,0 +1,10 @@
+# backend 로컬 전용 (루트 .gitignore 와 중복되어도 안전)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+.DS_Store
+.pytest_cache/

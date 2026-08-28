@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Test / type / lint caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Frontend (scaffold / future)
+node_modules/
+frontend/dist/
+frontend/.next/
+frontend/.nuxt/
+*.local
+
+# Notes:
+# - alembic/script.py.mako 는 ignore 하지 않음 (마이그레이션 생성 템플릿, 커밋 대상)
+# - alembic/versions/*.py 도 커밋 대상 (스키마 이력)
