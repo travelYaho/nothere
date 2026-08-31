@@ -1,6 +1,6 @@
 import { useState } from "react"
-import { ArrowRight, Bell, MapPin, Plus } from "./components/icons"
-import { Button, Chip, CongestionBadge, type CongestionLevel } from "./components/primitives"
+import { ArrowRight, Bell, MapPin, Plus } from "./components/common/icons"
+import { Button, Chip, CongestionBadge, type CongestionLevel } from "./components/common/primitives"
 import {
   DatePicker,
   FieldLabel,
@@ -9,7 +9,7 @@ import {
   Select,
   TextArea,
   TextInput,
-} from "./components/inputs"
+} from "./components/common/inputs"
 import {
   BannerCard,
   ChangeLogItem,
@@ -17,9 +17,10 @@ import {
   RecommendCard,
   ScheduleCard,
   SearchResultItem,
-} from "./components/cards"
-import { BasicHeader, BottomTab, FlowHeader, StatusBar } from "./components/navigation"
-import { AlertDialog, BottomSheet } from "./components/modals"
+} from "./components/common/cards"
+import { BasicHeader, BottomTab, FlowHeader, StatusBar } from "./components/layout/navigation"
+import { AlertDialog, BottomSheet } from "./components/feedback/modals"
+
 
 /* ── 갤러리 레이아웃 헬퍼 ─────────────────────────────────────── */
 function Section({

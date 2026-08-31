@@ -5,7 +5,8 @@
  *  - FlowHeader  : 뒤로가기 + 제목 + 스텝 + 진행바 — 온보딩 플로우
  *  - BottomTab   : 하단 탭 4개
  */
-import { Bell, Bookmark, ChevronLeft, Home, MapPin, RouteIcon, User } from "./icons"
+import { Bell, Bookmark, ChevronLeft, Home, MapPin, RouteIcon, User } from "../common/icons"
+
 
 export function StatusBar() {
   return (

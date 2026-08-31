@@ -13,7 +13,8 @@
  * 실제 앱에서는 portal + fixed 로 감싸면 됩니다.
  */
 import type { ReactNode } from "react"
-import { Button } from "./primitives"
+import { Button } from "../common/primitives"
+
 
 function Scrim({ onClick }: { onClick?: () => void }) {
   return (
