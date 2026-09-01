@@ -5,6 +5,7 @@
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.schedules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.schedule_places ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "profiles_select_own" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_insert_own" ON public.profiles;
@@ -51,3 +52,55 @@ CREATE POLICY "schedules_delete_own"
 ON public.schedules
 FOR DELETE
 USING (auth.uid() = user_id);
+
+-- schedule_places: 부모 schedules 소유자만 접근
+DROP POLICY IF EXISTS "schedule_places_select_own" ON public.schedule_places;
+DROP POLICY IF EXISTS "schedule_places_insert_own" ON public.schedule_places;
+DROP POLICY IF EXISTS "schedule_places_update_own" ON public.schedule_places;
+DROP POLICY IF EXISTS "schedule_places_delete_own" ON public.schedule_places;
+
+CREATE POLICY "schedule_places_select_own"
+ON public.schedule_places
+FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM public.schedules s
+    WHERE s.id = schedule_id AND s.user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "schedule_places_insert_own"
+ON public.schedule_places
+FOR INSERT
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.schedules s
+    WHERE s.id = schedule_id AND s.user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "schedule_places_update_own"
+ON public.schedule_places
+FOR UPDATE
+USING (
+  EXISTS (
+    SELECT 1 FROM public.schedules s
+    WHERE s.id = schedule_id AND s.user_id = auth.uid()
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1 FROM public.schedules s
+    WHERE s.id = schedule_id AND s.user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "schedule_places_delete_own"
+ON public.schedule_places
+FOR DELETE
+USING (
+  EXISTS (
+    SELECT 1 FROM public.schedules s
+    WHERE s.id = schedule_id AND s.user_id = auth.uid()
+  )
+);

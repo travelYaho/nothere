@@ -1,10 +1,7 @@
-"""홈 화면 요약 조회에 쓰는 최소 일정 모델이다.
+"""일정(schedules) ORM 모델이다.
 
-Supabase 가 DB 를 호스팅하더라도, FastAPI 가 직접 조회할 테이블 구조는 ORM 으로 정의해야 한다.
+소유자(user_id) 기준으로 조회·수정하며, 장소는 schedule_places 로 연결한다.
 """
-# [1주차 범위] 일정 CRUD·장소 등록·분석·추천은 구현하지 않는다.
-# GET /api/home 의 draftSchedule/recentSchedules 요약을 위해 최소 스키마만 둔다.
-# GET/DELETE /api/schedules* 는 이후 담당자가 구현한다.
 import enum
 from datetime import date, datetime
 from typing import TYPE_CHECKING
@@ -18,10 +15,11 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.profile import Profile
+    from app.db.models.schedule_place import SchedulePlace
 
 
 class ScheduleStatus(str, enum.Enum):
-    """홈 요약에서 구분하는 최소 일정 상태값 모음."""
+    """일정 상태값 모음."""
     DRAFT = "DRAFT"
     ANALYZED = "ANALYZED"
     EDITING = "EDITING"
@@ -37,7 +35,7 @@ IN_PROGRESS_STATUSES = (
 
 
 class Schedule(Base):
-    """로그인 사용자 소유의 일정 요약 정보를 저장하는 schedules 모델."""
+    """로그인 사용자 소유의 여행 일정."""
     __tablename__ = "schedules"
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -68,3 +66,8 @@ class Schedule(Base):
     )
 
     user: Mapped["Profile"] = relationship(back_populates="schedules")
+    places: Mapped[list["SchedulePlace"]] = relationship(
+        back_populates="schedule",
+        cascade="all, delete-orphan",
+        order_by="SchedulePlace.order_index",
+    )

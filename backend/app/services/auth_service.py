@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
-from app.core.supabase import new_anon_client
+from app.core.supabase import delete_auth_user, new_anon_client
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import SignupRequest, SignupResponse
 from app.schemas.user import UserResponse
@@ -95,6 +95,11 @@ class AuthService:
             try:
                 profile = self.users.create(user_id=user_id, nickname=payload.nickname)
             except SQLAlchemyError as exc:
+                # profiles 저장 실패 시 auth.users orphan 방지를 위해 Auth 유저를 롤백한다.
+                try:
+                    delete_auth_user(user_id)
+                except Exception:
+                    pass
                 raise AppError(
                     ErrorCode.DB_ERROR,
                     "사용자 프로필을 저장하는 중 오류가 발생했습니다.",

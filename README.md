@@ -17,7 +17,7 @@ yeogimalgo/
     │   ├── db/                   # 세션 + ORM 모델
     │   ├── repositories/         # DB CRUD
     │   ├── schemas/              # 요청/응답 Pydantic
-    │   ├── services/             # 비즈니스 로직 (1주차: auth/users/home)
+    │   ├── services/             # 비즈니스 로직 (auth/users/home/schedules)
     │   ├── clients/              # 외부 API (관광, LLM 등)
     │   ├── domains/              # 기능별 담당 코드
     │   │   ├── schedules/
@@ -31,4 +31,6 @@ yeogimalgo/
 
 
 백엔드 실행·환경변수·Swagger: [backend/README.md](backend/README.md)
+
+프론트엔드(Vite + Supabase Auth): [frontend/README.md](frontend/README.md)
 

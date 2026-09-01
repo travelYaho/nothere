@@ -28,7 +28,7 @@ class HomeService:
         self.db = db
         self.schedules = ScheduleRepository(db)
 
-    # [1주차 범위] 일정 생성/상세/삭제는 하지 않고, 홈 화면 요약만 조합한다.
+    # 홈은 요약만 반환한다. 일정 CRUD는 ScheduleService(/api/schedules)를 사용한다.
     def get_home(self, current_user: CurrentUser) -> HomeResponse:
         try:
             draft = self.schedules.get_in_progress(current_user.id)

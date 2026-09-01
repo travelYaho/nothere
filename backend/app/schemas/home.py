@@ -11,7 +11,7 @@ class HomeUserResponse(APIModel):
     nickname: str
 
 
-# [1주차 범위] 홈 응답용 최소 일정 요약 스키마. 일정 상세/장소 필드는 이후 확장.
+# [홈 범위] 홈 응답용 최소 일정 요약. 상세/장소는 /api/schedules 응답을 사용한다.
 class ScheduleSummary(APIModel):
     """홈 카드에서 보여줄 최소 일정 정보만 담는다."""
     schedule_id: UUID
