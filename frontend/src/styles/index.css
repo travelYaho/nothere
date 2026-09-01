@@ -1,0 +1,177 @@
+/* Pretendard (public CDN) + Inter (Google Fonts) — @import must precede all else */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+@import "tailwindcss";
+
+/*
+  =====================================================================
+  "여기말고" — Design Foundation
+  혼잡을 피해 여행 일정을 점검·대체해주는 모바일 서비스의 디자인 토큰.
+  Figma 임포트에서 추출한 값을 단일 소스로 정리했습니다.
+  Tailwind v4 @theme → bg-primary / text-ink / border-line 등으로 사용.
+  =====================================================================
+*/
+@theme {
+  /* ---- Brand & ink ------------------------------------------------ */
+  --color-primary: #3A8F60;
+  /* 난빛 감도는 차분하면서 화사한 숲/산 산책 그린 */
+  --color-primary-strong: #225C3C;
+  /* 배너 그라디언트 딥톤 */
+  --color-primary-foreground: #ffffff;
+
+  --color-ink: #0d1117;
+  /* 기본 텍스트 · 강한 헤딩 */
+  --color-ink-soft: #4a5568;
+  /* 보조 텍스트 · 라벨 */
+  --color-ink-muted: #8a95a5;
+  /* 캡션 */
+  --color-ink-faint: #9ba8b8;
+  /* placeholder · 비활성 라벨 */
+  --color-ink-ghost: #a9b3c1;
+  /* 입력 placeholder */
+
+  /* ---- Surfaces --------------------------------------------------- */
+  --color-canvas: #f4f6fb;
+  /* 앱 배경 */
+  --color-surface: #ffffff;
+  /* 카드 · 시트 */
+  --color-surface-sunken: #eef1f6;
+  /* 비활성 · 드롭존 */
+  --color-surface-chip: #e8edf5;
+
+  /* ---- Lines ------------------------------------------------------ */
+  --color-line: #e0e6ef;
+  /* 입력 테두리 */
+  --color-line-soft: #e8edf5;
+  /* 구분선 */
+  --color-line-chip: #dbe2ec;
+  /* 칩 테두리 */
+
+  /* ---- Congestion semantics (서비스 핵심) ------------------------- */
+  --color-congestion-high: #dd4040;
+  /* 혼잡 가능성 높음 */
+  --color-congestion-high-bg: #fdecec;
+  --color-congestion-medium: #c99a2e;
+  /* 보통 예상 */
+  --color-congestion-low: #22a565;
+  /* 여유 예상 */
+  --color-congestion-none: #9ba8b8;
+  /* 예측 정보 없음 */
+
+  /* ---- Radius ----------------------------------------------------- */
+  --radius-field: 16px;
+  /* 카드 · 입력 · 버튼 */
+  --radius-banner: 24px;
+  /* 프로모션 배너 · 바텀시트 */
+  --radius-pill: 999px;
+  /* 칩 · 뱃지 */
+
+  /* ---- Shadows (주석 해제 시 그림자 복구 가능) ------------------- */
+  /*
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-primary: 0 8px 9px rgba(58, 143, 96, 0.38);
+  --shadow-primary-soft: 0 4px 8px rgba(58, 143, 96, 0.20);
+  --shadow-sheet: 0 -8px 30px rgba(16, 24, 48, 0.12);
+  */
+  --shadow-card: none;
+  --shadow-primary: none;
+  --shadow-primary-soft: none;
+  --shadow-sheet: none;
+
+  /* ---- Type scale (px, mobile) ----------------------------------- */
+  --text-display: 24px;
+  /* 스크린 타이틀 */
+  --text-title: 19px;
+  /* 섹션 헤딩 */
+  --text-heading: 16px;
+  /* 헤더 · 버튼 */
+  --text-subhead: 15px;
+  --text-body: 14px;
+  --text-label: 13px;
+  --text-caption: 12px;
+  --text-micro: 11px;
+
+  --font-sans:
+    "Pretendard Variable", Pretendard, Inter, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+  }
+
+  /* 스크롤 중에만 스크롤바 노출 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  *:hover::-webkit-scrollbar-thumb,
+  *:active::-webkit-scrollbar-thumb {
+    background: rgba(13, 17, 23, 0.18);
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+  }
+}
+
+@layer utilities {
+  @keyframes ymg-sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes ymg-fade-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes ymg-pop-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.96);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .animate-sheet-up {
+    animation: ymg-sheet-up 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .animate-fade-in {
+    animation: ymg-fade-in 0.2s ease-out;
+  }
+
+  .animate-pop-in {
+    animation: ymg-pop-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
