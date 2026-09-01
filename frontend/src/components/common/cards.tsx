@@ -162,7 +162,7 @@ export function BannerCard({
   imageUrl,
   footer,
 }: {
-  eyebrow?: string
+  eyebrow?: React.ReactNode
   title: React.ReactNode
   subtitle?: string
   tone?: "primary" | "warn"
