@@ -13,7 +13,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.db.models.schedule import Schedule
+    from app.db.models.trip import Trip
+    from app.db.models.user_preference import UserLongTermPreference
 
 
 class Profile(Base):
@@ -39,4 +40,7 @@ class Profile(Base):
         nullable=False,
     )
 
-    schedules: Mapped[list["Schedule"]] = relationship(back_populates="user")
+    trips: Mapped[list["Trip"]] = relationship(back_populates="user")
+    long_term_preferences: Mapped[list["UserLongTermPreference"]] = relationship(
+        back_populates="user"
+    )

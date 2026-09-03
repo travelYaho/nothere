@@ -14,8 +14,8 @@ from app.services.home_service import HomeService
 router = APIRouter(tags=["home"])
 
 
-# [1주차 범위] 홈 API는 전체 일정 API를 대체하지 않는다.
-# draftSchedule/recentSchedules 요약만 반환하며, GET/DELETE /api/schedules* 는 미구현.
+# 홈 API는 전체 Trip API(STEP2~STEP9, /trips 등)를 대체하지 않는다.
+# draftSchedule/recentSchedules 필드명은 이미 배포된 홈 화면 계약이라 그대로 유지한다.
 @router.get("/home", response_model=HomeResponse)
 def get_home(
     current_user: CurrentUser = Depends(get_current_user),
