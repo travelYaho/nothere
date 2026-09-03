@@ -67,6 +67,13 @@ class TripRepository:
             .first()
         )
 
+    def mark_needs_reanalysis(self, trip: Trip) -> Trip:
+        """장소 순서변경처럼 무조건 재분석이 필요해지는 액션에 쓴다."""
+        trip.needs_reanalysis = True
+        self.db.commit()
+        self.db.refresh(trip)
+        return trip
+
     def update_conditions(
         self,
         trip: Trip,

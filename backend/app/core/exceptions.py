@@ -4,15 +4,25 @@ from typing import Any
 
 class AppError(Exception):
     """HTTP 응답으로 직결되는 업무 예외를 담는 커스텀 예외."""
-    def __init__(self, code: str, message: str, status_code: int = 400) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        status_code: int = 400,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
         self.code = code
         self.message = message
         self.status_code = status_code
+        # remainingCount 처럼 code/message 만으로는 표현 안 되는 부가 정보.
+        # 키는 이미 camelCase 로 직접 넣는다(이 dict 는 APIModel 을 안 거치므로
+        # alias_generator 가 적용되지 않는다).
+        self.extra = extra or {}
         super().__init__(message)
 
     def to_dict(self) -> dict[str, Any]:
-        """프론트가 기대하는 {code, message} 형식으로 직렬화한다."""
-        return {"code": self.code, "message": self.message}
+        """프론트가 기대하는 {code, message, ...extra} 형식으로 직렬화한다."""
+        return {"code": self.code, "message": self.message, **self.extra}
 
 
 class ErrorCode:
@@ -31,3 +41,5 @@ class ErrorCode:
     # 기존 코드 컨벤션(AUTH_* 등)에 맞춰 대문자 스네이크로 통일했다.
     INVALID_PREFERRED_EXPERIENCE_COUNT = "INVALID_PREFERRED_EXPERIENCE_COUNT"
     INVALID_TRAVEL_DATE = "INVALID_TRAVEL_DATE"
+    DUPLICATE_PLACE_ID = "DUPLICATE_PLACE_ID"
+    MINIMUM_PLACES_REQUIRED = "MINIMUM_PLACES_REQUIRED"
