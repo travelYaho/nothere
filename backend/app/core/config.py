@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     SUPABASE_SECRET_KEY: str
     DATABASE_URL: str
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    # 키 발급 전까지는 빈 문자열로 두고, TourAPI 클라이언트가 그 상태를
+    # EXTERNAL_API_UNAVAILABLE(503) 로 방어적으로 처리한다. Supabase 키와
+    # 달리 필수값 검증을 걸지 않아 키 없이도 서버는 정상 기동한다.
+    TOUR_API_KEY: str = ""
 
     @field_validator(
         "SUPABASE_URL",
