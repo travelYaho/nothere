@@ -7,6 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.db.models.trip import IN_PROGRESS_STATUSES, Trip, TripPreferredExperience
 
+_CONDITION_FIELDS = (
+    "title",
+    "travel_date",
+    "region_id",
+    "companion_type",
+    "transport_mode",
+    "extra_time_limit_minutes",
+)
+
 
 class TripRepository:
     """로그인 사용자 기준 Trip 생성/조회를 담당한다."""
@@ -49,6 +58,46 @@ class TripRepository:
         self.db.commit()
         self.db.refresh(trip)
         return trip
+
+    def get_owned_by_id(self, trip_id: UUID, user_id: UUID) -> Trip | None:
+        """PATCH/DELETE 전, 해당 사용자 소유의 Trip 인지까지 함께 확인한다."""
+        return (
+            self.db.query(Trip)
+            .filter(Trip.id == trip_id, Trip.user_id == user_id)
+            .first()
+        )
+
+    def update_conditions(
+        self,
+        trip: Trip,
+        *,
+        fields: dict,
+        needs_reanalysis: bool,
+        preferred_experience_tag_ids: list[int] | None,
+        preferred_experience_weights: tuple[float, ...],
+    ) -> Trip:
+        """제공된 필드만 갱신한다. preferred_experience_tag_ids 가 주어지면
+        기존 선호경험을 전체 교체한다(cascade="all, delete-orphan").
+        """
+        for field_name in _CONDITION_FIELDS:
+            if field_name in fields:
+                setattr(trip, field_name, fields[field_name])
+        trip.needs_reanalysis = needs_reanalysis
+
+        if preferred_experience_tag_ids is not None:
+            trip.preferred_experiences = [
+                TripPreferredExperience(experience_tag_id=tag_id, weight=weight)
+                for tag_id, weight in zip(preferred_experience_tag_ids, preferred_experience_weights)
+            ]
+
+        self.db.commit()
+        self.db.refresh(trip)
+        return trip
+
+    def delete(self, trip: Trip) -> None:
+        """하드 삭제. TripPlace/TripPreferredExperience 등은 FK cascade 로 함께 삭제된다."""
+        self.db.delete(trip)
+        self.db.commit()
 
     # 진행 중 여행 1건: DRAFT/ANALYZED/EDITING 중 updated_at 최신 (홈 draftSchedule용)
     def get_in_progress(self, user_id: UUID) -> Trip | None:
