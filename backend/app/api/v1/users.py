@@ -7,26 +7,27 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
 from app.db.session import get_db
+from app.schemas.common import ApiResponse
 from app.schemas.user import CurrentUser, UserResponse, UserUpdateRequest
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=ApiResponse[UserResponse])
 def get_me(
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> UserResponse:
+) -> ApiResponse[UserResponse]:
     """현재 로그인 사용자의 기본 프로필 정보를 반환한다."""
-    return UserService(db).get_me(current_user)
+    return ApiResponse(data=UserService(db).get_me(current_user))
 
 
-@router.patch("/me", response_model=UserResponse)
+@router.patch("/me", response_model=ApiResponse[UserResponse])
 def update_me(
     payload: UserUpdateRequest,
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> UserResponse:
+) -> ApiResponse[UserResponse]:
     """닉네임과 프로필 이미지 URL 을 부분 수정한다."""
-    return UserService(db).update_me(current_user, payload)
+    return ApiResponse(data=UserService(db).update_me(current_user, payload))
