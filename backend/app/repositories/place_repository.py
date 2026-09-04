@@ -4,7 +4,7 @@ from uuid import UUID
 from geoalchemy2.elements import WKTElement
 from sqlalchemy.orm import Session
 
-from app.db.models.place import Place
+from app.db.models.place import Place, PlaceExperienceTag
 
 
 class PlaceRepository:
@@ -35,6 +35,7 @@ class PlaceRepository:
         longitude: float | None,
         latitude: float | None,
         is_recommendable: bool = True,
+        expected_wait_minutes: int | None = None,
     ) -> Place:
         location = None
         if longitude is not None and latitude is not None:
@@ -47,8 +48,28 @@ class PlaceRepository:
             name=name,
             location=location,
             is_recommendable=is_recommendable,
+            expected_wait_minutes=expected_wait_minutes,
         )
         self.db.add(place)
         self.db.commit()
         self.db.refresh(place)
         return place
+
+    def add_experience_tag(
+        self,
+        place_id: UUID,
+        experience_tag_id: int,
+        *,
+        weight: float = 1.0,
+        source: str = "user_manual",
+    ) -> None:
+        """장소 직접 추가 시 선택한 '분류'를 place_experience_tags 에 연결한다."""
+        self.db.add(
+            PlaceExperienceTag(
+                place_id=place_id,
+                experience_tag_id=experience_tag_id,
+                weight=weight,
+                source=source,
+            )
+        )
+        self.db.commit()

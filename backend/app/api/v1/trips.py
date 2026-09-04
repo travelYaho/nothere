@@ -12,6 +12,7 @@ from app.schemas.trip import (
     TripConditionsUpdateResponse,
     TripCreateRequest,
     TripCreateResponse,
+    TripDetailResponse,
 )
 from app.schemas.user import CurrentUser
 from app.services.trip_service import TripService
@@ -27,6 +28,16 @@ def create_trip(
 ) -> ApiResponse[TripCreateResponse]:
     """STEP2 폼 제출 시 여행 일정을 생성하고 STEP3 진입 정보를 반환한다."""
     return ApiResponse(data=TripService(db).create_trip(current_user, payload))
+
+
+@router.get("/{trip_id}", response_model=ApiResponse[TripDetailResponse])
+def get_trip(
+    trip_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[TripDetailResponse]:
+    """일정 상세(이어서 진행) — 조건 + 등록된 장소 목록을 함께 반환한다."""
+    return ApiResponse(data=TripService(db).get_trip_detail(current_user, trip_id))
 
 
 @router.patch("/{trip_id}/conditions", response_model=ApiResponse[TripConditionsUpdateResponse])

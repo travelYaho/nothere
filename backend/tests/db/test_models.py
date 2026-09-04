@@ -47,7 +47,11 @@ def test_region_matches_erd_exactly():
 
 
 def test_place_uses_geography_location_not_lat_lng():
-    """Place.location 은 위경도 분리 컬럼이 아니라 GEOGRAPHY 단일 컬럼이어야 한다."""
+    """Place.location 은 위경도 분리 컬럼이 아니라 GEOGRAPHY 단일 컬럼이어야 한다.
+
+    expected_wait_minutes 는 ERD 원본엔 없지만, "장소 직접 추가"(커스텀 장소)
+    기능에 실제로 필요해 의도적으로 추가한 컬럼이라 허용 목록에 포함한다.
+    """
     columns = _columns("places")
     assert columns == {
         "id",
@@ -57,6 +61,7 @@ def test_place_uses_geography_location_not_lat_lng():
         "name",
         "location",
         "is_recommendable",
+        "expected_wait_minutes",
     }
     assert "latitude" not in columns
     assert "longitude" not in columns

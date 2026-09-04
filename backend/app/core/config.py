@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # EXTERNAL_API_UNAVAILABLE(503) 로 방어적으로 처리한다. Supabase 키와
     # 달리 필수값 검증을 걸지 않아 키 없이도 서버는 정상 기동한다.
     TOUR_API_KEY: str = ""
+    # 장소 직접 추가 시 주소 -> 위경도 지오코딩에 쓴다. TourAPI 와 마찬가지로
+    # 없어도 서버는 뜨고, 실제 호출 시점에 EXTERNAL_API_UNAVAILABLE 로 방어한다.
+    KAKAO_REST_API_KEY: str = ""
 
     @field_validator(
         "SUPABASE_URL",

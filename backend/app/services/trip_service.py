@@ -13,6 +13,8 @@ from app.schemas.trip import (
     TripConditionsUpdateResponse,
     TripCreateRequest,
     TripCreateResponse,
+    TripDetailResponse,
+    TripPlaceDetail,
 )
 from app.schemas.user import CurrentUser
 
@@ -180,3 +182,41 @@ class TripService:
     def delete_trip(self, current_user: CurrentUser, trip_id: UUID) -> None:
         trip = self._get_owned_trip_or_404(current_user, trip_id)
         self.trips.delete(trip)
+
+    def get_trip_detail(self, current_user: CurrentUser, trip_id: UUID) -> TripDetailResponse:
+        """GET /trips/{tripId} — STEP3 화면 진입/새로고침 시 기존 상태를 복원한다."""
+        trip = self._get_owned_trip_or_404(current_user, trip_id)
+
+        # weight 내림차순 = 1/2/3순위 클릭 순서 복원(1.0/0.7/0.5).
+        preferred_tag_ids = [
+            pref.experience_tag_id
+            for pref in sorted(trip.preferred_experiences, key=lambda p: p.weight, reverse=True)
+        ]
+        places = [
+            TripPlaceDetail(
+                trip_place_id=tp.id,
+                place_id=tp.place_id,
+                name=tp.place.name,
+                visit_order=tp.position,
+                visit_time=tp.visit_time,
+                duration_minutes=tp.stay_minutes,
+                is_fixed=tp.is_fixed,
+            )
+            for tp in trip.trip_places  # 관계에 order_by="TripPlace.position" 이미 설정됨
+        ]
+
+        return TripDetailResponse(
+            trip_id=trip.id,
+            title=trip.title,
+            travel_date=trip.travel_date,
+            region_id=trip.region_id,
+            region_name=trip.region.name,
+            companion_type=trip.companion_type,
+            transport_mode=trip.transport_mode,
+            extra_time_limit_minutes=trip.extra_time_limit_minutes,
+            status=trip.status,
+            current_step=trip.current_step,
+            needs_reanalysis=trip.needs_reanalysis,
+            preferred_experience_tag_ids=preferred_tag_ids,
+            places=places,
+        )

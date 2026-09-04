@@ -8,6 +8,8 @@ from app.core.security import get_current_user
 from app.db.session import get_db
 from app.schemas.common import ApiResponse
 from app.schemas.place import (
+    CustomPlaceAddRequest,
+    CustomPlaceAddResponse,
     PlaceSearchResponse,
     TripPlaceAddRequest,
     TripPlaceAddResponse,
@@ -46,6 +48,21 @@ def add_trip_place(
 ) -> ApiResponse[TripPlaceAddResponse]:
     """검색된 장소를 여행 일정에 추가한다. 중복 등록은 409로 거절한다."""
     return ApiResponse(data=PlaceService(db).add_place_to_trip(current_user, trip_id, payload))
+
+
+@router.post(
+    "/trips/{trip_id}/places/custom",
+    response_model=ApiResponse[CustomPlaceAddResponse],
+    status_code=201,
+)
+def add_custom_trip_place(
+    trip_id: UUID,
+    payload: CustomPlaceAddRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[CustomPlaceAddResponse]:
+    """검색 결과에 없는 장소를 이름/분류/주소로 직접 등록해 일정에 추가한다."""
+    return ApiResponse(data=PlaceService(db).add_custom_place_to_trip(current_user, trip_id, payload))
 
 
 @router.delete("/trip-places/{trip_place_id}", status_code=204)

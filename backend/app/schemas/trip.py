@@ -1,5 +1,5 @@
-"""STEP2 조건입력(여행 생성) API 의 요청/응답 스키마를 정의한다."""
-from datetime import date, datetime
+"""STEP2 조건입력(여행 생성) 및 일정 상세조회 API 의 요청/응답 스키마를 정의한다."""
+from datetime import date, datetime, time
 from uuid import UUID
 
 from pydantic import Field
@@ -52,3 +52,36 @@ class TripConditionsUpdateResponse(APIModel):
     needs_reanalysis: bool
     warnings: list[str]
     updated_at: datetime
+
+
+class TripPlaceDetail(APIModel):
+    """GET /trips/{tripId} 응답에 포함되는 등록된 장소 한 건.
+
+    STEP3 리스트 카드(Figma node 48:2979/48:3158)엔 이름/방문시간/체류시간만
+    보이므로 category 는 포함하지 않는다(TourAPI 소스 장소는 애초에 category 를
+    저장하지 않기도 한다 — Place 모델 주석 참고).
+    """
+    trip_place_id: UUID
+    place_id: UUID
+    name: str
+    visit_order: int
+    visit_time: time | None = None
+    duration_minutes: int | None = None
+    is_fixed: bool
+
+
+class TripDetailResponse(APIModel):
+    """GET /trips/{tripId} 200 응답 — 일정 상세(이어서 진행)."""
+    trip_id: UUID
+    title: str
+    travel_date: date | None
+    region_id: int
+    region_name: str
+    companion_type: str | None
+    transport_mode: str | None
+    extra_time_limit_minutes: int | None
+    status: str
+    current_step: int
+    needs_reanalysis: bool
+    preferred_experience_tag_ids: list[int]
+    places: list[TripPlaceDetail]

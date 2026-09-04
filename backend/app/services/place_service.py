@@ -3,13 +3,16 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.clients import tour_api
+from app.clients import kakao_api, tour_api
 from app.core.exceptions import AppError, ErrorCode
+from app.repositories.experience_tag_repository import ExperienceTagRepository
 from app.repositories.place_repository import PlaceRepository
 from app.repositories.region_repository import RegionRepository
 from app.repositories.trip_place_repository import TripPlaceRepository
 from app.repositories.trip_repository import TripRepository
 from app.schemas.place import (
+    CustomPlaceAddRequest,
+    CustomPlaceAddResponse,
     PlaceSearchItem,
     PlaceSearchResponse,
     TripPlaceAddRequest,
@@ -44,6 +47,7 @@ class PlaceService:
         self.trip_places = TripPlaceRepository(db)
         self.trips = TripRepository(db)
         self.regions = RegionRepository(db)
+        self.experience_tags = ExperienceTagRepository(db)
 
     def search_places(self, keyword: str, region_id: int | None) -> PlaceSearchResponse:
         area_code = None
@@ -117,6 +121,68 @@ class PlaceService:
             place_id=trip_place.place_id,
             visit_order=trip_place.position,
             is_fixed=trip_place.is_fixed,
+        )
+
+    def add_custom_place_to_trip(
+        self,
+        current_user: CurrentUser,
+        trip_id: UUID,
+        payload: CustomPlaceAddRequest,
+    ) -> CustomPlaceAddResponse:
+        """검색 결과에 없는 장소를 이름/분류/주소로 직접 등록한다(Figma node 48:3842).
+
+        커스텀 장소는 집중도 분석 대상이 아니므로(is_recommendable=False)
+        사용자가 예상 대기시간을 직접 입력하고, 위경도는 주소를 Kakao로
+        지오코딩해서 채운다.
+        """
+        trip = self.trips.get_owned_by_id(trip_id, current_user.id)
+        if trip is None:
+            raise AppError(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "여행 일정을 찾을 수 없습니다.",
+                status_code=404,
+            )
+
+        category_tags = self.experience_tags.get_active_by_ids([payload.category_tag_id])
+        if not category_tags:
+            raise AppError(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "선택한 분류를 찾을 수 없습니다.",
+                status_code=404,
+            )
+        category_tag = category_tags[0]
+
+        geocoded = kakao_api.geocode_address(payload.address)
+        if geocoded is None:
+            raise AppError(
+                ErrorCode.ADDRESS_NOT_FOUND,
+                "입력하신 주소를 찾을 수 없습니다. 주소를 다시 확인해 주세요.",
+                status_code=400,
+            )
+
+        place = self.places.create(
+            source_type="custom",
+            tour_content_id=None,
+            region_id=trip.region_id,
+            name=payload.name,
+            longitude=geocoded.longitude,
+            latitude=geocoded.latitude,
+            is_recommendable=False,
+            expected_wait_minutes=payload.expected_wait_minutes,
+        )
+        self.places.add_experience_tag(place.id, category_tag.id)
+
+        position = self.trip_places.next_position(trip_id)
+        trip_place = self.trip_places.add(trip_id=trip_id, place_id=place.id, position=position)
+
+        return CustomPlaceAddResponse(
+            trip_place_id=trip_place.id,
+            trip_id=trip_place.trip_id,
+            place_id=place.id,
+            visit_order=trip_place.position,
+            is_fixed=trip_place.is_fixed,
+            name=place.name,
+            category=category_tag.name,
         )
 
     def remove_place_from_trip(self, current_user: CurrentUser, trip_place_id: UUID) -> None:

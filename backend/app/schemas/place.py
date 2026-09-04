@@ -34,6 +34,25 @@ class TripPlaceAddResponse(APIModel):
     is_fixed: bool
 
 
+class CustomPlaceAddRequest(APIModel):
+    """POST /trips/{tripId}/places/custom 요청 — 검색 결과에 없는 장소를 직접 등록한다."""
+    name: str
+    category_tag_id: int
+    address: str
+    expected_wait_minutes: int | None = None
+
+
+class CustomPlaceAddResponse(APIModel):
+    """POST /trips/{tripId}/places/custom 201 응답."""
+    trip_place_id: UUID
+    trip_id: UUID
+    place_id: UUID
+    visit_order: int
+    is_fixed: bool
+    name: str
+    category: str
+
+
 class TripPlaceOrderItem(APIModel):
     """PATCH /trips/{tripId}/places/order 요청의 개별 항목."""
     trip_place_id: UUID

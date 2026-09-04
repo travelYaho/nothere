@@ -5,6 +5,11 @@ Part3(홍수민) 의 경로/거리 계산이 이 컬럼을 직접 쓸 수 있어
 latitude/longitude 컬럼으로 바꾸지 않는다. 검색 결과 표시용 address/category
 같은 부가 정보는 이 공유 테이블에 넣지 않고, 필요하면 /places/search 를
 구현하는 쪽에서 TourAPI 응답을 그대로 내려주거나 별도 캐시 테이블을 둔다.
+
+`expected_wait_minutes` 는 ERD 원본엔 없는 필드다. "장소 직접 추가"(Figma
+node 48:3842) 로 등록하는 커스텀 장소는 집중도 분석 대상이 아니라서
+(is_recommendable=False) 사용자가 직접 예상 대기시간을 입력하게 되어 있고,
+그 값을 저장할 곳이 필요해 추가했다.
 """
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -42,6 +47,7 @@ class Place(Base):
         nullable=True,
     )
     is_recommendable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    expected_wait_minutes: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
 
     region: Mapped["Region | None"] = relationship(back_populates="places")
     experience_tags: Mapped[list["PlaceExperienceTag"]] = relationship(back_populates="place")
