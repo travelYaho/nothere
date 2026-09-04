@@ -95,6 +95,22 @@ export interface TripPlaceVisitUpdateRequest {
   isFixed?: boolean | null
 }
 
+export interface PurposeTag {
+  id: number
+  name: string
+}
+
+export interface PurposeGetResponse {
+  tripPlaceId: string
+  purposeTags: PurposeTag[]
+}
+
+export interface PurposePutResponse {
+  tripPlaceId: string
+  purposeTags: PurposeTag[]
+  updatedAt: string
+}
+
 export interface TripConditionsUpdateRequest {
   title?: string | null
   travelDate?: string

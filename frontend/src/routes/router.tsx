@@ -6,6 +6,7 @@ import Home from "@/pages/Home"
 import TripConditions from "@/pages/TripConditions"
 import TripPlaces from "@/pages/TripPlaces"
 import CustomPlace from "@/pages/CustomPlace"
+import TripPurpose from "@/pages/TripPurpose"
 import TripAnalysisLoading from "@/pages/TripAnalysisLoading"
 
 export const router = createBrowserRouter([
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
       { path: "/trips/:tripId/conditions", element: <TripConditions /> },
       { path: "/trips/:tripId/places", element: <TripPlaces /> },
       { path: "/trips/:tripId/places/custom", element: <CustomPlace /> },
+      { path: "/trips/:tripId/purpose", element: <TripPurpose /> },
       { path: "/trips/:tripId/analysis", element: <TripAnalysisLoading /> },
     ],
   },

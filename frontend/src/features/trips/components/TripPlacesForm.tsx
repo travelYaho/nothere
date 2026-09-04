@@ -163,10 +163,12 @@ export function TripPlacesForm() {
     }
   }
 
-  function handleGoToAnalysis() {
+  function handleGoToPurpose() {
     if (!tripId) return
     setSubmitting(true)
-    navigate(`/trips/${tripId}/analysis`)
+    // STEP3 완료 후 바로 분석으로 가지 않고, 등록된 장소마다 방문 목적을
+    // 먼저 받는다(3/3 단계) — 그다음에 분석 로딩 화면으로 이어진다.
+    navigate(`/trips/${tripId}/purpose`)
   }
 
   if (loading) {
@@ -280,7 +282,7 @@ export function TripPlacesForm() {
             block
             loading={submitting}
             disabled={trip.places.length < 1}
-            onClick={handleGoToAnalysis}
+            onClick={handleGoToPurpose}
           >
             내 일정 점검하기
           </Button>
