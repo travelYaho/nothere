@@ -38,7 +38,9 @@ async function apiFetch<T>(
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.message ?? `요청 실패 (${response.status})`);
+    const msg =
+      body?.error?.message ?? body?.message ?? `요청 실패 (${response.status})`;
+    throw new Error(msg);
   }
   if (response.status === 204) {
     return undefined as T;
@@ -66,7 +68,9 @@ export function signup(payload: {
   }).then(async (response) => {
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(body.message ?? `회원가입 실패 (${response.status})`);
+      throw new Error(
+        body?.error?.message ?? body?.message ?? `회원가입 실패 (${response.status})`,
+      );
     }
     return body;
   });
