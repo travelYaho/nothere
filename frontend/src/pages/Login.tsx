@@ -2,15 +2,67 @@
  * Login — 로그인 화면.
  * Figma: 여기말GO / node 48:3448 "로그인 화면"
  */
-import { useState } from "react"
+import { useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import { ChevronLeft } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { PasswordInput, TextInput } from "@/components/common/inputs"
+import { establishSession, signIn, signUp } from "@/features/auth"
+
+function toErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    // supabase-js는 네트워크 실패 시 브라우저 fetch 의 원문 메시지("Failed to fetch")를
+    // 그대로 던진다 — 사용자에게는 우리 말로 바꿔서 보여준다.
+    if (/failed to fetch|network/i.test(err.message)) {
+      return "서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요."
+    }
+    return err.message
+  }
+  return "요청 중 문제가 발생했습니다."
+}
 
 export default function Login() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<"login" | "signup">("login")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [nickname, setNickname] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  function switchTab(next: "login" | "signup") {
+    setTab(next)
+    setError(null)
+    setNotice(null)
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setNotice(null)
+    setLoading(true)
+    try {
+      if (tab === "login") {
+        await signIn(email, password)
+        navigate("/home")
+        return
+      }
+
+      const result = await signUp({ email, password, nickname })
+      if (result.accessToken && result.refreshToken) {
+        await establishSession(result.accessToken, result.refreshToken)
+        navigate("/home")
+      } else {
+        setNotice("가입 확인 이메일을 보냈어요. 이메일을 확인한 뒤 로그인해 주세요.")
+        switchTab("login")
+      }
+    } catch (err) {
+      setError(toErrorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -31,7 +83,7 @@ export default function Login() {
 
         <div className="mt-6 flex w-full max-w-[325px] border-b-[0.667px] border-line-soft">
           <button
-            onClick={() => setTab("login")}
+            onClick={() => switchTab("login")}
             className={[
               "flex-1 pb-3 text-center text-[15px] font-bold",
               tab === "login" ? "text-ink" : "text-ink-ghost",
@@ -40,7 +92,7 @@ export default function Login() {
             로그인
           </button>
           <button
-            onClick={() => setTab("signup")}
+            onClick={() => switchTab("signup")}
             className={[
               "flex-1 pb-3 text-center text-[15px] font-bold",
               tab === "signup" ? "text-ink" : "text-ink-ghost",
@@ -50,16 +102,42 @@ export default function Login() {
           </button>
         </div>
 
-        <div className="mt-5 flex w-full max-w-[325px] flex-col gap-2.5">
-          <TextInput placeholder="이메일" type="email" />
-          <PasswordInput placeholder="비밀번호" />
-        </div>
+        <form onSubmit={handleSubmit} className="mt-5 flex w-full max-w-[325px] flex-col gap-2.5">
+          <TextInput
+            placeholder="이메일"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <PasswordInput
+            placeholder="비밀번호"
+            required
+            minLength={tab === "signup" ? 6 : undefined}
+            autoComplete={tab === "login" ? "current-password" : "new-password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          {tab === "signup" && (
+            <TextInput
+              placeholder="닉네임"
+              required
+              maxLength={50}
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+            />
+          )}
 
-        <div className="mt-4 w-full max-w-[325px]">
-          <Button block onClick={() => navigate("/home")}>
-            로그인
-          </Button>
-        </div>
+          {error && <p className="text-[12px] font-medium text-congestion-high">{error}</p>}
+          {notice && <p className="text-[12px] font-medium text-ink-soft">{notice}</p>}
+
+          <div className="mt-1">
+            <Button type="submit" block loading={loading}>
+              {tab === "login" ? "로그인" : "회원가입"}
+            </Button>
+          </div>
+        </form>
 
         <div className="mt-3 flex w-full max-w-[325px] items-center justify-between px-1">
           <button className="text-[12px] font-medium text-ink-muted">비밀번호 찾기</button>

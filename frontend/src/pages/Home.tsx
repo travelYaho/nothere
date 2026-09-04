@@ -3,6 +3,7 @@
  * Figma: 여기말GO / node 48:1966 "홈 (로그인)"
  */
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Bell, MapPin, Plus } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
@@ -15,6 +16,7 @@ const MY_SCHEDULES = [
 ]
 
 export default function Home() {
+  const navigate = useNavigate()
   const [tab, setTab] = useState("home")
 
   return (
@@ -51,7 +53,7 @@ export default function Home() {
       </div>
 
       <div className="px-4 pb-2.5">
-        <Button block leadingIcon={<Plus size={16} />}>
+        <Button block leadingIcon={<Plus size={16} />} onClick={() => navigate("/trips/new")}>
           새 일정 점검하기
         </Button>
       </div>

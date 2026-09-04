@@ -1,0 +1,106 @@
+/** backend/app/schemas/region.py, experience_tag.py, trip.py 와 짝을 이루는 타입들. */
+export interface Region {
+  id: number
+  name: string
+}
+
+export interface ExperienceTag {
+  id: number
+  name: string
+}
+
+export type CompanionType = "solo" | "couple" | "friends" | "family"
+
+export interface TripCreateRequest {
+  title?: string | null
+  travelDate: string // YYYY-MM-DD
+  regionId: number
+  companionType?: string | null
+  transportMode?: string | null
+  extraTimeLimitMinutes?: number | null
+  preferredExperienceTagIds: number[]
+}
+
+export interface TripCreateResponse {
+  tripId: string
+  title: string
+  status: string
+  currentStep: number
+  createdAt: string
+}
+
+export interface TripPlaceDetail {
+  tripPlaceId: string
+  placeId: string
+  name: string
+  visitOrder: number
+  visitTime: string | null
+  durationMinutes: number | null
+  isFixed: boolean
+}
+
+export interface TripDetailResponse {
+  tripId: string
+  title: string
+  travelDate: string | null
+  regionId: number
+  regionName: string
+  companionType: string | null
+  transportMode: string | null
+  extraTimeLimitMinutes: number | null
+  status: string
+  currentStep: number
+  needsReanalysis: boolean
+  preferredExperienceTagIds: number[]
+  places: TripPlaceDetail[]
+}
+
+export interface PlaceSearchItem {
+  placeId: string
+  name: string
+  category: string | null
+  address: string | null
+  latitude: number | null
+  longitude: number | null
+}
+
+export interface TripPlaceAddResponse {
+  tripPlaceId: string
+  tripId: string
+  placeId: string
+  visitOrder: number
+  isFixed: boolean
+}
+
+export interface CustomPlaceAddRequest {
+  name: string
+  categoryTagId: number
+  address: string
+  expectedWaitMinutes?: number | null
+}
+
+export interface CustomPlaceAddResponse extends TripPlaceAddResponse {
+  name: string
+  category: string
+}
+
+export interface TripPlaceOrderItem {
+  tripPlaceId: string
+  visitOrder: number
+}
+
+export interface TripPlaceVisitUpdateRequest {
+  visitTime?: string | null
+  durationMinutes?: number | null
+  isFixed?: boolean | null
+}
+
+export interface TripConditionsUpdateRequest {
+  title?: string | null
+  travelDate?: string
+  regionId?: number
+  companionType?: string | null
+  transportMode?: string | null
+  extraTimeLimitMinutes?: number | null
+  preferredExperienceTagIds?: number[]
+}
