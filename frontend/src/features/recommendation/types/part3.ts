@@ -1,34 +1,25 @@
-/** Part3 API DTO (camelCase) */
+/** 추천·교체·가이드 API DTO (camelCase) */
 export type CongestionLevelApi = "low" | "mid" | "medium" | "high" | "unknown" | "none"
 
-export type RankedCandidate = {
+export type RouteScoredCandidate = {
   candidateId: string
   placeId: string
   placeName: string
   experienceScore: number
   routeScore: number
-  congestionScore: number
-  operationScore: number
-  totalScore: number
-  rank: number
   extraMinutes: number | null
   distancePrevM: number | null
   distanceNextM: number | null
   congestionLevel: CongestionLevelApi
   isRouteEstimated: boolean
   isEligible: boolean
+  exclusionReason: string | null
 }
 
-export type RankResponse = {
+export type RouteScoresResponse = {
   requestId: string
-  rankedCount: number
-  candidates: RankedCandidate[]
-  excludedCandidates: { candidateId: string; exclusionReason: string | null }[]
-  fallbackSuggestion?: {
-    reason: string
-    action: string
-    retryEndpoint: string
-  }
+  scoredCount: number
+  candidates: RouteScoredCandidate[]
 }
 
 export type CompareCandidatesResponse = {
@@ -41,14 +32,15 @@ export type CompareCandidatesResponse = {
     candidateId: string
     placeName: string
     experienceScore: number
+    routeScore: number
     congestionLevel: CongestionLevelApi
     congestionImprovement: string
     extraMinutes: number | null
     distancePrevM: number | null
     distanceNextM: number | null
     reasonText: string | null
-    rank: number | null
-    totalScore: number
+    isEligible: boolean
+    exclusionReason: string | null
   }[]
   requestId: string
   tripPlaceId: string

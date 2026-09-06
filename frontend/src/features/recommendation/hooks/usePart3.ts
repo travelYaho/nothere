@@ -4,11 +4,11 @@ import {
   confirmTrip,
   createShareLink,
   fetchPublicGuide,
-  fetchRankedCandidates,
   fetchRemainingCongested,
   fetchReplacementPreview,
+  fetchScoredCandidates,
   fetchTripGuide,
-  rankRecommendation,
+  scoreRoutes,
 } from "../api/part3Api"
 import type {
   CompareCandidatesResponse,
@@ -38,8 +38,8 @@ export function useCompareFlow(requestId: string | undefined) {
     setLoading(true)
     setError(null)
     try {
-      await rankRecommendation(token, requestId)
-      const compared = await fetchRankedCandidates(token, requestId)
+      await scoreRoutes(token, requestId)
+      const compared = await fetchScoredCandidates(token, requestId)
       setData(compared)
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오기 실패")

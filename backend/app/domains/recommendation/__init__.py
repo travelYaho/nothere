@@ -1,4 +1,4 @@
-"""추천(recommendation) 도메인.
+"""혼잡 대체·추천 알고리즘 도메인."""
+from app.domains.recommendation.service import RecommendationService
 
-혼잡 장소 대체·추천 알고리즘 담당 코드를 둔다.
-"""
+__all__ = ["RecommendationService"]

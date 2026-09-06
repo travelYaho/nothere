@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     SUPABASE_SECRET_KEY: str
     DATABASE_URL: str
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    KAKAO_REST_API_KEY: str = ""
+    ROUTE_CACHE_TTL_HOURS: int = 24
+    FRONTEND_PUBLIC_ORIGIN: str = "http://localhost:5173"
 
     @field_validator(
         "SUPABASE_URL",

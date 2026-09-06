@@ -3,10 +3,10 @@ import type {
   CompareCandidatesResponse,
   ConfirmResponse,
   GuideResponse,
-  RankResponse,
   RemainingCongestedResponse,
   ReplacementPreviewResponse,
   ReplacementResponse,
+  RouteScoresResponse,
   ShareLinkResponse,
 } from "../types/part3"
 
@@ -44,9 +44,9 @@ async function v1Fetch<T>(
   return body as T
 }
 
-const base = "/api/v1"
+const base = "/api"
 
-export function rankRecommendation(
+export function scoreRoutes(
   accessToken: string,
   requestId: string,
   payload?: {
@@ -55,14 +55,14 @@ export function rankRecommendation(
     extraTimeLimitMinutes?: number
   },
 ) {
-  return v1Fetch<RankResponse>(
-    `${base}/recommendation-requests/${requestId}/rank`,
+  return v1Fetch<RouteScoresResponse>(
+    `${base}/recommendation-requests/${requestId}/route-scores`,
     accessToken,
     { method: "POST", body: JSON.stringify(payload ?? {}) },
   )
 }
 
-export function fetchRankedCandidates(accessToken: string, requestId: string) {
+export function fetchScoredCandidates(accessToken: string, requestId: string) {
   return v1Fetch<CompareCandidatesResponse>(
     `${base}/recommendation-requests/${requestId}/candidates`,
     accessToken,

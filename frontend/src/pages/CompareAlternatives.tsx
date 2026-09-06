@@ -1,5 +1,5 @@
 /**
- * STEP7 — 원래 장소 vs Top3 대안 비교
+ * STEP7 — 원래 장소 vs 경로 점수 반영 대안 비교
  */
 import { useEffect } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
@@ -19,6 +19,8 @@ export default function CompareAlternatives() {
     void load()
   }, [load])
 
+  const visible = data?.candidates.filter((c) => c.isEligible) ?? []
+
   return (
     <div className="relative flex flex-1 flex-col">
       <FlowHeader
@@ -29,7 +31,7 @@ export default function CompareAlternatives() {
         onBack={() => navigate(-1)}
       />
       <div className="flex flex-1 flex-col gap-4 px-5 pb-10 pt-2">
-        {loading && <p className="text-[13px] text-ink-muted">추천을 계산하는 중…</p>}
+        {loading && <p className="text-[13px] text-ink-muted">경로 점수를 계산하는 중…</p>}
         {error && <p className="text-[13px] text-congestion-high">{error}</p>}
         {!requestId && (
           <p className="text-[13px] text-ink-muted">
@@ -47,12 +49,12 @@ export default function CompareAlternatives() {
               </div>
             </section>
 
-            <p className="text-[13px] font-semibold text-ink-soft">추천 대안 Top {data.candidates.length}</p>
+            <p className="text-[13px] font-semibold text-ink-soft">경로 점수 반영 대안</p>
             <div className="flex flex-col gap-3">
-              {data.candidates.map((c) => (
+              {visible.map((c) => (
                 <div key={c.candidateId} className="flex flex-col gap-2">
                   <RecommendCard
-                    tag={`RANK ${c.rank ?? "-"} · 추가 ${c.extraMinutes ?? 0}분`}
+                    tag={`경로 ${c.routeScore.toFixed(2)} · 추가 ${c.extraMinutes ?? 0}분`}
                     title={c.placeName}
                     level={toUiCongestion(c.congestionLevel)}
                     onClick={() =>
