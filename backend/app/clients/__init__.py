@@ -1,4 +1,4 @@
-"""외부 서비스/API 클라이언트 패키지이다.
+"""외부 API 클라이언트."""
+from app.clients.kakao_mobility import KakaoMobilityClient, RouteResult
 
-관광 API, LLM(OpenAI 등) 호출 래퍼를 여기에 둔다.
-"""
+__all__ = ["KakaoMobilityClient", "RouteResult"]

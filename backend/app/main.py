@@ -58,7 +58,7 @@ def health() -> dict[str, str]:
 
 @app.exception_handler(AppError)
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
-    """서비스 내부 AppError를 공통 {code, message} 형식으로 반환한다."""
+    """서비스 내부 AppError를 공통 {error:{code,message}} 형식으로 반환한다."""
     return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
 
 
@@ -71,7 +71,7 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
     message = f"{field} 값이 올바르지 않습니다." if field else "요청 값이 올바르지 않습니다."
     return JSONResponse(
         status_code=422,
-        content={"code": ErrorCode.VALIDATION_ERROR, "message": message},
+        content={"error": {"code": ErrorCode.VALIDATION_ERROR, "message": message}},
     )
 
 
@@ -81,5 +81,5 @@ async def db_error_handler(_request: Request, exc: SQLAlchemyError) -> JSONRespo
     logger.exception("Database error: %s", exc)
     return JSONResponse(
         status_code=500,
-        content={"code": ErrorCode.DB_ERROR, "message": "데이터베이스 오류가 발생했습니다."},
+        content={"error": {"code": ErrorCode.DB_ERROR, "message": "데이터베이스 오류가 발생했습니다."}},
     )
