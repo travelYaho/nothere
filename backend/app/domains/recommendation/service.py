@@ -1,4 +1,4 @@
-"""추천 랭킹·교체·확정·가이드 서비스."""
+"""추천 경로 점수·교체·확정·가이드 서비스."""
 from __future__ import annotations
 
 import secrets
@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.exceptions import AppError, ErrorCode
-from app.db.models.recommendation import RecommendationRanking
+from app.db.models.recommendation import (
+    RecommendationRanking,
+    RecommendationReason,
+    RecommendationRoute,
+)
 from app.db.models.replacement import Replacement
 from app.db.models.share_link import ShareLink
 from app.db.models.trip import Trip
@@ -136,24 +140,33 @@ class RecommendationService:
             ranking = RecommendationRanking(
                 candidate_id=cand.id,
                 route_score=to_decimal(route_result.route_score),
+                congestion_score=None,
+                operation_score=None,
+                total_score=None,
+                rank=None,
+                scored_at=now,
+            )
+            route = RecommendationRoute(
+                candidate_id=cand.id,
                 distance_prev_m=dist_prev,
                 distance_next_m=dist_next,
                 extra_minutes=extra_minutes,
                 route_source=route_source,
                 is_route_estimated=is_estimated,
-                congestion_score=None,
-                congestion_level=cand.congestion_level,
-                operation_score=None,
-                total_score=None,
-                rank=None,
-                reason_text=reason,
+                calculated_at=now,
+            )
+            reason_row = RecommendationReason(
+                candidate_id=cand.id,
+                recommend_reason=reason if route_result.is_eligible else None,
+                not_recommend_reason=None if route_result.is_eligible else reason,
                 reason_source_snapshot=route_result.snapshot,
                 is_eligible=route_result.is_eligible,
                 exclusion_reason=route_result.exclusion_reason,
-                scored_at=now,
             )
-            saved = self.repo.upsert_ranking(ranking)
-            scored.append((cand, saved, cand_name))
+            saved_ranking = self.repo.upsert_ranking(ranking)
+            saved_route = self.repo.upsert_route(route)
+            saved_reason = self.repo.upsert_reason(reason_row)
+            scored.append((cand, saved_ranking, saved_route, saved_reason, cand_name))
 
         self.db.commit()
 
@@ -164,15 +177,15 @@ class RecommendationService:
                 "placeName": name,
                 "experienceScore": float(c.experience_score),
                 "routeScore": float(r.route_score or 0),
-                "extraMinutes": r.extra_minutes,
-                "distancePrevM": r.distance_prev_m,
-                "distanceNextM": r.distance_next_m,
-                "congestionLevel": r.congestion_level,
-                "isRouteEstimated": r.is_route_estimated,
-                "isEligible": r.is_eligible,
-                "exclusionReason": r.exclusion_reason,
+                "extraMinutes": route.extra_minutes,
+                "distancePrevM": route.distance_prev_m,
+                "distanceNextM": route.distance_next_m,
+                "congestionLevel": c.congestion_level,
+                "isRouteEstimated": route.is_route_estimated,
+                "isEligible": reason.is_eligible,
+                "exclusionReason": reason.exclusion_reason,
             }
-            for c, r, name in scored
+            for c, r, route, reason, name in scored
         ]
         return {
             "requestId": str(request_id),
@@ -194,10 +207,13 @@ class RecommendationService:
             )
 
         candidates = []
-        for cand, ranking in scored:
+        for cand, ranking, route, reason in scored:
             place = self.repo.get_place(cand.candidate_place_id)
-            after = ranking.congestion_level or cand.congestion_level
+            after = cand.congestion_level
             improvement = f"{original_level}_to_{after}"
+            reason_text = None
+            if reason is not None:
+                reason_text = reason.recommend_reason or reason.not_recommend_reason
             candidates.append(
                 {
                     "candidateId": str(cand.id),
@@ -206,12 +222,12 @@ class RecommendationService:
                     "routeScore": float(ranking.route_score or 0),
                     "congestionLevel": after,
                     "congestionImprovement": improvement,
-                    "extraMinutes": ranking.extra_minutes,
-                    "distancePrevM": ranking.distance_prev_m,
-                    "distanceNextM": ranking.distance_next_m,
-                    "reasonText": ranking.reason_text,
-                    "isEligible": ranking.is_eligible,
-                    "exclusionReason": ranking.exclusion_reason,
+                    "extraMinutes": route.extra_minutes if route else None,
+                    "distancePrevM": route.distance_prev_m if route else None,
+                    "distanceNextM": route.distance_next_m if route else None,
+                    "reasonText": reason_text,
+                    "isEligible": reason.is_eligible if reason else True,
+                    "exclusionReason": reason.exclusion_reason if reason else None,
                 }
             )
 
@@ -240,14 +256,16 @@ class RecommendationService:
         if cand is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "후보를 찾을 수 없습니다.", 404)
         ranking = self.repo.get_ranking_by_candidate(candidate_id)
-        if ranking is None or not ranking.is_eligible:
+        reason = self.repo.get_reason_by_candidate(candidate_id)
+        route = self.repo.get_route_by_candidate(candidate_id)
+        if ranking is None or reason is None or not reason.is_eligible:
             raise AppError(ErrorCode.INVALID_REQUEST, "경로 점수가 없는 후보입니다.", 400)
 
         before_place = self.repo.get_place(tp.place_id)
         after_place = self.repo.get_place(cand.candidate_place_id)
         analysis = self.repo.latest_analysis(tp.id)
         before_level = analysis.level if analysis and analysis.level else "high"
-        after_level = ranking.congestion_level or cand.congestion_level
+        after_level = cand.congestion_level
 
         mode = trip.transport_mode or "walk"
         prev_tp, next_tp = self.repo.neighbors(trip.id, tp.position)
@@ -278,7 +296,7 @@ class RecommendationService:
                 "name": after_place.name if after_place else "",
                 "congestionLevel": after_level,
             },
-            "extraMinutes": ranking.extra_minutes,
+            "extraMinutes": route.extra_minutes if route else None,
             "totalTravelBefore": int(round(before_sec / 60)),
             "totalTravelAfter": int(round(after_sec / 60)),
             "candidateId": str(candidate_id),
@@ -301,7 +319,9 @@ class RecommendationService:
         if cand is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "후보를 찾을 수 없습니다.", 404)
         ranking = self.repo.get_ranking_by_candidate(candidate_id)
-        if ranking is None or not ranking.is_eligible:
+        reason = self.repo.get_reason_by_candidate(candidate_id)
+        route = self.repo.get_route_by_candidate(candidate_id)
+        if ranking is None or reason is None or not reason.is_eligible:
             raise AppError(ErrorCode.INVALID_REQUEST, "경로 점수가 없는 후보입니다.", 400)
 
         from_place_id = tp.place_id
@@ -311,16 +331,17 @@ class RecommendationService:
 
         analysis = self.repo.latest_analysis(tp.id)
         before_level = analysis.level if analysis else None
+        reason_snapshot = reason.recommend_reason or reason.not_recommend_reason
 
         replacement = Replacement(
             trip_place_id=tp.id,
             from_place_id=from_place_id,
             to_place_id=to_place_id,
             ranking_id=ranking.id,
-            reason_snapshot=ranking.reason_text,
-            extra_minutes=ranking.extra_minutes,
+            reason_snapshot=reason_snapshot,
+            extra_minutes=route.extra_minutes if route else None,
             before_level=before_level,
-            after_level=ranking.congestion_level,
+            after_level=cand.congestion_level,
             applied_at=datetime.now(timezone.utc),
         )
         self.repo.create_replacement(replacement)

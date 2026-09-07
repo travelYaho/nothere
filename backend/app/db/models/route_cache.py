@@ -1,8 +1,8 @@
-"""경로 캐시(route_cache) ORM."""
+"""경로 캐시(route_cache) — 장소 A→B API 캐시. trip/candidate 무관."""
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,8 +22,16 @@ class RouteCache(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    origin_place_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
-    destination_place_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    origin_place_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("place.id"),
+        nullable=False,
+    )
+    destination_place_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("place.id"),
+        nullable=False,
+    )
     transport_mode: Mapped[str] = mapped_column(String(20), nullable=False)
     distance_m: Mapped[int] = mapped_column(Integer, nullable=False)
     duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)

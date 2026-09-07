@@ -13,7 +13,9 @@ from app.db.models.recommendation import (
     RecommendationCandidate,
     RecommendationInteraction,
     RecommendationRanking,
+    RecommendationReason,
     RecommendationRequest,
+    RecommendationRoute,
     TripPlaceAnalysis,
 )
 from app.db.models.replacement import Replacement
@@ -122,19 +124,18 @@ class RecommendationRepository:
             .first()
         )
 
-    def list_rankings_for_request(self, request_id: UUID) -> list[RecommendationRanking]:
-        cand_ids = [
-            c.id
-            for c in self.db.query(RecommendationCandidate.id)
-            .filter(RecommendationCandidate.request_id == request_id)
-            .all()
-        ]
-        if not cand_ids:
-            return []
+    def get_route_by_candidate(self, candidate_id: UUID) -> RecommendationRoute | None:
         return (
-            self.db.query(RecommendationRanking)
-            .filter(RecommendationRanking.candidate_id.in_(cand_ids))
-            .all()
+            self.db.query(RecommendationRoute)
+            .filter(RecommendationRoute.candidate_id == candidate_id)
+            .first()
+        )
+
+    def get_reason_by_candidate(self, candidate_id: UUID) -> RecommendationReason | None:
+        return (
+            self.db.query(RecommendationReason)
+            .filter(RecommendationReason.candidate_id == candidate_id)
+            .first()
         )
 
     def upsert_ranking(self, ranking: RecommendationRanking) -> RecommendationRanking:
@@ -145,39 +146,84 @@ class RecommendationRepository:
             return ranking
         for field in (
             "route_score",
-            "distance_prev_m",
-            "distance_next_m",
-            "extra_minutes",
-            "route_source",
-            "is_route_estimated",
             "congestion_score",
-            "congestion_level",
             "operation_score",
             "total_score",
             "rank",
-            "reason_text",
-            "reason_source_snapshot",
-            "is_eligible",
-            "exclusion_reason",
             "scored_at",
         ):
             setattr(existing, field, getattr(ranking, field))
         self.db.flush()
         return existing
 
+    def upsert_route(self, route: RecommendationRoute) -> RecommendationRoute:
+        existing = self.get_route_by_candidate(route.candidate_id)
+        if existing is None:
+            self.db.add(route)
+            self.db.flush()
+            return route
+        for field in (
+            "distance_prev_m",
+            "distance_next_m",
+            "extra_minutes",
+            "route_source",
+            "is_route_estimated",
+            "calculated_at",
+        ):
+            setattr(existing, field, getattr(route, field))
+        self.db.flush()
+        return existing
+
+    def upsert_reason(self, reason: RecommendationReason) -> RecommendationReason:
+        existing = self.get_reason_by_candidate(reason.candidate_id)
+        if existing is None:
+            self.db.add(reason)
+            self.db.flush()
+            return reason
+        for field in (
+            "recommend_reason",
+            "not_recommend_reason",
+            "reason_source_snapshot",
+            "is_eligible",
+            "exclusion_reason",
+        ):
+            setattr(existing, field, getattr(reason, field))
+        self.db.flush()
+        return existing
+
     def list_scored_for_request(
         self, request_id: UUID, *, eligible_only: bool = False
-    ) -> list[tuple[RecommendationCandidate, RecommendationRanking]]:
+    ) -> list[
+        tuple[
+            RecommendationCandidate,
+            RecommendationRanking,
+            RecommendationRoute | None,
+            RecommendationReason | None,
+        ]
+    ]:
         query = (
-            self.db.query(RecommendationCandidate, RecommendationRanking)
+            self.db.query(
+                RecommendationCandidate,
+                RecommendationRanking,
+                RecommendationRoute,
+                RecommendationReason,
+            )
             .join(
                 RecommendationRanking,
                 RecommendationRanking.candidate_id == RecommendationCandidate.id,
             )
+            .outerjoin(
+                RecommendationRoute,
+                RecommendationRoute.candidate_id == RecommendationCandidate.id,
+            )
+            .outerjoin(
+                RecommendationReason,
+                RecommendationReason.candidate_id == RecommendationCandidate.id,
+            )
             .filter(RecommendationCandidate.request_id == request_id)
         )
         if eligible_only:
-            query = query.filter(RecommendationRanking.is_eligible.is_(True))
+            query = query.filter(RecommendationReason.is_eligible.is_(True))
         return list(query.order_by(RecommendationRanking.route_score.desc().nullslast()).all())
 
     # —— replacement ——

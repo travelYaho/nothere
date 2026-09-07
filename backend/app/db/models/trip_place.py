@@ -1,4 +1,4 @@
-"""일정 내 장소(trip_place) ORM — Part1 ERD."""
+"""일정 내 장소(trip_place) ORM — Part1."""
 from datetime import time
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -23,8 +23,17 @@ class TripPlace(Base):
         nullable=False,
         index=True,
     )
-    place_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
-    initial_place_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    place_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("place.id"),
+        nullable=False,
+        index=True,
+    )
+    initial_place_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("place.id"),
+        nullable=True,
+    )
     position: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     visit_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     stay_minutes: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)

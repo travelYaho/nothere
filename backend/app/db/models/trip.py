@@ -1,4 +1,4 @@
-"""여행 일정(trip) ORM — Part1 ERD."""
+"""여행 일정(trip) ORM — Part1."""
 from datetime import date, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -17,8 +17,18 @@ class Trip(Base):
     __tablename__ = "trip"
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
-    region_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("profile.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    region_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("region.id"),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     travel_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     companion_type: Mapped[str | None] = mapped_column(String(50), nullable=True)

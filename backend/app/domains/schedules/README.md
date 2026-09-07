@@ -1,8 +1,6 @@
-# schedules 도메인
+# schedules 도메인 (레거시)
 
-일정 CRUD와 장소(`schedule_places`)를 담당합니다.
+`schedules` / `schedule_places` 테이블은 통합 스키마에서 제거되었다.
+일정 데이터는 `trip` / `trip_place` 로 이전한다.
 
-- API: `GET/POST /api/schedules`, `GET/PATCH/DELETE /api/schedules/{id}`
-- 서비스: `app/services/schedule_service.py`
-- 모델: `Schedule`, `SchedulePlace`
-- 소유자 필터: repository의 `user_id` 조건 (FastAPI는 RLS를 우회하므로 필수)
+현재 `/api/schedules` 는 501을 반환한다. 홈의 draft/recent도 빈 값이다.

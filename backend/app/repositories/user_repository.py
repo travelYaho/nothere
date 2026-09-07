@@ -1,4 +1,4 @@
-"""profiles 테이블에 대한 SQLAlchemy 접근을 모아 둔 repository 이다."""
+"""profile 테이블에 대한 SQLAlchemy 접근을 모아 둔 repository 이다."""
 from uuid import UUID
 
 from sqlalchemy.orm import Session
