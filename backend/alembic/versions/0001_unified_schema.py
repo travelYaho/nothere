@@ -53,10 +53,9 @@ _DROP_ORDER = [
 
 
 def upgrade() -> None:
+    # 레거시 profiles/schedules/schedule_places DROP 은 하지 않는다.
+    # 백필·검증 후 별도 정리 revision 에서만 삭제한다.
     sql = _SCHEMA_SQL.read_text(encoding="utf-8")
-    # 구 스키마가 남아 있으면 제거 (개발 DB 리셋용)
-    for table in ("schedule_places", "schedules", "profiles"):
-        op.execute(f"DROP TABLE IF EXISTS public.{table} CASCADE;")
     op.execute(sql)
 
 

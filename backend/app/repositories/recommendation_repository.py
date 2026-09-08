@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import desc
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.guide_entry import GuideEntry
@@ -27,6 +28,11 @@ from app.db.models.trip_place import TripPlace
 class RecommendationRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def _execute_upsert(self, stmt):
+        row = self.db.execute(stmt).scalars().first()
+        self.db.flush()
+        return row
 
     # —— trip / trip_place ——
     def get_trip_owned(self, trip_id: UUID, user_id: UUID) -> Trip | None:
@@ -139,57 +145,75 @@ class RecommendationRepository:
         )
 
     def upsert_ranking(self, ranking: RecommendationRanking) -> RecommendationRanking:
-        existing = self.get_ranking_by_candidate(ranking.candidate_id)
-        if existing is None:
-            self.db.add(ranking)
-            self.db.flush()
-            return ranking
-        for field in (
-            "route_score",
-            "congestion_score",
-            "operation_score",
-            "total_score",
-            "rank",
-            "scored_at",
-        ):
-            setattr(existing, field, getattr(ranking, field))
-        self.db.flush()
-        return existing
+        insert_stmt = pg_insert(RecommendationRanking).values(
+            id=ranking.id or uuid4(),
+            candidate_id=ranking.candidate_id,
+            route_score=ranking.route_score,
+            congestion_score=ranking.congestion_score,
+            operation_score=ranking.operation_score,
+            total_score=ranking.total_score,
+            rank=ranking.rank,
+            scored_at=ranking.scored_at,
+        )
+        stmt = insert_stmt.on_conflict_do_update(
+            index_elements=["candidate_id"],
+            set_={
+                "route_score": insert_stmt.excluded.route_score,
+                "congestion_score": insert_stmt.excluded.congestion_score,
+                "operation_score": insert_stmt.excluded.operation_score,
+                "total_score": insert_stmt.excluded.total_score,
+                "rank": insert_stmt.excluded.rank,
+                "scored_at": insert_stmt.excluded.scored_at,
+            },
+        ).returning(RecommendationRanking)
+        return self._execute_upsert(stmt)
 
     def upsert_route(self, route: RecommendationRoute) -> RecommendationRoute:
-        existing = self.get_route_by_candidate(route.candidate_id)
-        if existing is None:
-            self.db.add(route)
-            self.db.flush()
-            return route
-        for field in (
-            "distance_prev_m",
-            "distance_next_m",
-            "extra_minutes",
-            "route_source",
-            "is_route_estimated",
-            "calculated_at",
-        ):
-            setattr(existing, field, getattr(route, field))
-        self.db.flush()
-        return existing
+        insert_stmt = pg_insert(RecommendationRoute).values(
+            id=route.id or uuid4(),
+            candidate_id=route.candidate_id,
+            distance_prev_m=route.distance_prev_m,
+            distance_next_m=route.distance_next_m,
+            extra_minutes=route.extra_minutes,
+            route_source=route.route_source,
+            is_route_estimated=route.is_route_estimated,
+            calculated_at=route.calculated_at,
+        )
+        stmt = insert_stmt.on_conflict_do_update(
+            index_elements=["candidate_id"],
+            set_={
+                "distance_prev_m": insert_stmt.excluded.distance_prev_m,
+                "distance_next_m": insert_stmt.excluded.distance_next_m,
+                "extra_minutes": insert_stmt.excluded.extra_minutes,
+                "route_source": insert_stmt.excluded.route_source,
+                "is_route_estimated": insert_stmt.excluded.is_route_estimated,
+                "calculated_at": insert_stmt.excluded.calculated_at,
+            },
+        ).returning(RecommendationRoute)
+        return self._execute_upsert(stmt)
 
     def upsert_reason(self, reason: RecommendationReason) -> RecommendationReason:
-        existing = self.get_reason_by_candidate(reason.candidate_id)
-        if existing is None:
-            self.db.add(reason)
-            self.db.flush()
-            return reason
-        for field in (
-            "recommend_reason",
-            "not_recommend_reason",
-            "reason_source_snapshot",
-            "is_eligible",
-            "exclusion_reason",
-        ):
-            setattr(existing, field, getattr(reason, field))
-        self.db.flush()
-        return existing
+        insert_stmt = pg_insert(RecommendationReason).values(
+            id=reason.id or uuid4(),
+            candidate_id=reason.candidate_id,
+            recommend_reason=reason.recommend_reason,
+            not_recommend_reason=reason.not_recommend_reason,
+            reason_source_snapshot=reason.reason_source_snapshot,
+            is_eligible=reason.is_eligible,
+            exclusion_reason=reason.exclusion_reason,
+        )
+        stmt = insert_stmt.on_conflict_do_update(
+            index_elements=["candidate_id"],
+            set_={
+                "recommend_reason": insert_stmt.excluded.recommend_reason,
+                "not_recommend_reason": insert_stmt.excluded.not_recommend_reason,
+                "reason_source_snapshot": insert_stmt.excluded.reason_source_snapshot,
+                "is_eligible": insert_stmt.excluded.is_eligible,
+                "exclusion_reason": insert_stmt.excluded.exclusion_reason,
+                "updated_at": datetime.now(timezone.utc),
+            },
+        ).returning(RecommendationReason)
+        return self._execute_upsert(stmt)
 
     def list_scored_for_request(
         self, request_id: UUID, *, eligible_only: bool = False

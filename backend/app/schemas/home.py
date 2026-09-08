@@ -9,6 +9,7 @@ class HomeUserResponse(APIModel):
     """홈 상단에 필요한 최소 사용자 정보."""
     id: UUID
     nickname: str
+    profile_image_url: str | None = None
 
 
 # [홈 범위] 홈 응답용 최소 일정 요약. 상세/장소는 /api/schedules 응답을 사용한다.

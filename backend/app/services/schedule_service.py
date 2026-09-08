@@ -24,17 +24,17 @@ class ScheduleService:
         self.db = db
 
     def list_schedules(self, current_user: CurrentUser) -> ScheduleListResponse:
-        raise AppError(ErrorCode.INVALID_REQUEST, _MSG, 501)
+        raise AppError(ErrorCode.NOT_IMPLEMENTED, _MSG, 501)
 
     def get_schedule(self, current_user: CurrentUser, schedule_id: UUID) -> ScheduleResponse:
-        raise AppError(ErrorCode.INVALID_REQUEST, _MSG, 501)
+        raise AppError(ErrorCode.NOT_IMPLEMENTED, _MSG, 501)
 
     def create_schedule(
         self,
         current_user: CurrentUser,
         payload: ScheduleCreateRequest,
     ) -> ScheduleResponse:
-        raise AppError(ErrorCode.INVALID_REQUEST, _MSG, 501)
+        raise AppError(ErrorCode.NOT_IMPLEMENTED, _MSG, 501)
 
     def update_schedule(
         self,
@@ -42,7 +42,7 @@ class ScheduleService:
         schedule_id: UUID,
         payload: ScheduleUpdateRequest,
     ) -> ScheduleResponse:
-        raise AppError(ErrorCode.INVALID_REQUEST, _MSG, 501)
+        raise AppError(ErrorCode.NOT_IMPLEMENTED, _MSG, 501)
 
     def delete_schedule(self, current_user: CurrentUser, schedule_id: UUID) -> None:
-        raise AppError(ErrorCode.INVALID_REQUEST, _MSG, 501)
+        raise AppError(ErrorCode.NOT_IMPLEMENTED, _MSG, 501)

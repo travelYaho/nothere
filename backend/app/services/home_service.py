@@ -16,7 +16,7 @@ class HomeService:
     def get_home(self, current_user: CurrentUser) -> HomeResponse:
         return HomeResponse(
             user=HomeUserResponse(
-                user_id=current_user.id,
+                id=current_user.id,
                 nickname=current_user.nickname,
                 profile_image_url=current_user.profile_image_url,
             ),

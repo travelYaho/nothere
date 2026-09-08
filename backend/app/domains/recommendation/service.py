@@ -226,7 +226,7 @@ class RecommendationService:
                     "distancePrevM": route.distance_prev_m if route else None,
                     "distanceNextM": route.distance_next_m if route else None,
                     "reasonText": reason_text,
-                    "isEligible": reason.is_eligible if reason else True,
+                    "isEligible": reason.is_eligible if reason else False,
                     "exclusionReason": reason.exclusion_reason if reason else None,
                 }
             )
