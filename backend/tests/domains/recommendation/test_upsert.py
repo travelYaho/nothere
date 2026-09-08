@@ -22,8 +22,8 @@ def _compile_upsert_sql(build_fn) -> str:
     db = MagicMock()
     captured: list = []
 
-    def execute(stmt):
-        captured.append(stmt)
+    def execute(stmt, **kwargs):
+        captured.append((stmt, kwargs))
         result = MagicMock()
         result.scalars.return_value.first.return_value = MagicMock()
         return result
@@ -32,8 +32,10 @@ def _compile_upsert_sql(build_fn) -> str:
     repo = RecommendationRepository(db)
     build_fn(repo)
     assert captured, "upsert 가 execute 를 호출해야 함"
+    stmt, kwargs = captured[0]
+    assert kwargs.get("execution_options") == {"populate_existing": True}
     return str(
-        captured[0].compile(
+        stmt.compile(
             dialect=postgresql.dialect(),
             compile_kwargs={"literal_binds": False},
         )
@@ -94,7 +96,8 @@ def test_concurrent_upsert_route_same_candidate_does_not_raise():
     candidate_id = uuid4()
     db = MagicMock()
 
-    def execute(stmt):
+    def execute(stmt, **kwargs):
+        assert kwargs.get("execution_options") == {"populate_existing": True}
         result = MagicMock()
         result.scalars.return_value.first.return_value = RecommendationRoute(
             id=uuid4(),
@@ -138,3 +141,56 @@ def test_concurrent_upsert_route_same_candidate_does_not_raise():
             )
         )
         assert "ON CONFLICT" in sql.upper()
+
+
+def test_upsert_route_refreshes_existing_identity_map_entity():
+    """같은 Session에 이미 로드된 엔터티가 있으면 RETURNING 값으로 갱신되어 반환된다."""
+    candidate_id = uuid4()
+    existing = RecommendationRoute(
+        id=uuid4(),
+        candidate_id=candidate_id,
+        distance_prev_m=10,
+        distance_next_m=20,
+        extra_minutes=1,
+        route_source="old",
+        is_route_estimated=True,
+        calculated_at=datetime.now(timezone.utc),
+    )
+    now = datetime.now(timezone.utc)
+    db = MagicMock()
+
+    def execute(stmt, **kwargs):
+        assert kwargs.get("execution_options") == {"populate_existing": True}
+        # populate_existing 시뮬레이션: identity-map 엔터티 속성을 RETURNING 결과로 덮어씀
+        existing.distance_prev_m = 100
+        existing.distance_next_m = 200
+        existing.extra_minutes = 5
+        existing.route_source = "api"
+        existing.is_route_estimated = False
+        existing.calculated_at = now
+        result = MagicMock()
+        result.scalars.return_value.first.return_value = existing
+        return result
+
+    db.execute.side_effect = execute
+    repo = RecommendationRepository(db)
+
+    returned = repo.upsert_route(
+        RecommendationRoute(
+            id=uuid4(),
+            candidate_id=candidate_id,
+            distance_prev_m=100,
+            distance_next_m=200,
+            extra_minutes=5,
+            route_source="api",
+            is_route_estimated=False,
+            calculated_at=now,
+        )
+    )
+
+    assert returned is existing
+    assert returned.distance_prev_m == 100
+    assert returned.distance_next_m == 200
+    assert returned.extra_minutes == 5
+    assert returned.route_source == "api"
+    assert returned.is_route_estimated is False

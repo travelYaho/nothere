@@ -30,7 +30,11 @@ class RecommendationRepository:
         self.db = db
 
     def _execute_upsert(self, stmt):
-        row = self.db.execute(stmt).scalars().first()
+        # identity-map 에 이미 있는 엔터티면 RETURNING 값으로 속성을 갱신한다.
+        row = self.db.execute(
+            stmt,
+            execution_options={"populate_existing": True},
+        ).scalars().first()
         self.db.flush()
         return row
 
