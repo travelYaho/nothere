@@ -1,4 +1,4 @@
-"""장소 교체 이력(replacement) ORM."""
+"""장소 교체 이력(replacement) ORM — Part3."""
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -19,8 +19,16 @@ class Replacement(Base):
         nullable=False,
         index=True,
     )
-    from_place_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
-    to_place_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    from_place_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("place.id"),
+        nullable=False,
+    )
+    to_place_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("place.id"),
+        nullable=False,
+    )
     ranking_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("recommendation_ranking.id", ondelete="SET NULL"),
