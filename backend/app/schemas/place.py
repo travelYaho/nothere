@@ -23,6 +23,7 @@ class PlaceSearchResponse(APIModel):
 class TripPlaceAddRequest(APIModel):
     """POST /trips/{tripId}/places 요청."""
     place_id: UUID
+    visit_time: time | None = None
 
 
 class TripPlaceAddResponse(APIModel):
@@ -31,6 +32,7 @@ class TripPlaceAddResponse(APIModel):
     trip_id: UUID
     place_id: UUID
     visit_order: int
+    visit_time: time | None
     is_fixed: bool
 
 

@@ -7,7 +7,7 @@
  * 않았다 — 그건 경로 계산(Part3 담당, STEP4~6)이 필요한 값이라 지금은 낼 수
  * 있는 실제 데이터가 없다. 지도 영역도 Figma 원본 주석 그대로 "준비 중" placeholder다.
  */
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Close, Grip, Search } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
@@ -25,6 +25,7 @@ import type { CompanionType, PlaceSearchItem, TripDetailResponse, TripPlaceDetai
 import { ApiError } from "@/types/api"
 
 const SEARCH_DEBOUNCE_MS = 350
+const LONG_PRESS_MS = 350
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"]
 
 function toErrorMessage(err: unknown): string {
@@ -54,10 +55,28 @@ function formatConditionSummary(trip: TripDetailResponse): string {
 }
 
 function formatVisitInfo(place: TripPlaceDetail): string {
-  const parts: string[] = []
-  if (place.visitTime) parts.push(place.visitTime.slice(0, 5))
-  if (place.durationMinutes != null) parts.push(`체류 ${place.durationMinutes}분`)
-  return parts.length ? parts.join(" · ") : "시간 미설정"
+  return place.visitTime ? place.visitTime.slice(0, 5) : "시간 미설정"
+}
+
+/**
+ * 시간이 설정된 장소끼리만 오름차순으로 재배열하고, 그 장소들이 원래
+ * 차지하던 자리(index)에 도로 끼워 넣는다 — 시간 미설정 장소는 드래그로
+ * 옮긴 자리를 그대로 유지한 채(꾹 눌러 순서 변경 가능), 시간이 있는
+ * 장소만 "빠른 시간대가 앞"이 되도록 자동 정렬하기 위해서다.
+ */
+function sortPlacesForDisplay(places: TripPlaceDetail[]): TripPlaceDetail[] {
+  const result = [...places]
+  const timedIndices: number[] = []
+  result.forEach((place, index) => {
+    if (place.visitTime) timedIndices.push(index)
+  })
+  const timedSorted = timedIndices
+    .map((index) => result[index])
+    .sort((a, b) => (a.visitTime! < b.visitTime! ? -1 : a.visitTime! > b.visitTime! ? 1 : 0))
+  timedIndices.forEach((index, i) => {
+    result[index] = timedSorted[i]
+  })
+  return result
 }
 
 export function TripPlacesForm() {
@@ -70,6 +89,9 @@ export function TripPlacesForm() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
+  const [pointerPos, setPointerPos] = useState<{ x: number; y: number } | null>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [keyword, setKeyword] = useState("")
@@ -96,6 +118,12 @@ export function TripPlacesForm() {
   }, [refreshTrip])
 
   useEffect(() => {
+    return () => {
+      if (longPressTimer.current !== null) clearTimeout(longPressTimer.current)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!searchOpen || !keyword.trim()) {
       setResults([])
       setSearchError(null)
@@ -114,12 +142,12 @@ export function TripPlacesForm() {
     return () => clearTimeout(handle)
   }, [keyword, searchOpen, trip?.regionId])
 
-  async function handleAddSearchResult(placeId: string) {
+  async function handleAddSearchResult(placeId: string, visitTime: string | null) {
     if (!tripId) return
     setPendingPlaceId(placeId)
     setActionError(null)
     try {
-      await addPlaceToTrip(tripId, placeId)
+      await addPlaceToTrip(tripId, placeId, visitTime)
       await refreshTrip()
     } catch (err) {
       setActionError(toErrorMessage(err))
@@ -138,15 +166,73 @@ export function TripPlacesForm() {
     }
   }
 
+  function clearLongPressTimer() {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
+  /**
+   * 드래그 순서변경은 HTML5 네이티브 draggable 대신 포인터 이벤트로 직접
+   * 구현했다 — 네이티브 drag&drop 은 터치스크린(모바일)에서 아예 동작하지
+   * 않고, 데스크톱에서도 "누르고만 있기"로는 시작되지 않아 "길게 눌러 순서
+   * 변경" UX와 맞지 않는다. 손잡이(Grip)를 일정 시간 누르고 있으면 드래그가
+   * 시작되고, setPointerCapture 덕분에 손가락/마우스가 손잡이 밖으로 나가도
+   * move/up 이벤트를 계속 받는다.
+   */
+  function handleGripPointerDown(index: number) {
+    return (e: React.PointerEvent<SVGSVGElement>) => {
+      e.currentTarget.setPointerCapture(e.pointerId)
+      clearLongPressTimer()
+      const { clientX, clientY } = e
+      longPressTimer.current = setTimeout(() => {
+        setDragIndex(index)
+        setOverIndex(index)
+        setPointerPos({ x: clientX, y: clientY })
+      }, LONG_PRESS_MS)
+    }
+  }
+
+  function handleGripPointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    if (dragIndex === null) return
+    setPointerPos({ x: e.clientX, y: e.clientY })
+    const el = document.elementFromPoint(e.clientX, e.clientY)
+    const rowEl = el instanceof Element ? el.closest<HTMLElement>("[data-row-index]") : null
+    if (!rowEl) return
+    const idx = Number(rowEl.dataset.rowIndex)
+    if (!Number.isNaN(idx)) setOverIndex(idx)
+  }
+
+  function handleGripPointerUp() {
+    clearLongPressTimer()
+    if (dragIndex !== null && overIndex !== null) {
+      handleDrop(overIndex)
+    } else {
+      setDragIndex(null)
+      setOverIndex(null)
+    }
+    setPointerPos(null)
+  }
+
+  function handleGripPointerCancel() {
+    clearLongPressTimer()
+    setDragIndex(null)
+    setOverIndex(null)
+    setPointerPos(null)
+  }
+
   async function handleDrop(targetIndex: number) {
     if (dragIndex === null || dragIndex === targetIndex || !trip || !tripId) {
       setDragIndex(null)
+      setOverIndex(null)
       return
     }
-    const reordered = [...trip.places]
+    const reordered = sortPlacesForDisplay(trip.places)
     const [moved] = reordered.splice(dragIndex, 1)
     reordered.splice(targetIndex, 0, moved)
     setDragIndex(null)
+    setOverIndex(null)
 
     const withNewOrder = reordered.map((p, i) => ({ ...p, visitOrder: i + 1 }))
     setTrip({ ...trip, places: withNewOrder })
@@ -196,6 +282,8 @@ export function TripPlacesForm() {
   }
 
   const addedPlaceIds = new Set(trip.places.map((p) => p.placeId))
+  const displayPlaces = sortPlacesForDisplay(trip.places)
+  const draggedPlace = dragIndex !== null ? displayPlaces[dragIndex] : null
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
@@ -233,25 +321,39 @@ export function TripPlacesForm() {
               아직 등록된 장소가 없어요. 위에서 검색해서 추가해 보세요.
             </p>
           )}
-          {trip.places.map((place, index) => (
-            <div
-              key={place.tripPlaceId}
-              draggable
-              onDragStart={() => setDragIndex(index)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => handleDrop(index)}
-              className="flex items-center gap-3 rounded-[var(--radius-field)] bg-surface p-3.5 shadow-[var(--shadow-card)]"
-            >
-              <Grip size={16} className="shrink-0 cursor-grab text-ink-ghost" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] font-bold text-ink">{place.name}</p>
-                <p className="text-[11px] font-medium text-ink-faint">{formatVisitInfo(place)}</p>
+          {displayPlaces.map((place, index) => {
+            const canDrag = !place.visitTime
+            const isDragging = dragIndex === index
+            const isDropTarget = dragIndex !== null && overIndex === index && !isDragging
+            return (
+              <div
+                key={place.tripPlaceId}
+                data-row-index={index}
+                className={[
+                  "flex items-center gap-3 rounded-[var(--radius-field)] bg-surface p-3.5 shadow-[var(--shadow-card)] transition-[opacity,box-shadow]",
+                  isDragging ? "opacity-50" : "",
+                  isDropTarget ? "ring-2 ring-primary/40" : "",
+                ].join(" ")}
+              >
+                <Grip
+                  size={16}
+                  onPointerDown={canDrag ? handleGripPointerDown(index) : undefined}
+                  onPointerMove={canDrag ? handleGripPointerMove : undefined}
+                  onPointerUp={canDrag ? handleGripPointerUp : undefined}
+                  onPointerCancel={canDrag ? handleGripPointerCancel : undefined}
+                  style={{ touchAction: "none" }}
+                  className={`shrink-0 ${canDrag ? "cursor-grab text-ink-ghost" : "cursor-default text-ink-ghost/30"}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-bold text-ink">{place.name}</p>
+                  <p className="text-[11px] font-medium text-ink-faint">{formatVisitInfo(place)}</p>
+                </div>
+                <button onClick={() => handleRemove(place.tripPlaceId)} className="shrink-0 text-ink-ghost">
+                  <Close size={16} />
+                </button>
               </div>
-              <button onClick={() => handleRemove(place.tripPlaceId)} className="shrink-0 text-ink-ghost">
-                <Close size={16} />
-              </button>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         <button
@@ -302,6 +404,22 @@ export function TripPlacesForm() {
           onAdd={handleAddSearchResult}
           onAddCustom={() => navigate(`/trips/${tripId}/places/custom`)}
         />
+      )}
+
+      {draggedPlace && pointerPos && (
+        <div
+          style={{
+            position: "fixed",
+            left: pointerPos.x,
+            top: pointerPos.y,
+            transform: "translate(-24px, -50%) rotate(-2deg)",
+            pointerEvents: "none",
+          }}
+          className="z-40 flex w-[240px] items-center gap-3 rounded-[var(--radius-field)] bg-surface p-3.5 shadow-[0_16px_32px_rgba(16,24,48,0.28)] ring-2 ring-primary/50"
+        >
+          <Grip size={16} className="shrink-0 text-ink-ghost" />
+          <p className="truncate text-[14px] font-bold text-ink">{draggedPlace.name}</p>
+        </div>
       )}
     </div>
   )

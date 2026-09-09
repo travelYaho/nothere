@@ -8,7 +8,7 @@
  *  6) ChangeLogItem     — 변경 기록 아이템 (BEFORE → AFTER)
  *  7) GuidebookCard     — 공개 갤러리 카드 (커버 이미지 + 지역·좋아요)
  */
-import { ArrowRight, Heart, Plus } from "./icons"
+import { ArrowRight, Close, Heart, Plus } from "./icons"
 import { Button, CongestionBadge, type CongestionLevel } from "./primitives"
 
 /* 1) ScheduleCard --------------------------------------------------- */
@@ -18,33 +18,47 @@ export function ScheduleCard({
   meta,
   active = false,
   onClick,
+  onRemove,
 }: {
   index: number
   title: string
   meta: string
   active?: boolean
   onClick?: () => void
+  /** 있으면 우측 화살표 대신 삭제(X) 버튼을 보여준다 — 보관함 목록용. */
+  onRemove?: () => void
 }) {
   return (
-    <button
-      onClick={onClick}
+    <div
       className={[
         "flex w-full items-center gap-3.5 rounded-[var(--radius-field)] bg-surface px-4 py-3.5 text-left",
-        "shadow-[var(--shadow-card)] transition-transform active:scale-[0.99]",
+        "shadow-[var(--shadow-card)]",
         active ? "border-2 border-primary" : "border-[0.667px] border-transparent",
       ].join(" ")}
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-primary text-[12px] font-extrabold text-white">
-        {String(index).padStart(2, "0")}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-bold tracking-[-0.28px] text-ink">
-          {title}
+      <button
+        onClick={onClick}
+        disabled={!onClick}
+        className="flex min-w-0 flex-1 items-center gap-3.5 text-left transition-transform active:scale-[0.99]"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-primary text-[12px] font-extrabold text-white">
+          {String(index).padStart(2, "0")}
         </span>
-        <span className="mt-0.5 block text-[11px] font-medium text-ink-faint">{meta}</span>
-      </span>
-      <ArrowRight size={16} className="shrink-0 text-ink-faint" />
-    </button>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-bold tracking-[-0.28px] text-ink">
+            {title}
+          </span>
+          <span className="mt-0.5 block text-[11px] font-medium text-ink-faint">{meta}</span>
+        </span>
+      </button>
+      {onRemove ? (
+        <button onClick={onRemove} className="shrink-0 p-1 text-ink-ghost">
+          <Close size={14} />
+        </button>
+      ) : (
+        <ArrowRight size={16} className="shrink-0 text-ink-faint" />
+      )}
+    </div>
   )
 }
 

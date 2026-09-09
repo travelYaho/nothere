@@ -30,10 +30,7 @@ function toErrorMessage(err: unknown): string {
 }
 
 function formatVisitInfo(place: TripPlaceDetail): string {
-  const parts: string[] = []
-  if (place.visitTime) parts.push(`${place.visitTime.slice(0, 5)} 방문 예정`)
-  if (place.durationMinutes != null) parts.push(`체류 ${place.durationMinutes}분`)
-  return parts.length ? parts.join(" · ") : "방문 시간 미설정"
+  return place.visitTime ? `${place.visitTime.slice(0, 5)} 방문 예정` : "방문 시간 미설정"
 }
 
 export function TripPurposeForm() {

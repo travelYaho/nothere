@@ -32,7 +32,14 @@ class TripPlaceRepository:
         )
         return (max_position or 0) + 1
 
-    def add(self, *, trip_id: UUID, place_id: UUID, position: int) -> TripPlace:
+    def add(
+        self,
+        *,
+        trip_id: UUID,
+        place_id: UUID,
+        position: int,
+        visit_time: time | None = None,
+    ) -> TripPlace:
         """장소를 추가한다. initial_place_id 는 이후 교체 로직(파트3)이 원래
         장소와 비교할 수 있도록 최초 등록 시점의 place_id 와 동일하게 둔다.
         """
@@ -41,6 +48,7 @@ class TripPlaceRepository:
             place_id=place_id,
             initial_place_id=place_id,
             position=position,
+            visit_time=visit_time,
         )
         self.db.add(trip_place)
         self.db.commit()
