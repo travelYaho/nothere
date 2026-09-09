@@ -1,7 +1,7 @@
 """Supabase Auth 회원가입과 서비스 profile 생성을 묶는 인증 서비스이다.
 
 로그인/로그아웃/토큰 재발급은 프론트엔드가 Supabase Auth 를 직접 사용한다.
-서비스 전용 사용자 정보는 profiles 테이블에서 관리한다.
+서비스 전용 사용자 정보는 profile 테이블에서 관리한다.
 """
 from uuid import UUID
 
@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
-from app.core.supabase import new_anon_client
+from app.core.supabase import delete_auth_user, new_anon_client
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import SignupRequest, SignupResponse
 from app.schemas.user import UserResponse
@@ -43,7 +43,7 @@ def _map_signup_error(exc: Exception) -> AppError:
 
 
 def _to_user_response(user_id: UUID, email: str, nickname: str, profile_image_url: str | None) -> UserResponse:
-    """Supabase/Auth + profiles 정보를 프론트 응답 스키마로 합친다."""
+    """Supabase/Auth + profile 정보를 프론트 응답 스키마로 합친다."""
     return UserResponse(
         id=user_id,
         email=email,
@@ -95,6 +95,11 @@ class AuthService:
             try:
                 profile = self.users.create(user_id=user_id, nickname=payload.nickname)
             except SQLAlchemyError as exc:
+                # profile 저장 실패 시 auth.users orphan 방지를 위해 Auth 유저를 롤백한다.
+                try:
+                    delete_auth_user(user_id)
+                except Exception:
+                    pass
                 raise AppError(
                     ErrorCode.DB_ERROR,
                     "사용자 프로필을 저장하는 중 오류가 발생했습니다.",

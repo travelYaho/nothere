@@ -5,7 +5,8 @@ from uuid import UUID
 from sqlalchemy import desc, nulls_last
 from sqlalchemy.orm import Session
 
-from app.db.models.trip import IN_PROGRESS_STATUSES, Trip, TripPreferredExperience
+from app.db.models.preference import TripPreferredExperience
+from app.db.models.trip import IN_PROGRESS_STATUSES, Trip
 
 _CONDITION_FIELDS = (
     "title",

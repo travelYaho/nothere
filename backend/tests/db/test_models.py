@@ -46,7 +46,7 @@ def test_schedules_table_is_gone():
 
 def test_region_matches_erd_exactly():
     """Region 은 스키마 문서(id/name/is_supported) 외 컬럼을 추가하지 않는다."""
-    assert _columns("regions") == {"id", "name", "is_supported"}
+    assert _columns("region") == {"id", "name", "is_supported"}
 
 
 def test_place_uses_geography_location_not_lat_lng():
@@ -57,7 +57,7 @@ def test_place_uses_geography_location_not_lat_lng():
     address 는 Kakao 지오코딩이 비활성화된 동안 좌표 대신 임시로 저장하는
     주소 원문이다.
     """
-    columns = _columns("places")
+    columns = _columns("place")
     assert columns == {
         "id",
         "source_type",
@@ -74,19 +74,19 @@ def test_place_uses_geography_location_not_lat_lng():
 
 
 def test_trip_place_purpose_composite_key_matches_erd():
-    table = Base.metadata.tables["trip_place_purposes"]
+    table = Base.metadata.tables["trip_place_purpose"]
     assert {c.name for c in table.primary_key.columns} == {"trip_place_id", "purpose_tag_id"}
-    assert _columns("trip_place_purposes") == {"trip_place_id", "purpose_tag_id", "created_at"}
+    assert _columns("trip_place_purpose") == {"trip_place_id", "purpose_tag_id", "created_at"}
 
 
 def test_trip_preferred_experience_composite_key_matches_erd():
-    table = Base.metadata.tables["trip_preferred_experiences"]
+    table = Base.metadata.tables["trip_preferred_experience"]
     assert {c.name for c in table.primary_key.columns} == {"trip_id", "experience_tag_id"}
-    assert _columns("trip_preferred_experiences") == {"trip_id", "experience_tag_id", "weight"}
+    assert _columns("trip_preferred_experience") == {"trip_id", "experience_tag_id", "weight"}
 
 
 def test_trip_place_has_expected_columns():
-    columns = _columns("trip_places")
+    columns = _columns("trip_place")
     expected = {
         "id",
         "trip_id",
@@ -110,13 +110,13 @@ def test_trip_place_defaults_are_pending_and_not_fixed():
     아직 세션에 넣지 않은 객체를 만들어서는 확인할 수 없다. 그래서
     Column.default.arg 를 직접 검사한다.
     """
-    table = Base.metadata.tables["trip_places"]
+    table = Base.metadata.tables["trip_place"]
     assert table.columns["is_fixed"].default.arg is False
     assert table.columns["resolution_status"].default.arg == "pending"
 
 
-def test_profile_relationship_renamed_from_schedules_to_trips():
-    assert hasattr(Profile, "trips")
+def test_profile_has_no_schedules_relationship():
+    """1주차 플레이스홀더였던 schedules 관계가 Profile 에 남아있지 않은지 확인한다."""
     assert not hasattr(Profile, "schedules")
 
 
@@ -144,6 +144,9 @@ def test_guide_entry_has_expected_columns():
         "trip_place_id",
         "entry_date",
         "image_url",
+        "image_key",
+        "image_original_name",
+        "image_content_type",
         "content",
         "is_public",
         "display_order",
@@ -165,7 +168,7 @@ def test_guide_like_has_unique_constraint_on_share_link_and_user():
 
 def test_place_experience_tag_and_trip_preferred_experience_share_experience_tags():
     """PlaceExperienceTag/TripPreferredExperience 가 같은 experience_tags 를 참조하는지 확인한다."""
-    place_tag_fk = next(iter(Base.metadata.tables["place_experience_tags"].columns["experience_tag_id"].foreign_keys))
-    trip_pref_fk = next(iter(Base.metadata.tables["trip_preferred_experiences"].columns["experience_tag_id"].foreign_keys))
-    assert place_tag_fk.column.table.name == "experience_tags"
-    assert trip_pref_fk.column.table.name == "experience_tags"
+    place_tag_fk = next(iter(Base.metadata.tables["place_experience_tag"].columns["experience_tag_id"].foreign_keys))
+    trip_pref_fk = next(iter(Base.metadata.tables["trip_preferred_experience"].columns["experience_tag_id"].foreign_keys))
+    assert place_tag_fk.column.table.name == "experience_tag"
+    assert trip_pref_fk.column.table.name == "experience_tag"

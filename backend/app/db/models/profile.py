@@ -1,25 +1,16 @@
-"""서비스 사용자 프로필 테이블 모델이다.
-
-Supabase Auth 의 auth.users 와 분리해, 닉네임/프로필 이미지 같은 서비스 전용 정보를 저장한다.
-"""
+"""서비스 사용자 프로필 — auth.users 와 1:1."""
 from datetime import datetime
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-if TYPE_CHECKING:
-    from app.db.models.trip import Trip
-    from app.db.models.user_preference import UserLongTermPreference
-
 
 class Profile(Base):
-    """auth.users 와 1:1 로 연결되는 public.profiles 모델."""
-    __tablename__ = "profiles"
+    __tablename__ = "profile"
 
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -38,9 +29,4 @@ class Profile(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
-    )
-
-    trips: Mapped[list["Trip"]] = relationship(back_populates="user")
-    long_term_preferences: Mapped[list["UserLongTermPreference"]] = relationship(
-        back_populates="user"
     )

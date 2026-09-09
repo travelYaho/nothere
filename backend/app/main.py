@@ -58,8 +58,8 @@ def health() -> dict[str, str]:
 
 @app.exception_handler(AppError)
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
-    """서비스 내부 AppError를 공통 {"error": {code, message}} 형식으로 반환한다."""
-    return JSONResponse(status_code=exc.status_code, content={"error": exc.to_dict()})
+    """서비스 내부 AppError를 공통 {error:{code,message}} 형식으로 반환한다."""
+    return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
 
 
 @app.exception_handler(RequestValidationError)

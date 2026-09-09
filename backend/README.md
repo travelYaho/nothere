@@ -34,6 +34,8 @@ source .venv/bin/activate
 alembic upgrade head
 ```
 
+Supabase Dashboard SQL Editor에서 `supabase/rls.sql`도 실행해 RLS 정책을 적용하세요.
+
 ## 서버 실행
 
 ```bash
@@ -52,8 +54,13 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 * 회원가입: `POST /api/auth/signup`
 * 로그인 / 로그아웃 / 토큰 갱신: 프론트엔드에서 Supabase Auth 사용
-* 일부 API는 인증 후 사용할 수 있습니다.
+* 보호 API는 `Authorization: Bearer <access_token>` 필요
 
+## 주요 API
+
+* `GET /api/home` — 홈 요약 (진행 중/최근 일정)
+* `GET|PATCH /api/users/me` — 내 프로필
+* `GET|POST /api/schedules`, `GET|PATCH|DELETE /api/schedules/{id}` — 일정·장소 CRUD
 
 ## Health Check
 
@@ -69,8 +76,6 @@ GET /health
 }
 ```
 
-```
-
 ## 에러 응답
 
 API 에러는 다음 형식으로 반환됩니다.
@@ -80,4 +85,12 @@ API 에러는 다음 형식으로 반환됩니다.
   "code": "AUTH_TOKEN_INVALID",
   "message": "인증 토큰이 유효하지 않습니다."
 }
+```
+
+## 테스트
+
+```bash
+cd backend
+source .venv/bin/activate
+pytest
 ```

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models.trip import TripPlacePurpose
+from app.db.models.preference import TripPlacePurpose
 
 
 class TripPlacePurposeRepository:

@@ -35,7 +35,7 @@ class GuideLike(Base):
     )
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("profiles.id", ondelete="CASCADE"),
+        ForeignKey("profile.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

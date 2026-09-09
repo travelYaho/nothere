@@ -1,6 +1,7 @@
 """로그인 사용자의 홈 화면 요약 엔드포인트를 정의한다.
 
 이 파일은 전체 일정 기능이 아니라 홈에 필요한 최소 요약 응답만 다룬다.
+일정 CRUD는 /api/trips 를 사용한다.
 """
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session

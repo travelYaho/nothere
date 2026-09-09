@@ -13,7 +13,9 @@ from app.db.models.guide_like import GuideLike
 from app.db.models.profile import Profile
 from app.db.models.region import Region
 from app.db.models.share_link import ShareLink, ShareLinkVisibility
-from app.db.models.trip import Trip, TripPlace, TripPreferredExperience
+from app.db.models.preference import TripPreferredExperience
+from app.db.models.trip import Trip
+from app.db.models.trip_place import TripPlace
 
 PAGE_SIZE = 8
 # 카드 부제(by 작성자 · 태그1·태그2)에 노출할 선호경험 태그 최대 개수.
