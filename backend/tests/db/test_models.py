@@ -45,8 +45,10 @@ def test_schedules_table_is_gone():
 
 
 def test_region_matches_erd_exactly():
-    """Region 은 스키마 문서(id/name/is_supported) 외 컬럼을 추가하지 않는다."""
-    assert _columns("region") == {"id", "name", "is_supported"}
+    """Region 은 스키마 문서(id/name/is_supported) + 집중률 API 연동용 지역 코드
+    (area_cd/signgu_cd) 외 컬럼을 추가하지 않는다.
+    """
+    assert _columns("region") == {"id", "name", "is_supported", "area_cd", "signgu_cd"}
 
 
 def test_place_uses_geography_location_not_lat_lng():

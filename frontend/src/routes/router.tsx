@@ -12,6 +12,7 @@ import TripAnalysisLoading from "@/pages/TripAnalysisLoading"
 import GuideExplore from "@/pages/GuideExplore"
 import GuideLiked from "@/pages/GuideLiked"
 import CompareAlternatives from "@/pages/CompareAlternatives"
+import RecommendationPurpose from "@/pages/RecommendationPurpose"
 import ReplacementPreviewPage from "@/pages/ReplacementPreview"
 import RemainingCongested from "@/pages/RemainingCongested"
 import ConfirmTrip from "@/pages/ConfirmTrip"
@@ -34,6 +35,10 @@ export const router = createBrowserRouter([
       { path: "/trips/:tripId/analysis", element: <TripAnalysisLoading /> },
       { path: "/guides/explore", element: <GuideExplore /> },
       { path: "/guides/liked", element: <GuideLiked /> },
+      {
+        path: "/trips/:tripId/places/:tripPlaceId/purpose",
+        element: <RecommendationPurpose />,
+      },
       {
         path: "/trips/:tripId/places/:tripPlaceId/compare",
         element: <CompareAlternatives />,

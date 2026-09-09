@@ -2,14 +2,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
 
+from app.db.models.experience_tag import ExperienceTag
 from app.db.models.guide_entry import GuideEntry
 from app.db.models.place import Place
+from app.db.models.preference import PlaceExperienceTag
 from app.db.models.recommendation import (
     RecommendationCandidate,
     RecommendationInteraction,
@@ -253,6 +256,146 @@ class RecommendationRepository:
         if eligible_only:
             query = query.filter(RecommendationReason.is_eligible.is_(True))
         return list(query.order_by(RecommendationRanking.route_score.desc().nullslast()).all())
+
+    # —— STEP6 대안 후보 생성 ——
+    def list_trip_place_ids(self, trip_id: UUID) -> set[UUID]:
+        """같은 일정에 이미 포함된 place_id들 — duplicate_place 판정용."""
+        rows = self.db.query(TripPlace.place_id).filter(TripPlace.trip_id == trip_id).all()
+        return {row[0] for row in rows}
+
+    def get_places_map(self, place_ids) -> dict[UUID, Place]:
+        place_ids = list(place_ids)
+        if not place_ids:
+            return {}
+        rows = self.db.query(Place).filter(Place.id.in_(place_ids)).all()
+        return {row.id: row for row in rows}
+
+    def get_or_create_place_by_tour_content_id(
+        self, tour_content_id: str, name: str, latitude: float, longitude: float
+    ) -> Place:
+        place = (
+            self.db.query(Place).filter(Place.tour_content_id == tour_content_id).first()
+        )
+        if place is not None:
+            return place
+        place = Place(
+            source_type="tour_api",
+            tour_content_id=tour_content_id,
+            name=name,
+            is_recommendable=True,
+        )
+        self.db.add(place)
+        self.db.flush()
+        self.db.execute(
+            text(
+                "UPDATE place SET location = ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography "
+                "WHERE id = :id"
+            ),
+            {"lng": longitude, "lat": latitude, "id": str(place.id)},
+        )
+        self.db.flush()
+        self.db.refresh(place)
+        return place
+
+    def list_nearby_recommendable_places(
+        self,
+        latitude: float,
+        longitude: float,
+        radius_m: float,
+        exclude_place_ids: set[UUID],
+        limit: int = 20,
+    ) -> list[dict]:
+        """TourAPI 응답이 비었을 때 쓰는 DB 후보 풀 — 이미 알려진 place 중 반경 내 것만."""
+        rows = self.db.execute(
+            text(
+                """
+                SELECT id, name, tour_content_id,
+                       ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
+                FROM place
+                WHERE is_recommendable = TRUE
+                  AND location IS NOT NULL
+                  AND ST_DWithin(
+                        location,
+                        ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                        :radius_m
+                      )
+                ORDER BY location <-> ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
+                LIMIT :limit
+                """
+            ),
+            {"lng": longitude, "lat": latitude, "radius_m": radius_m, "limit": limit},
+        ).mappings().all()
+        return [
+            dict(row)
+            for row in rows
+            if UUID(str(row["id"])) not in exclude_place_ids
+        ]
+
+    def get_experience_tag_code_map(self) -> dict[str, int]:
+        rows = self.db.query(ExperienceTag).filter(ExperienceTag.is_active.is_(True)).all()
+        return {row.code: row.id for row in rows}
+
+    def list_experience_tags(self) -> list[ExperienceTag]:
+        return (
+            self.db.query(ExperienceTag)
+            .filter(ExperienceTag.is_active.is_(True))
+            .order_by(ExperienceTag.id.asc())
+            .all()
+        )
+
+    def upsert_place_experience_tags(
+        self, place_id: UUID, weights: dict[int, float], source: str
+    ) -> None:
+        """카테고리 기반으로 추정한 place-경험태그 가중치를 저장한다.
+
+        source="manual"인 기존 행은 덮어쓰지 않는다 — 수동 검수 UI가 아직 없어 지금 당장
+        만들어지는 값은 아니지만, 나중에 사람이 직접 확정한 태그가 다음 추천 요청 때 카테고리
+        규칙으로 조용히 되돌려지는 것을 미리 막아둔다(place_concentration_mapping의
+        _HUMAN_REVIEWED_STATUSES 보존 규칙과 같은 목적).
+        """
+        for tag_id, weight in weights.items():
+            insert_stmt = pg_insert(PlaceExperienceTag).values(
+                place_id=place_id,
+                experience_tag_id=tag_id,
+                weight=Decimal(str(round(weight, 4))),
+                source=source,
+            )
+            stmt = insert_stmt.on_conflict_do_update(
+                index_elements=["place_id", "experience_tag_id"],
+                set_={
+                    "weight": insert_stmt.excluded.weight,
+                    "source": insert_stmt.excluded.source,
+                },
+                where=PlaceExperienceTag.source.is_distinct_from("manual"),
+            )
+            self.db.execute(stmt)
+        self.db.flush()
+
+    def create_request_with_candidates(
+        self,
+        trip_place_id: UUID,
+        search_mode: str,
+        status: str,
+        candidates: list[dict],
+    ) -> RecommendationRequest:
+        """요청 행과 후보 행들을 한 트랜잭션으로 커밋한다.
+
+        요청을 status=success로 먼저 커밋하고 후보 저장을 별도 커밋으로 나누면, 후보 저장이
+        실패했을 때 "성공했지만 후보가 없는 요청"이 남을 수 있어 하나의 트랜잭션으로 묶는다.
+        """
+        request = RecommendationRequest(
+            trip_place_id=trip_place_id,
+            search_mode=search_mode,
+            status=status,
+            completed_at=datetime.now(timezone.utc),
+        )
+        self.db.add(request)
+        self.db.flush()  # candidates가 참조할 request.id 확보
+        for candidate in candidates:
+            self.db.add(RecommendationCandidate(request_id=request.id, **candidate))
+        self.db.commit()
+        self.db.refresh(request)
+        return request
 
     # —— replacement ——
     def create_replacement(self, replacement: Replacement) -> Replacement:

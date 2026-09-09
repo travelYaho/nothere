@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timezone
+from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -17,21 +19,153 @@ from app.db.models.recommendation import (
 from app.db.models.replacement import Replacement
 from app.db.models.share_link import ShareLink
 from app.db.models.trip import Trip
+from app.domains.recommendation import candidates as candidate_pipeline
 from app.domains.recommendation.route import RouteService
 from app.domains.recommendation.scoring import (
     build_reason_text,
     compute_route_score,
     to_decimal,
 )
+from app.repositories.analysis_repository import AnalysisRepository
 from app.repositories.recommendation_repository import RecommendationRepository
 from app.schemas.user import CurrentUser
+from app.utils.geo import get_place_coords
 
 
 class RecommendationService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.repo = RecommendationRepository(db)
+        self.analysis_repo = AnalysisRepository(db)
         self.routes = RouteService(db)
+
+    def create_request(
+        self,
+        trip_place_id: UUID,
+        user: CurrentUser,
+        purpose_tag_ids: list[int] | None,
+        search_mode: str | None,
+    ) -> dict:
+        """STEP6 — 후보를 탐색해 recommendation_request/candidate 를 생성한다.
+
+        경로 점수·이유·순위는 다루지 않는다. 이후 route-scores 엔드포인트가 이어받는다.
+        """
+        tp = self.repo.get_trip_place(trip_place_id)
+        if tp is None:
+            raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정 장소를 찾을 수 없습니다.", 404)
+        trip = self.repo.get_trip_owned(tp.trip_id, user.id)
+        if trip is None:
+            raise AppError(ErrorCode.FORBIDDEN, "접근 권한이 없습니다.", 403)
+
+        requested_mode = search_mode or "default"
+        if requested_mode not in candidate_pipeline.RADIUS_KM_BY_MODE:
+            raise AppError(
+                ErrorCode.INVALID_SEARCH_MODE, "search_mode 값이 올바르지 않습니다.", 400
+            )
+
+        origin_coords = get_place_coords(self.db, tp.place_id)
+        if origin_coords is None:
+            raise AppError(
+                ErrorCode.VALIDATION_ERROR, "원래 장소의 좌표 정보가 없습니다.", 422
+            )
+        origin_lat, origin_lng = origin_coords
+
+        tag_code_map = self.repo.get_experience_tag_code_map()
+        code_by_id = {tag_id: code for code, tag_id in tag_code_map.items()}
+        purpose_tag_codes = [
+            code_by_id[tag_id] for tag_id in (purpose_tag_ids or []) if tag_id in code_by_id
+        ]
+
+        duplicate_place_ids = self.repo.list_trip_place_ids(trip.id)
+        duplicate_names = {
+            place.name for place in self.repo.get_places_map(duplicate_place_ids).values()
+        }
+
+        experience_threshold = (
+            candidate_pipeline.RELAXED_EXPERIENCE_THRESHOLD
+            if requested_mode == "relaxed_experience"
+            else candidate_pipeline.DEFAULT_EXPERIENCE_THRESHOLD
+        )
+        modes_to_try = (
+            [requested_mode]
+            if requested_mode != "default"
+            else ["default", "expanded_radius"]
+        )
+
+        survivors: list[candidate_pipeline.EnrichedCandidate] = []
+        excluded_count = 0
+        final_mode = requested_mode
+        for mode in modes_to_try:
+            final_mode = mode
+            radius_km = candidate_pipeline.RADIUS_KM_BY_MODE[mode]
+            generated = candidate_pipeline.generate_candidates(
+                origin_lat,
+                origin_lng,
+                radius_km,
+                db_pool_fetcher=lambda radius_m: self.repo.list_nearby_recommendable_places(
+                    origin_lat, origin_lng, radius_m, duplicate_place_ids
+                ),
+            )
+            enriched = candidate_pipeline.enrich_candidates(
+                generated, trip.travel_date, purpose_tag_codes, self.analysis_repo
+            )
+            survivors, excluded_count = candidate_pipeline.filter_candidates(
+                enriched, duplicate_names, experience_threshold
+            )
+            if len(survivors) >= candidate_pipeline.MIN_CANDIDATES or mode == modes_to_try[-1]:
+                break
+
+        survivors = candidate_pipeline.select_top_candidates(
+            survivors, candidate_pipeline.MAX_CANDIDATES
+        )
+
+        try:
+            row_dicts = [self._materialize_candidate(c, tag_code_map) for c in survivors]
+            status = "success" if row_dicts else "no_candidate"
+            request = self.repo.create_request_with_candidates(
+                trip_place_id, final_mode, status, row_dicts
+            )
+        except SQLAlchemyError as exc:
+            self.db.rollback()
+            raise AppError(
+                ErrorCode.DB_ERROR, "추천 후보를 저장하는 중 오류가 발생했습니다.", 500
+            ) from exc
+
+        return {
+            "requestId": str(request.id),
+            "tripPlaceId": str(trip_place_id),
+            "searchMode": final_mode,
+            "status": status,
+            "candidateCount": len(row_dicts),
+            "excludedCount": excluded_count,
+        }
+
+    def _materialize_candidate(
+        self, candidate: "candidate_pipeline.EnrichedCandidate", tag_code_map: dict[str, int]
+    ) -> dict:
+        """TourAPI 후보는 place 행을 확보하고 place_experience_tag(tour_category)도 채운다."""
+        source = candidate.source
+        if source.from_tour_api:
+            place = self.repo.get_or_create_place_by_tour_content_id(
+                source.id, source.name, source.latitude, source.longitude
+            )
+            place_id = place.id
+            weights = {
+                tag_code_map[code]: weight
+                for code, weight in candidate.category_weights.items()
+                if code in tag_code_map
+            }
+            if weights:
+                self.repo.upsert_place_experience_tags(place_id, weights, source="tour_category")
+        else:
+            place_id = UUID(source.id)
+
+        return {
+            "candidate_place_id": place_id,
+            "experience_score": Decimal(str(candidate.experience_score)),
+            "congestion_level": candidate.congestion_level,
+            "feasibility_status": "UNKNOWN",
+        }
 
     def _assert_request_owned(self, request_id: UUID, user: CurrentUser):
         req = self.repo.get_request(request_id)
@@ -348,6 +482,11 @@ class RecommendationService:
 
         tp.place_id = to_place_id
         tp.resolution_status = "replaced"
+        # 이 trip_place에 붙어 있던 옛 장소의 분석 결과를 지운다 — 안 지우면 다음 조회 때
+        # 새 장소인데 옛 장소의 혼잡도가 그대로 보인다. place_concentration_mapping은 place_id
+        # 기준 재사용 데이터라 여기서 지우지 않는다(analysis_repository.clear_analysis_for_trip_place 참고).
+        # 아래 self.db.commit() 하나로 이 메서드의 모든 변경이 같은 트랜잭션에 묶인다.
+        self.analysis_repo.clear_analysis_for_trip_place(tp.id)
 
         self.repo.log_interaction(
             user_id=user.id,

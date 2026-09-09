@@ -49,7 +49,9 @@ CREATE TABLE public.api_fetch_log (
 CREATE TABLE public.region (
   id BIGSERIAL PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
-  is_supported BOOLEAN NOT NULL DEFAULT FALSE
+  is_supported BOOLEAN NOT NULL DEFAULT FALSE,
+  area_cd VARCHAR(20) NULL,
+  signgu_cd VARCHAR(20) NULL
 );
 
 CREATE TABLE public.experience_tag (

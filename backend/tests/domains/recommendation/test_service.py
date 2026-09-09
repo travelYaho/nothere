@@ -152,3 +152,54 @@ def test_score_routes_returns_route_score_without_rank_or_total():
     assert "rank" not in item
     assert item["isEligible"] is True
     db.commit.assert_called()
+
+
+def test_apply_replacement_clears_old_analysis_in_same_commit():
+    """교체 후 옛 장소의 trip_place_analysis가 지워져야 새 장소 조회 시 옛 혼잡도가 안 남는다.
+
+    clear_analysis_for_trip_place가 별도 commit 없이 flush만 하고, apply_replacement의
+    마지막 self.db.commit() 하나로 place_id 변경/분석 삭제/interaction 기록이 함께 묶여야 한다.
+    """
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    candidate_id = uuid4()
+    from_place_id = uuid4()
+    to_place_id = uuid4()
+
+    tp = SimpleNamespace(
+        id=trip_place_id,
+        trip_id=trip_id,
+        place_id=from_place_id,
+        initial_place_id=None,
+        is_fixed=False,
+    )
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+    cand = SimpleNamespace(id=candidate_id, candidate_place_id=to_place_id, congestion_level="low")
+    ranking = SimpleNamespace(id=uuid4())
+    reason = SimpleNamespace(is_eligible=True, recommend_reason="추천", not_recommend_reason=None)
+    route = SimpleNamespace(extra_minutes=5)
+
+    svc.repo.get_trip_place = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_candidate = MagicMock(return_value=cand)
+    svc.repo.get_ranking_by_candidate = MagicMock(return_value=ranking)
+    svc.repo.get_reason_by_candidate = MagicMock(return_value=reason)
+    svc.repo.get_route_by_candidate = MagicMock(return_value=route)
+    svc.repo.latest_analysis = MagicMock(return_value=SimpleNamespace(level="high"))
+    svc.repo.create_replacement = MagicMock()
+    svc.repo.log_interaction = MagicMock()
+    svc.analysis_repo.clear_analysis_for_trip_place = MagicMock()
+
+    call_order: list[str] = []
+    svc.analysis_repo.clear_analysis_for_trip_place.side_effect = lambda *a, **k: call_order.append("clear")
+    db.commit.side_effect = lambda: call_order.append("commit")
+
+    result = svc.apply_replacement(trip_place_id, candidate_id, user)
+
+    assert tp.place_id == to_place_id
+    svc.analysis_repo.clear_analysis_for_trip_place.assert_called_once_with(trip_place_id)
+    assert call_order == ["clear", "commit"]  # commit 전에 clear가 끝나 있어야 같은 트랜잭션
+    assert result["resolutionStatus"] == "replaced"
