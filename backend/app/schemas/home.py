@@ -12,13 +12,13 @@ class HomeUserResponse(APIModel):
     profile_image_url: str | None = None
 
 
-# [홈 범위] 홈 응답용 최소 일정 요약. 상세/장소는 /api/schedules 응답을 사용한다.
 class ScheduleSummary(APIModel):
-    """홈 카드에서 보여줄 최소 일정 정보만 담는다."""
+    """홈 카드에서 보여줄 최소 일정 정보만 담는다. schedule_id 는 trip.id 이다."""
     schedule_id: UUID
     title: str
     travel_date: date | None = None
     status: str
+    place_count: int = 0
 
 
 class HomeResponse(APIModel):

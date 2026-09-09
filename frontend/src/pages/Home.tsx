@@ -3,6 +3,8 @@
  * Figma: 여기말GO / node 48:1966 "홈 (로그인)"
  */
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/auth/AuthProvider"
 import { Bell, MapPin, Plus } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
@@ -16,12 +18,28 @@ const MY_SCHEDULES = [
 
 export default function Home() {
   const [tab, setTab] = useState("home")
+  const [loggingOut, setLoggingOut] = useState(false)
+  const navigate = useNavigate()
+  const { logout } = useAuth()
+
+  const onLogout = async () => {
+    setLoggingOut(true)
+    try {
+      await logout()
+      navigate("/", { replace: true })
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex items-center justify-between px-5 pb-3.5 pt-2">
         <h1 className="text-[24px] font-extrabold tracking-[-0.63px] text-ink">여기말고</h1>
         <div className="flex items-center gap-3.5">
+          <Button variant="text" loading={loggingOut} onClick={() => void onLogout()}>
+            로그아웃
+          </Button>
           <MapPin size={20} className="text-ink-soft" />
           <Bell size={20} className="text-ink-soft" />
         </div>

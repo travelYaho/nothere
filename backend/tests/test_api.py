@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.main import app
-from app.schemas.auth import SignupResponse
+from app.schemas.auth import AuthSessionResponse, MessageResponse, SignupResponse
 from app.schemas.home import HomeResponse, HomeUserResponse, ScheduleSummary
 from app.schemas.schedule import PlaceResponse, ScheduleListResponse, ScheduleResponse
 from app.schemas.user import CurrentUser, UserResponse
@@ -163,3 +163,52 @@ def test_signup_delegates_to_service(monkeypatch: pytest.MonkeyPatch):
     body = response.json()
     assert body["user"]["email"] == "new@example.com"
     assert body["accessToken"] == "access"
+
+
+def test_login_delegates_to_service(monkeypatch: pytest.MonkeyPatch):
+    user_id = uuid4()
+
+    def _login(self, payload) -> AuthSessionResponse:
+        return AuthSessionResponse(
+            user=UserResponse(
+                id=user_id,
+                email=payload.email,
+                nickname="테스터",
+                profile_image_url=None,
+            ),
+            access_token="access",
+            refresh_token="refresh",
+            token_type="bearer",
+        )
+
+    monkeypatch.setattr(AuthService, "login", _login)
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/api/auth/login",
+            json={"email": "tester@example.com", "password": "secret12"},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["user"]["email"] == "tester@example.com"
+    assert body["accessToken"] == "access"
+
+
+def test_logout(client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(AuthService, "logout", lambda self, token: None)
+    response = client.post("/api/auth/logout", headers={"Authorization": "Bearer token"})
+    assert response.status_code == 204
+
+
+def test_password_reset_request(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        AuthService,
+        "request_password_reset",
+        lambda self, payload: MessageResponse(message="비밀번호 재설정 안내를 보냈습니다."),
+    )
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/api/auth/password/reset-request",
+            json={"email": "user@example.com"},
+        )
+    assert response.status_code == 200
+    assert "보냈습니다" in response.json()["message"]
