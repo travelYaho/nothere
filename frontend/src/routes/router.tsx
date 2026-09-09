@@ -4,6 +4,7 @@ import HomeGuest from "@/pages/HomeGuest"
 import Login from "@/pages/Login"
 import Home from "@/pages/Home"
 import CompareAlternatives from "@/pages/CompareAlternatives"
+import RecommendationPurpose from "@/pages/RecommendationPurpose"
 import ReplacementPreviewPage from "@/pages/ReplacementPreview"
 import RemainingCongested from "@/pages/RemainingCongested"
 import ConfirmTrip from "@/pages/ConfirmTrip"
@@ -17,6 +18,10 @@ export const router = createBrowserRouter([
       { path: "/", element: <HomeGuest /> },
       { path: "/login", element: <Login /> },
       { path: "/home", element: <Home /> },
+      {
+        path: "/trips/:tripId/places/:tripPlaceId/purpose",
+        element: <RecommendationPurpose />,
+      },
       {
         path: "/trips/:tripId/places/:tripPlaceId/compare",
         element: <CompareAlternatives />,
