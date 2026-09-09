@@ -53,7 +53,7 @@ export default function Login() {
     if (!email.trim()) next.email = "이메일을 입력해 주세요."
     else if (!isValidEmail(email.trim())) next.email = "이메일 형식을 확인해주세요."
     if (!password) next.password = "비밀번호를 입력해 주세요."
-    else if (password.length < 6) next.password = "비밀번호는 6자 이상이어야 합니다."
+    else if (password.length < 8) next.password = "비밀번호는 8자 이상이어야 합니다."
     if (view === "signup") {
       if (!nickname.trim()) next.nickname = "닉네임을 입력해 주세요."
       if (passwordConfirm !== password) next.passwordConfirm = "비밀번호가 일치하지 않습니다."
