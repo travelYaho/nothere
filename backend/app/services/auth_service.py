@@ -2,6 +2,12 @@
 
 로그인/로그아웃/토큰 재발급은 프론트엔드가 Supabase Auth 를 직접 사용한다.
 서비스 전용 사용자 정보는 profile 테이블에서 관리한다.
+
+회원가입은 공개 sign_up API 대신 관리자(service role) create_user API를
+email_confirm=True 로 호출한다. sign_up 은 확인 이메일을 보내는데, Supabase
+기본 이메일 발송량이 시간당 몇 건 수준으로 낮게 제한돼 있어(over_email_send_
+rate_limit) 개발/데모 단계에서 바로 막히기 때문이다. 이메일 소유 확인이
+필요해지면 이 부분을 다시 sign_up 기반으로 되돌려야 한다.
 """
 from uuid import UUID
 
@@ -9,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
-from app.core.supabase import delete_auth_user, new_anon_client
+from app.core.supabase import delete_auth_user, get_service_client, new_anon_client
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import SignupRequest, SignupResponse
 from app.schemas.user import UserResponse
@@ -61,13 +67,13 @@ class AuthService:
 
     def signup(self, payload: SignupRequest) -> SignupResponse:
         """Supabase Auth 회원가입 후 같은 UUID 로 profile 을 생성한다."""
-        client = new_anon_client()
         try:
-            result = client.auth.sign_up(
+            result = get_service_client().auth.admin.create_user(
                 {
                     "email": payload.email,
                     "password": payload.password,
-                    "options": {"data": {"nickname": payload.nickname}},
+                    "email_confirm": True,
+                    "user_metadata": {"nickname": payload.nickname},
                 }
             )
         except Exception as exc:
@@ -79,14 +85,6 @@ class AuthService:
                 ErrorCode.VALIDATION_ERROR,
                 "회원가입에 실패했습니다.",
                 status_code=400,
-            )
-
-        identities = getattr(auth_user, "identities", None)
-        if identities is not None and len(identities) == 0:
-            raise AppError(
-                ErrorCode.AUTH_EMAIL_ALREADY_EXISTS,
-                "이미 가입된 이메일입니다.",
-                status_code=409,
             )
 
         user_id = UUID(str(auth_user.id))
@@ -106,7 +104,16 @@ class AuthService:
                     status_code=500,
                 ) from exc
 
-        session = result.session
+        # admin.create_user 는 세션을 돌려주지 않으므로, 방금 만든 비밀번호로
+        # 바로 로그인해 프론트가 이어서 쓸 수 있는 세션을 만들어준다.
+        try:
+            session_result = new_anon_client().auth.sign_in_with_password(
+                {"email": payload.email, "password": payload.password}
+            )
+            session = session_result.session
+        except Exception:
+            session = None
+
         user = _to_user_response(
             profile.id,
             auth_user.email or payload.email,
