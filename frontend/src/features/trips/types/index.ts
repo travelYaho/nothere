@@ -69,6 +69,7 @@ export interface TripPlaceAddResponse {
   tripId: string
   placeId: string
   visitOrder: number
+  visitTime: string | null
   isFixed: boolean
 }
 

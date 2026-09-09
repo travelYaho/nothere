@@ -101,14 +101,16 @@ def test_add_place_to_trip_success():
     service.trip_places.exists.return_value = False
     service.trip_places.next_position.return_value = 3
     service.trip_places.add.return_value = MagicMock(
-        id=uuid4(), trip_id=trip_id, place_id=place_id, position=3, is_fixed=False
+        id=uuid4(), trip_id=trip_id, place_id=place_id, position=3, visit_time=None, is_fixed=False
     )
 
     result = service.add_place_to_trip(_current_user(), trip_id, TripPlaceAddRequest(place_id=place_id))
 
     assert result.visit_order == 3
     assert result.is_fixed is False
-    service.trip_places.add.assert_called_once_with(trip_id=trip_id, place_id=place_id, position=3)
+    service.trip_places.add.assert_called_once_with(
+        trip_id=trip_id, place_id=place_id, position=3, visit_time=None
+    )
 
 
 def test_add_place_to_trip_unknown_trip_returns_404():

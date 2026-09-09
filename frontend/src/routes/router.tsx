@@ -3,6 +3,7 @@ import { MobileLayout } from "@/components/layout/MobileLayout"
 import HomeGuest from "@/pages/HomeGuest"
 import Login from "@/pages/Login"
 import Home from "@/pages/Home"
+import Bookmarks from "@/pages/Bookmarks"
 import TripConditions from "@/pages/TripConditions"
 import TripPlaces from "@/pages/TripPlaces"
 import CustomPlace from "@/pages/CustomPlace"
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
       { path: "/", element: <HomeGuest /> },
       { path: "/login", element: <Login /> },
       { path: "/home", element: <Home /> },
+      { path: "/bookmarks", element: <Bookmarks /> },
       { path: "/trips/new", element: <TripConditions /> },
       { path: "/trips/:tripId/conditions", element: <TripConditions /> },
       { path: "/trips/:tripId/places", element: <TripPlaces /> },

@@ -5,6 +5,7 @@
  *  - FlowHeader  : 뒤로가기 + 제목 + 스텝 + 진행바 — 온보딩 플로우
  *  - BottomTab   : 하단 탭 4개
  */
+import { useNavigate } from "react-router-dom"
 import { Bell, Bookmark, ChevronLeft, Home, MapPin, RouteIcon, User } from "../common/icons"
 
 
@@ -92,6 +93,22 @@ const TABS = [
   { key: "saved", label: "보관함", Icon: Bookmark },
   { key: "my", label: "마이", Icon: User },
 ] as const
+
+/** BottomTab 키 → 라우트. "마이"는 아직 화면이 없어 제외했다. */
+const TAB_ROUTES: Record<string, string> = {
+  home: "/home",
+  create: "/trips/new",
+  saved: "/bookmarks",
+}
+
+/** BottomTab 클릭을 실제 라우팅으로 연결하는 공용 훅. */
+export function useBottomTabNav() {
+  const navigate = useNavigate()
+  return function handleTabChange(key: string) {
+    const path = TAB_ROUTES[key]
+    if (path) navigate(path)
+  }
+}
 
 export function BottomTab({
   active = "home",

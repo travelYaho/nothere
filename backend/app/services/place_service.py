@@ -113,13 +113,19 @@ class PlaceService:
             )
 
         position = self.trip_places.next_position(trip_id)
-        trip_place = self.trip_places.add(trip_id=trip_id, place_id=payload.place_id, position=position)
+        trip_place = self.trip_places.add(
+            trip_id=trip_id,
+            place_id=payload.place_id,
+            position=position,
+            visit_time=payload.visit_time,
+        )
 
         return TripPlaceAddResponse(
             trip_place_id=trip_place.id,
             trip_id=trip_place.trip_id,
             place_id=trip_place.place_id,
             visit_order=trip_place.position,
+            visit_time=trip_place.visit_time,
             is_fixed=trip_place.is_fixed,
         )
 

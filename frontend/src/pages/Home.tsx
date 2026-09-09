@@ -2,12 +2,11 @@
  * Home — 홈(로그인) 화면.
  * Figma: 여기말GO / node 48:1966 "홈 (로그인)"
  */
-import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowRight, Bell, Heart, MapPin, Plus } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
-import { BottomTab } from "@/components/layout/navigation"
+import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 
 const CONTINUE_SCHEDULE = { title: "서울 서촌 당일치기", meta: "2026년 8월 14일 | 4곳 등록" }
 const MY_SCHEDULES = [
@@ -17,7 +16,7 @@ const MY_SCHEDULES = [
 
 export default function Home() {
   const navigate = useNavigate()
-  const [tab, setTab] = useState("home")
+  const handleTabChange = useBottomTabNav()
 
   return (
     <div className="flex flex-1 flex-col">
@@ -94,7 +93,7 @@ export default function Home() {
         </div>
       </div>
 
-      <BottomTab active={tab} onChange={setTab} />
+      <BottomTab active="home" onChange={handleTabChange} />
     </div>
   )
 }

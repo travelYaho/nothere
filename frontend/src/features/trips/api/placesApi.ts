@@ -15,8 +15,8 @@ export function searchPlaces(keyword: string, regionId?: number) {
     .then((res) => res.places)
 }
 
-export function addPlaceToTrip(tripId: string, placeId: string) {
-  return apiClient.post<TripPlaceAddResponse>(`/trips/${tripId}/places`, { placeId })
+export function addPlaceToTrip(tripId: string, placeId: string, visitTime?: string | null) {
+  return apiClient.post<TripPlaceAddResponse>(`/trips/${tripId}/places`, { placeId, visitTime })
 }
 
 export function addCustomPlaceToTrip(tripId: string, payload: CustomPlaceAddRequest) {

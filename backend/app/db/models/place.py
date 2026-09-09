@@ -6,24 +6,15 @@
 값을 저장할 곳이 필요해 추가했다. 주소도 카카오 지오코딩("카카오맵" 제품
 비활성화로 당장 불가)이 가능해지기 전까지는 텍스트로만 저장해 둔다.
 """
-from typing import Any
 from uuid import UUID, uuid4
 
+from geoalchemy2 import Geography
+from geoalchemy2.elements import WKBElement
 from sqlalchemy import BigInteger, Boolean, ForeignKey, SmallInteger, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import UserDefinedType
 
 from app.db.base import Base
-
-
-class Geography(UserDefinedType):
-    """PostGIS GEOGRAPHY 컬럼용 최소 타입."""
-
-    cache_ok = True
-
-    def get_col_spec(self, **_kwargs: Any) -> str:
-        return "GEOGRAPHY(POINT,4326)"
 
 
 class Place(Base):
@@ -39,7 +30,9 @@ class Place(Base):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    location: Mapped[Any | None] = mapped_column(Geography, nullable=True)
+    location: Mapped[WKBElement | None] = mapped_column(
+        Geography(geometry_type="POINT", srid=4326), nullable=True
+    )
     is_recommendable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     expected_wait_minutes: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)
