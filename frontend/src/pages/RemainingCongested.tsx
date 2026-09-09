@@ -6,16 +6,18 @@ import { useNavigate, useParams } from "react-router-dom"
 import { CongestionCard } from "@/components/common/cards"
 import { Button } from "@/components/common/primitives"
 import { FlowHeader } from "@/components/layout/navigation"
-import { toUiCongestion, useRemaining } from "@/features/recommendation"
+import { toUiCongestion, useRemaining, useRunAnalysis } from "@/features/recommendation"
 
 export default function RemainingCongested() {
   const { tripId } = useParams()
   const navigate = useNavigate()
   const { data, loading, error, load } = useRemaining(tripId)
+  const { run: runAnalysis } = useRunAnalysis(tripId)
 
   useEffect(() => {
-    void load()
-  }, [load])
+    // 이 화면에 들어올 때마다 최신 집중도로 다시 분석한 뒤 남은 혼잡 장소를 불러온다.
+    void runAnalysis().then(() => load())
+  }, [runAnalysis, load])
 
   return (
     <div className="relative flex flex-1 flex-col">
@@ -52,16 +54,11 @@ export default function RemainingCongested() {
                   place={item.placeName}
                   level={toUiCongestion(item.level)}
                   onAlternative={() =>
-                    navigate(`/trips/${tripId}/places/${item.tripPlaceId}/compare`)
+                    navigate(`/trips/${tripId}/places/${item.tripPlaceId}/purpose`)
                   }
                 />
               ))}
             </div>
-            <p className="text-[12px] text-ink-faint">
-              대안 보기는 Part2 recommendation request 생성 후
-              <code className="mx-1">?requestId=</code>
-              와 함께 비교 화면으로 진입하세요.
-            </p>
           </>
         )}
       </div>
