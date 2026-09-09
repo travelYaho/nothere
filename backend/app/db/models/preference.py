@@ -1,13 +1,17 @@
 """여행/장소 경험 태그·목적·장기 선호 — Part1."""
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Numeric, SmallInteger, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.db.models.trip import Trip
 
 
 class TripPlacePurpose(Base):
@@ -44,6 +48,8 @@ class TripPreferredExperience(Base):
         primary_key=True,
     )
     weight: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+
+    trip: Mapped["Trip"] = relationship(back_populates="preferred_experiences")
 
 
 class PlaceExperienceTag(Base):

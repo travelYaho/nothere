@@ -2,11 +2,11 @@
  * Home — 홈(로그인) 화면.
  * Figma: 여기말GO / node 48:1966 "홈 (로그인)"
  */
-import { useState } from "react"
-import { Bell, MapPin, Plus } from "@/components/common/icons"
+import { useNavigate } from "react-router-dom"
+import { ArrowRight, Bell, Heart, MapPin, Plus } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
-import { BottomTab } from "@/components/layout/navigation"
+import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 
 const CONTINUE_SCHEDULE = { title: "서울 서촌 당일치기", meta: "2026년 8월 14일 | 4곳 등록" }
 const MY_SCHEDULES = [
@@ -15,7 +15,8 @@ const MY_SCHEDULES = [
 ]
 
 export default function Home() {
-  const [tab, setTab] = useState("home")
+  const navigate = useNavigate()
+  const handleTabChange = useBottomTabNav()
 
   return (
     <div className="flex flex-1 flex-col">
@@ -51,9 +52,26 @@ export default function Home() {
       </div>
 
       <div className="px-4 pb-2.5">
-        <Button block leadingIcon={<Plus size={16} />}>
+        <Button block leadingIcon={<Plus size={16} />} onClick={() => navigate("/trips/new")}>
           새 일정 점검하기
         </Button>
+      </div>
+
+      <div className="flex gap-2 px-4 pb-2.5">
+        <button
+          onClick={() => navigate("/guides/explore")}
+          className="flex flex-1 items-center justify-between rounded-[var(--radius-field)] bg-surface px-4 py-3 text-left shadow-[var(--shadow-card)]"
+        >
+          <span className="text-[13px] font-bold text-ink">가이드북 둘러보기</span>
+          <ArrowRight size={14} className="text-ink-faint" />
+        </button>
+        <button
+          onClick={() => navigate("/guides/liked")}
+          className="flex shrink-0 items-center gap-1.5 rounded-[var(--radius-field)] bg-surface px-4 py-3 shadow-[var(--shadow-card)]"
+        >
+          <Heart size={14} className="text-primary" />
+          <span className="text-[13px] font-bold text-ink">좋아요함</span>
+        </button>
       </div>
 
       <div className="px-4 pb-2">
@@ -75,7 +93,7 @@ export default function Home() {
         </div>
       </div>
 
-      <BottomTab active={tab} onChange={setTab} />
+      <BottomTab active="home" onChange={handleTabChange} />
     </div>
   )
 }

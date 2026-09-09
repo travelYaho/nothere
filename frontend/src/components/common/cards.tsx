@@ -1,13 +1,14 @@
 /**
- * 카드 6종
+ * 카드 7종
  *  1) ScheduleCard      — 일정 목록 아이템 (번호 뱃지 + 제목 + 메타 + 진행중 강조)
  *  2) CongestionCard    — 혼잡 경고 카드 (빨강 테두리, 대안보기/유지)
  *  3) RecommendCard     — 추천 카드 (혼잡도 뱃지 포함)
  *  4) SearchResultItem  — 검색 결과 리스트 아이템 (+ 추가 버튼)
  *  5) BannerCard        — 홈 프로모션 배너 (그라디언트 + 이미지)
  *  6) ChangeLogItem     — 변경 기록 아이템 (BEFORE → AFTER)
+ *  7) GuidebookCard     — 공개 갤러리 카드 (커버 이미지 + 지역·좋아요)
  */
-import { ArrowRight, Plus } from "./icons"
+import { ArrowRight, Close, Heart, Plus } from "./icons"
 import { Button, CongestionBadge, type CongestionLevel } from "./primitives"
 
 /* 1) ScheduleCard --------------------------------------------------- */
@@ -17,33 +18,47 @@ export function ScheduleCard({
   meta,
   active = false,
   onClick,
+  onRemove,
 }: {
   index: number
   title: string
   meta: string
   active?: boolean
   onClick?: () => void
+  /** 있으면 우측 화살표 대신 삭제(X) 버튼을 보여준다 — 보관함 목록용. */
+  onRemove?: () => void
 }) {
   return (
-    <button
-      onClick={onClick}
+    <div
       className={[
         "flex w-full items-center gap-3.5 rounded-[var(--radius-field)] bg-surface px-4 py-3.5 text-left",
-        "shadow-[var(--shadow-card)] transition-transform active:scale-[0.99]",
+        "shadow-[var(--shadow-card)]",
         active ? "border-2 border-primary" : "border-[0.667px] border-transparent",
       ].join(" ")}
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-primary text-[12px] font-extrabold text-white">
-        {String(index).padStart(2, "0")}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-bold tracking-[-0.28px] text-ink">
-          {title}
+      <button
+        onClick={onClick}
+        disabled={!onClick}
+        className="flex min-w-0 flex-1 items-center gap-3.5 text-left transition-transform active:scale-[0.99]"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-primary text-[12px] font-extrabold text-white">
+          {String(index).padStart(2, "0")}
         </span>
-        <span className="mt-0.5 block text-[11px] font-medium text-ink-faint">{meta}</span>
-      </span>
-      <ArrowRight size={16} className="shrink-0 text-ink-faint" />
-    </button>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-bold tracking-[-0.28px] text-ink">
+            {title}
+          </span>
+          <span className="mt-0.5 block text-[11px] font-medium text-ink-faint">{meta}</span>
+        </span>
+      </button>
+      {onRemove ? (
+        <button onClick={onRemove} className="shrink-0 p-1 text-ink-ghost">
+          <Close size={14} />
+        </button>
+      ) : (
+        <ArrowRight size={16} className="shrink-0 text-ink-faint" />
+      )}
+    </div>
   )
 }
 
@@ -196,6 +211,73 @@ export function BannerCard({
         {footer && <div className="mt-auto">{footer}</div>}
       </div>
     </div>
+  )
+}
+
+/* 6-1) GuidebookCard -------------------------------------------------- */
+export function GuidebookCard({
+  title,
+  regionName,
+  placeCount,
+  tags,
+  authorNickname,
+  coverImageUrl,
+  likeCount,
+  isLikedByMe,
+  onClick,
+  onToggleLike,
+}: {
+  title: string
+  regionName: string
+  placeCount: number
+  tags: string[]
+  authorNickname: string
+  coverImageUrl: string | null
+  likeCount: number
+  isLikedByMe: boolean
+  onClick?: () => void
+  onToggleLike?: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full overflow-hidden rounded-[var(--radius-field)] bg-surface text-left shadow-[var(--shadow-card)] transition-transform active:scale-[0.99]"
+    >
+      <div className="relative h-[140px] w-full bg-surface-chip">
+        {coverImageUrl && (
+          <img src={coverImageUrl} alt="" className="h-full w-full object-cover" />
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/45 to-transparent" />
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleLike?.()
+          }}
+          aria-pressed={isLikedByMe}
+          aria-label={isLikedByMe ? "좋아요 취소" : "좋아요"}
+          className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-black/30 backdrop-blur-sm"
+        >
+          <Heart size={16} filled={isLikedByMe} className={isLikedByMe ? "text-primary" : "text-white"} />
+        </button>
+        <span className="absolute bottom-2.5 left-2.5 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-bold text-primary">
+          {regionName} · {placeCount}곳
+        </span>
+      </div>
+      <div className="flex flex-col gap-1.5 px-3.5 py-3">
+        <p className="truncate text-[14px] font-bold tracking-[-0.28px] text-ink">{title}</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-[11px] font-medium text-ink-faint">
+            by {authorNickname}
+            {tags.length > 0 ? ` · ${tags.join("·")}` : ""}
+          </p>
+          <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-primary">
+            <Heart size={12} filled className="text-primary" />
+            {likeCount}
+          </span>
+        </div>
+      </div>
+    </button>
   )
 }
 

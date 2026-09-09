@@ -103,6 +103,35 @@ export const Grip = (p: IconProps) => (
     <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" />
   </svg>
 )
+export const Heart = ({
+  size = 20,
+  filled = false,
+  className,
+  ...props
+}: IconProps & { filled?: boolean }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill={filled ? "currentColor" : "none"}
+    stroke="currentColor"
+    strokeWidth={1.8}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    {...props}
+  >
+    <path d="M12 20.5s-7.2-4.4-9.8-9C.6 8 2 4.6 5.4 4.6c2 0 3.6 1.1 4.8 2.8 1.2-1.7 2.8-2.8 4.8-2.8 3.4 0 4.8 3.4 3.2 6.9-2.6 4.6-9.8 9-9.8 9z" />
+  </svg>
+)
+export const Sliders = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 6h9M17 6h3M4 12h2M10 12h10M4 18h12M20 18h0.01" />
+    <circle cx="13" cy="6" r="2" />
+    <circle cx="6" cy="12" r="2" />
+    <circle cx="16" cy="18" r="2" />
+  </svg>
+)
 export const Dot = ({ size = 8, className }: { size?: number; className?: string }) => (
   <span
     className={className}

@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     SUPABASE_SECRET_KEY: str
     DATABASE_URL: str
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    # 키 발급 전까지는 빈 문자열로 두고, TourAPI 클라이언트가 그 상태를
+    # EXTERNAL_API_UNAVAILABLE(503) 로 방어적으로 처리한다. Supabase 키와
+    # 달리 필수값 검증을 걸지 않아 키 없이도 서버는 정상 기동한다.
+    TOUR_API_KEY: str = ""
+    # 장소 직접 추가 시 주소 -> 위경도 지오코딩에 쓴다. TourAPI 와 마찬가지로
+    # 없어도 서버는 뜨고, 실제 호출 시점에 EXTERNAL_API_UNAVAILABLE 로 방어한다.
     KAKAO_REST_API_KEY: str = ""
     ROUTE_CACHE_TTL_HOURS: int = 24
     FRONTEND_PUBLIC_ORIGIN: str = "http://localhost:5173"

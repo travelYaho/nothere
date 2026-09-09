@@ -336,3 +336,14 @@ ALTER TABLE public.concentration_spot ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.place_concentration_mapping ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.route_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.place_experience_tag ENABLE ROW LEVEL SECURITY;
+
+-- =============================================================================
+-- guide_like: 비로그인 좋아요는 지원하지 않는다(단순화) — 본인 좋아요만 보고 관리한다.
+-- =============================================================================
+ALTER TABLE public.guide_like ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "guide_like_owner_all" ON public.guide_like;
+
+CREATE POLICY "guide_like_owner_all" ON public.guide_like
+  FOR ALL USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);

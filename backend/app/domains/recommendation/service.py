@@ -578,11 +578,11 @@ class RecommendationService:
         now = datetime.now(timezone.utc)
         trip.status = "confirmed"
         trip.confirmed_at = now
-        if trip.places:
+        if trip.trip_places:
             self.repo.log_interaction(
                 user_id=user.id,
                 trip_id=trip.id,
-                trip_place_id=trip.places[0].id,
+                trip_place_id=trip.trip_places[0].id,
                 event_type="trip_confirm",
             )
         self.db.commit()
@@ -594,7 +594,7 @@ class RecommendationService:
 
     def build_guide(self, trip: Trip) -> dict:
         stops = []
-        places_sorted = sorted(trip.places, key=lambda p: p.position)
+        places_sorted = sorted(trip.trip_places, key=lambda p: p.position)
         mode = trip.transport_mode or "walk"
         for i, tp in enumerate(places_sorted):
             place = self.repo.get_place(tp.place_id)

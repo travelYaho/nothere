@@ -127,4 +127,4 @@ def test_list_experience_tags_is_public(client: TestClient):
     app.dependency_overrides[get_db] = _override
     response = client.get("/api/experience-tags")
     assert response.status_code == 200
-    assert response.json()["data"] == []
+    assert response.json()["data"]["experienceTags"] == []

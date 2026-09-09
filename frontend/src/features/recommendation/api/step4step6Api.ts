@@ -53,7 +53,9 @@ export function fetchAnalysis(accessToken: string, tripId: string, status?: "CRO
 }
 
 export function fetchExperienceTags() {
-  return v1Fetch<ExperienceTag[]>(`${base}/experience-tags`, null)
+  return v1Fetch<{ experienceTags: ExperienceTag[] }>(`${base}/experience-tags`, null).then(
+    (res) => res.experienceTags,
+  )
 }
 
 export function createRecommendationRequest(

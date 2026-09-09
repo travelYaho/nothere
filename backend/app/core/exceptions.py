@@ -15,6 +15,9 @@ class AppError(Exception):
         self.code = code
         self.message = message
         self.status_code = status_code
+        # remainingCount 처럼 code/message 만으로는 표현 안 되는 부가 정보.
+        # 키는 이미 camelCase 로 직접 넣는다(이 dict 는 APIModel 을 안 거치므로
+        # alias_generator 가 적용되지 않는다).
         self.extra = extra or {}
         super().__init__(message)
 
@@ -49,6 +52,14 @@ class ErrorCode:
     EXTERNAL_API_ERROR = "EXTERNAL_API_ERROR"
     EXTERNAL_API_UNAVAILABLE = "EXTERNAL_API_UNAVAILABLE"
     UNRESOLVED_CONGESTED_PLACES = "unresolved_congested_places"
+    # 명세서 예시는 소문자 스네이크(invalid_preferred_experience_count)로 적혀 있지만,
+    # 기존 코드 컨벤션(AUTH_* 등)에 맞춰 대문자 스네이크로 통일했다.
+    INVALID_PREFERRED_EXPERIENCE_COUNT = "INVALID_PREFERRED_EXPERIENCE_COUNT"
+    INVALID_TRAVEL_DATE = "INVALID_TRAVEL_DATE"
+    DUPLICATE_PLACE_ID = "DUPLICATE_PLACE_ID"
+    MINIMUM_PLACES_REQUIRED = "MINIMUM_PLACES_REQUIRED"
+    ADDRESS_NOT_FOUND = "ADDRESS_NOT_FOUND"
+    GUIDE_NOT_PUBLIC = "GUIDE_NOT_PUBLIC"
     SHARE_LINK_GONE = "SHARE_LINK_GONE"
     NO_PLACES_IN_TRIP = "NO_PLACES_IN_TRIP"
     INVALID_SEARCH_MODE = "INVALID_SEARCH_MODE"

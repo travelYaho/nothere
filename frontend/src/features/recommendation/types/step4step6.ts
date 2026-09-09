@@ -23,7 +23,6 @@ export type AnalysisResponse = {
 
 export type ExperienceTag = {
   id: number
-  code: string
   name: string
 }
 
