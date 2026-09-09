@@ -4,7 +4,7 @@
  */
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Bell, MapPin, Plus } from "@/components/common/icons"
+import { ArrowRight, Bell, Heart, MapPin, Plus } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
 import { BottomTab } from "@/components/layout/navigation"
@@ -56,6 +56,23 @@ export default function Home() {
         <Button block leadingIcon={<Plus size={16} />} onClick={() => navigate("/trips/new")}>
           새 일정 점검하기
         </Button>
+      </div>
+
+      <div className="flex gap-2 px-4 pb-2.5">
+        <button
+          onClick={() => navigate("/guides/explore")}
+          className="flex flex-1 items-center justify-between rounded-[var(--radius-field)] bg-surface px-4 py-3 text-left shadow-[var(--shadow-card)]"
+        >
+          <span className="text-[13px] font-bold text-ink">가이드북 둘러보기</span>
+          <ArrowRight size={14} className="text-ink-faint" />
+        </button>
+        <button
+          onClick={() => navigate("/guides/liked")}
+          className="flex shrink-0 items-center gap-1.5 rounded-[var(--radius-field)] bg-surface px-4 py-3 shadow-[var(--shadow-card)]"
+        >
+          <Heart size={14} className="text-primary" />
+          <span className="text-[13px] font-bold text-ink">좋아요함</span>
+        </button>
       </div>
 
       <div className="px-4 pb-2">

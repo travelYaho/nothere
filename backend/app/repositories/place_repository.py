@@ -36,6 +36,7 @@ class PlaceRepository:
         latitude: float | None,
         is_recommendable: bool = True,
         expected_wait_minutes: int | None = None,
+        address: str | None = None,
     ) -> Place:
         location = None
         if longitude is not None and latitude is not None:
@@ -49,6 +50,7 @@ class PlaceRepository:
             location=location,
             is_recommendable=is_recommendable,
             expected_wait_minutes=expected_wait_minutes,
+            address=address,
         )
         self.db.add(place)
         self.db.commit()

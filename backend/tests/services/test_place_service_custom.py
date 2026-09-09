@@ -1,10 +1,13 @@
-"""PlaceService.add_custom_place_to_trip 을 repository/Kakao mock 으로 검증한다."""
-from unittest.mock import MagicMock, patch
+"""PlaceService.add_custom_place_to_trip 을 repository mock 으로 검증한다.
+
+Kakao 지오코딩은 "카카오맵" 제품 비활성화로 당장 못 써서, 이 플로우는 주소를
+텍스트로만 저장하고 위경도는 채우지 않는다(추후 배치로 채울 예정).
+"""
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
-from app.clients.kakao_api import GeocodedAddress
 from app.core.exceptions import AppError, ErrorCode
 from app.schemas.place import CustomPlaceAddRequest
 from app.schemas.user import CurrentUser
@@ -57,22 +60,18 @@ def test_add_custom_place_success():
         id=uuid4(), trip_id=trip_id, position=5, is_fixed=False
     )
 
-    with patch(
-        "app.services.place_service.kakao_api.geocode_address",
-        return_value=GeocodedAddress(latitude=37.57, longitude=126.97),
-    ) as mock_geocode:
-        result = service.add_custom_place_to_trip(_current_user(), trip_id, _payload())
+    result = service.add_custom_place_to_trip(_current_user(), trip_id, _payload())
 
-    mock_geocode.assert_called_once_with("서울 종로구 사직로 161")
     service.places.create.assert_called_once_with(
         source_type="custom",
         tour_content_id=None,
         region_id=1,
         name="유성푸르지오시티",
-        longitude=126.97,
-        latitude=37.57,
+        longitude=None,
+        latitude=None,
         is_recommendable=False,
         expected_wait_minutes=60,
+        address="서울 종로구 사직로 161",
     )
     service.places.add_experience_tag.assert_called_once_with(place_id, 2)
     assert result.visit_order == 5
@@ -101,34 +100,3 @@ def test_add_custom_place_unknown_category_returns_404():
     assert exc_info.value.status_code == 404
     assert exc_info.value.code == ErrorCode.RESOURCE_NOT_FOUND
     service.places.create.assert_not_called()
-
-
-def test_add_custom_place_unresolvable_address_returns_400():
-    service = _service_with_mocks()
-    service.trips.get_owned_by_id.return_value = MagicMock(id=uuid4(), region_id=1)
-    service.experience_tags.get_active_by_ids.return_value = [_tag(2, "역사·문화")]
-
-    with patch("app.services.place_service.kakao_api.geocode_address", return_value=None):
-        with pytest.raises(AppError) as exc_info:
-            service.add_custom_place_to_trip(_current_user(), uuid4(), _payload(address="asdkjaslkdjas"))
-
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.code == ErrorCode.ADDRESS_NOT_FOUND
-    service.places.create.assert_not_called()
-
-
-def test_add_custom_place_geocoding_service_down_propagates_503():
-    """Kakao 자체가 죽었을 때(EXTERNAL_API_UNAVAILABLE)는 주소를 못 찾은 것과 구분되어야 한다."""
-    service = _service_with_mocks()
-    service.trips.get_owned_by_id.return_value = MagicMock(id=uuid4(), region_id=1)
-    service.experience_tags.get_active_by_ids.return_value = [_tag(2, "역사·문화")]
-
-    with patch(
-        "app.services.place_service.kakao_api.geocode_address",
-        side_effect=AppError(ErrorCode.EXTERNAL_API_UNAVAILABLE, "죽음", status_code=503),
-    ):
-        with pytest.raises(AppError) as exc_info:
-            service.add_custom_place_to_trip(_current_user(), uuid4(), _payload())
-
-    assert exc_info.value.status_code == 503
-    assert exc_info.value.code == ErrorCode.EXTERNAL_API_UNAVAILABLE

@@ -10,6 +10,12 @@ latitude/longitude 컬럼으로 바꾸지 않는다. 검색 결과 표시용 add
 node 48:3842) 로 등록하는 커스텀 장소는 집중도 분석 대상이 아니라서
 (is_recommendable=False) 사용자가 직접 예상 대기시간을 입력하게 되어 있고,
 그 값을 저장할 곳이 필요해 추가했다.
+
+`address` 도 ERD 원본엔 없다. 원래 계획은 카카오 지오코딩으로 주소를 바로
+좌표(location)로 변환하는 거였는데, 카카오 콘솔에 "카카오맵" 제품이 아직
+비활성화 상태라 당장 못 쓴다. 그래서 지오코딩은 나중으로 미루고(지도 기능
+만들 때 배치로 좌표를 채워 넣기로 함), 우선 주소 원문만 텍스트로 저장한다.
+그동안 location 은 커스텀 장소에 한해 null 로 남는다.
 """
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -48,6 +54,7 @@ class Place(Base):
     )
     is_recommendable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     expected_wait_minutes: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    address: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     region: Mapped["Region | None"] = relationship(back_populates="places")
     experience_tags: Mapped[list["PlaceExperienceTag"]] = relationship(back_populates="place")

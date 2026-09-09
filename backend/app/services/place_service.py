@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.clients import kakao_api, tour_api
+from app.clients import tour_api
 from app.core.exceptions import AppError, ErrorCode
 from app.repositories.experience_tag_repository import ExperienceTagRepository
 from app.repositories.place_repository import PlaceRepository
@@ -132,8 +132,9 @@ class PlaceService:
         """검색 결과에 없는 장소를 이름/분류/주소로 직접 등록한다(Figma node 48:3842).
 
         커스텀 장소는 집중도 분석 대상이 아니므로(is_recommendable=False)
-        사용자가 예상 대기시간을 직접 입력하고, 위경도는 주소를 Kakao로
-        지오코딩해서 채운다.
+        사용자가 예상 대기시간을 직접 입력한다. 위경도는 Kakao 지오코딩("카카오맵"
+        제품 비활성화로 당장 못 씀)이 가능해지면 나중에 배치로 채우기로 하고,
+        지금은 주소 원문만 텍스트로 저장한다(Place.address).
         """
         trip = self.trips.get_owned_by_id(trip_id, current_user.id)
         if trip is None:
@@ -152,23 +153,16 @@ class PlaceService:
             )
         category_tag = category_tags[0]
 
-        geocoded = kakao_api.geocode_address(payload.address)
-        if geocoded is None:
-            raise AppError(
-                ErrorCode.ADDRESS_NOT_FOUND,
-                "입력하신 주소를 찾을 수 없습니다. 주소를 다시 확인해 주세요.",
-                status_code=400,
-            )
-
         place = self.places.create(
             source_type="custom",
             tour_content_id=None,
             region_id=trip.region_id,
             name=payload.name,
-            longitude=geocoded.longitude,
-            latitude=geocoded.latitude,
+            longitude=None,
+            latitude=None,
             is_recommendable=False,
             expected_wait_minutes=payload.expected_wait_minutes,
+            address=payload.address,
         )
         self.places.add_experience_tag(place.id, category_tag.id)
 

@@ -5,7 +5,18 @@
       "name": "frontend-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
-      "port": 5173
+      "port": 5173,
+      "autoPort": true
+    },
+    {
+      "name": "backend-dev",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m", "uvicorn", "app.main:app",
+        "--reload", "--host", "0.0.0.0", "--port", "8000",
+        "--app-dir", "backend"
+      ],
+      "port": 8000
     }
   ]
 }

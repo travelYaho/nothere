@@ -11,10 +11,13 @@ from sqlalchemy.orm import configure_mappers
 from app.db.base import Base
 from app.db.models import (  # noqa: F401  (import 자체가 관계 등록을 트리거)
     ExperienceTag,
+    GuideEntry,
+    GuideLike,
     Place,
     PlaceExperienceTag,
     Profile,
     Region,
+    ShareLink,
     Trip,
     TripPlace,
     TripPlacePurpose,
@@ -49,8 +52,10 @@ def test_region_matches_erd_exactly():
 def test_place_uses_geography_location_not_lat_lng():
     """Place.location 은 위경도 분리 컬럼이 아니라 GEOGRAPHY 단일 컬럼이어야 한다.
 
-    expected_wait_minutes 는 ERD 원본엔 없지만, "장소 직접 추가"(커스텀 장소)
-    기능에 실제로 필요해 의도적으로 추가한 컬럼이라 허용 목록에 포함한다.
+    expected_wait_minutes/address 는 ERD 원본엔 없지만, "장소 직접 추가"(커스텀
+    장소) 기능에 실제로 필요해 의도적으로 추가한 컬럼이라 허용 목록에 포함한다.
+    address 는 Kakao 지오코딩이 비활성화된 동안 좌표 대신 임시로 저장하는
+    주소 원문이다.
     """
     columns = _columns("places")
     assert columns == {
@@ -62,6 +67,7 @@ def test_place_uses_geography_location_not_lat_lng():
         "location",
         "is_recommendable",
         "expected_wait_minutes",
+        "address",
     }
     assert "latitude" not in columns
     assert "longitude" not in columns
@@ -112,6 +118,49 @@ def test_trip_place_defaults_are_pending_and_not_fixed():
 def test_profile_relationship_renamed_from_schedules_to_trips():
     assert hasattr(Profile, "trips")
     assert not hasattr(Profile, "schedules")
+
+
+def test_share_link_has_expected_columns_and_visibility_check():
+    columns = _columns("share_link")
+    assert columns == {
+        "id",
+        "trip_id",
+        "token",
+        "visibility",
+        "created_at",
+        "expires_at",
+        "revoked_at",
+    }
+    table = Base.metadata.tables["share_link"]
+    assert table.columns["visibility"].default.arg == "link"
+    check_names = {c.name for c in table.constraints if hasattr(c, "sqltext")}
+    assert "ck_share_link_visibility" in check_names
+
+
+def test_guide_entry_has_expected_columns():
+    assert _columns("guide_entry") == {
+        "id",
+        "trip_id",
+        "trip_place_id",
+        "entry_date",
+        "image_url",
+        "content",
+        "is_public",
+        "display_order",
+        "created_at",
+        "updated_at",
+    }
+
+
+def test_guide_like_has_unique_constraint_on_share_link_and_user():
+    table = Base.metadata.tables["guide_like"]
+    assert _columns("guide_like") == {"id", "share_link_id", "user_id", "created_at"}
+    unique_cols = {
+        tuple(sorted(c.name for c in constraint.columns))
+        for constraint in table.constraints
+        if constraint.__class__.__name__ == "UniqueConstraint"
+    }
+    assert ("share_link_id", "user_id") in unique_cols
 
 
 def test_place_experience_tag_and_trip_preferred_experience_share_experience_tags():

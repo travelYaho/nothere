@@ -39,11 +39,16 @@ def test_upgrade_head_renders_offline_sql_without_db_connection():
         "trip_places",
         "trip_place_purposes",
         "user_long_term_preferences",
+        "share_link",
+        "guide_entry",
+        "guide_like",
     ]:
         assert f"CREATE TABLE {table} " in sql, f"{table} 테이블 생성 SQL이 없습니다."
 
     assert sql.index("CREATE TABLE regions ") < sql.index("CREATE TABLE places ")
     assert sql.index("CREATE TABLE places ") < sql.index("CREATE TABLE trip_places ")
     assert sql.index("CREATE TABLE trips ") < sql.index("CREATE TABLE trip_places ")
+    assert sql.index("CREATE TABLE trips ") < sql.index("CREATE TABLE share_link ")
+    assert sql.index("CREATE TABLE share_link ") < sql.index("CREATE TABLE guide_like ")
     assert "DROP TABLE schedules" in sql
     assert "CREATE EXTENSION IF NOT EXISTS postgis" in sql
