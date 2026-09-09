@@ -3,6 +3,7 @@ from fastapi import APIRouter
 
 from app.api import (
     auth,
+    experience_tags,
     guide,
     home,
     recommendation,
@@ -21,3 +22,4 @@ api_router.include_router(recommendation.router)
 api_router.include_router(replacements.router)
 api_router.include_router(trips.router)
 api_router.include_router(guide.router)
+api_router.include_router(experience_tags.router)

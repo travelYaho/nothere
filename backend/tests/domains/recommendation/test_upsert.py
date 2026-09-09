@@ -194,3 +194,21 @@ def test_upsert_route_refreshes_existing_identity_map_entity():
     assert returned.extra_minutes == 5
     assert returned.route_source == "api"
     assert returned.is_route_estimated is False
+
+
+def test_upsert_place_experience_tags_sql_guards_manual_source():
+    """자동 규칙이 source='manual'인 기존 행을 덮어쓰지 않도록 WHERE 가드가 SQL에 있어야 한다."""
+    db = MagicMock()
+    captured: list = []
+    db.execute.side_effect = lambda stmt, **kwargs: captured.append(stmt)
+    repo = RecommendationRepository(db)
+
+    repo.upsert_place_experience_tags(uuid4(), {1: 0.8}, source="tour_category")
+
+    assert captured, "execute가 호출되어야 함"
+    sql = str(
+        captured[0].compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+    assert "ON CONFLICT" in sql.upper()
+    assert "manual" in sql
+    assert "IS DISTINCT FROM" in sql.upper()
