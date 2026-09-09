@@ -36,3 +36,6 @@ frontend/.nuxt/
 # Notes:
 # - alembic/script.py.mako 는 ignore 하지 않음 (마이그레이션 생성 템플릿, 커밋 대상)
 # - alembic/versions/*.py 도 커밋 대상 (스키마 이력)
+
+# Claude Code local config
+.claude/
