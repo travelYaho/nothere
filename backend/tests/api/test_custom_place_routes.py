@@ -1,5 +1,8 @@
 """POST /trips/{tripId}/places/custom 라우터를 dependency override 로
-DB/Supabase/Kakao 실접속 없이 검증한다.
+DB/Supabase 실접속 없이 검증한다.
+
+Kakao 지오코딩은 "카카오맵" 제품 비활성화로 당장 못 써서, 이 라우트는 주소를
+텍스트로만 저장하고 위경도는 채우지 않는다.
 """
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -7,7 +10,6 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.clients.kakao_api import GeocodedAddress
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.main import app
@@ -37,10 +39,7 @@ def test_add_custom_place_success_returns_201(client):
         "app.services.place_service.ExperienceTagRepository"
     ) as MockTagRepo, patch("app.services.place_service.PlaceRepository") as MockPlaceRepo, patch(
         "app.services.place_service.TripPlaceRepository"
-    ) as MockTripPlaceRepo, patch(
-        "app.services.place_service.kakao_api.geocode_address",
-        return_value=GeocodedAddress(latitude=37.57, longitude=126.97),
-    ):
+    ) as MockTripPlaceRepo:
         MockTripRepo.return_value.get_owned_by_id.return_value = MagicMock(id=trip_id, region_id=1)
         tag = MagicMock(id=2)
         tag.name = "역사·문화"
@@ -68,48 +67,31 @@ def test_add_custom_place_success_returns_201(client):
     assert body["data"]["name"] == "유성푸르지오시티"
     assert body["data"]["category"] == "역사·문화"
     assert body["data"]["visitOrder"] == 1
+    MockPlaceRepo.return_value.create.assert_called_once_with(
+        source_type="custom",
+        tour_content_id=None,
+        region_id=1,
+        name="유성푸르지오시티",
+        longitude=None,
+        latitude=None,
+        is_recommendable=False,
+        expected_wait_minutes=60,
+        address="서울 종로구 사직로 161",
+    )
 
 
-def test_add_custom_place_address_not_found_returns_400(client):
+def test_add_custom_place_unknown_category_returns_404(client):
     trip_id = uuid4()
     with patch("app.services.place_service.TripRepository") as MockTripRepo, patch(
         "app.services.place_service.ExperienceTagRepository"
-    ) as MockTagRepo, patch(
-        "app.services.place_service.kakao_api.geocode_address", return_value=None
-    ):
+    ) as MockTagRepo:
         MockTripRepo.return_value.get_owned_by_id.return_value = MagicMock(id=trip_id, region_id=1)
-        tag = MagicMock(id=2)
-        tag.name = "역사·문화"
-        MockTagRepo.return_value.get_active_by_ids.return_value = [tag]
+        MockTagRepo.return_value.get_active_by_ids.return_value = []
 
         res = client.post(
             f"/api/trips/{trip_id}/places/custom",
-            json={
-                "name": "존재안하는곳",
-                "categoryTagId": 2,
-                "address": "asdkjaslkdjas",
-            },
+            json={"name": "존재안하는곳", "categoryTagId": 999, "address": "서울 종로구"},
         )
 
-    assert res.status_code == 400
-    assert res.json()["error"]["code"] == "ADDRESS_NOT_FOUND"
-
-
-def test_add_custom_place_kakao_unavailable_returns_503(client):
-    trip_id = uuid4()
-    with patch("app.services.place_service.TripRepository") as MockTripRepo, patch(
-        "app.services.place_service.ExperienceTagRepository"
-    ) as MockTagRepo, patch("app.services.place_service.kakao_api.settings") as mock_settings:
-        MockTripRepo.return_value.get_owned_by_id.return_value = MagicMock(id=trip_id, region_id=1)
-        tag = MagicMock(id=2)
-        tag.name = "역사·문화"
-        MockTagRepo.return_value.get_active_by_ids.return_value = [tag]
-        mock_settings.KAKAO_REST_API_KEY = ""
-
-        res = client.post(
-            f"/api/trips/{trip_id}/places/custom",
-            json={"name": "유성푸르지오시티", "categoryTagId": 2, "address": "서울 종로구"},
-        )
-
-    assert res.status_code == 503
-    assert res.json()["error"]["code"] == "EXTERNAL_API_UNAVAILABLE"
+    assert res.status_code == 404
+    assert res.json()["error"]["code"] == "RESOURCE_NOT_FOUND"

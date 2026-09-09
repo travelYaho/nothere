@@ -115,3 +115,74 @@ WITH CHECK (auth.uid() = user_id);
 -- regions / experience_tags / places / place_experience_tags 는 사용자 소유가 아닌
 -- 참조(카탈로그) 데이터라 RLS를 걸지 않는다. FastAPI 가 DATABASE_URL(postgres 롤)로
 -- 접속해 우회하는 것과 별개로, Supabase 클라이언트가 직접 조회해도 안전한 공개 데이터다.
+
+-- 가이드북 공개 갤러리·좋아요: share_link/guide_entry 는 소유자만 관리하되,
+-- visibility='public' 인 링크와 그에 딸린 공개 그림일기는 누구나 조회할 수 있어야
+-- 탐색 갤러리가 Supabase 클라이언트로 직접 조회되는 경우에도 동작한다.
+ALTER TABLE public.share_link ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.guide_entry ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.guide_like ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "share_link_select_public_or_owner" ON public.share_link;
+DROP POLICY IF EXISTS "share_link_owner_write" ON public.share_link;
+
+CREATE POLICY "share_link_select_public_or_owner"
+ON public.share_link
+FOR SELECT
+USING (
+    visibility = 'public'
+    OR EXISTS (
+        SELECT 1 FROM public.trips
+        WHERE trips.id = share_link.trip_id AND trips.user_id = auth.uid()
+    )
+);
+
+CREATE POLICY "share_link_owner_write"
+ON public.share_link
+FOR ALL
+USING (EXISTS (
+    SELECT 1 FROM public.trips
+    WHERE trips.id = share_link.trip_id AND trips.user_id = auth.uid()
+))
+WITH CHECK (EXISTS (
+    SELECT 1 FROM public.trips
+    WHERE trips.id = share_link.trip_id AND trips.user_id = auth.uid()
+));
+
+DROP POLICY IF EXISTS "guide_entry_select_public_or_owner" ON public.guide_entry;
+DROP POLICY IF EXISTS "guide_entry_owner_write" ON public.guide_entry;
+
+CREATE POLICY "guide_entry_select_public_or_owner"
+ON public.guide_entry
+FOR SELECT
+USING (
+    (is_public AND EXISTS (
+        SELECT 1 FROM public.share_link
+        WHERE share_link.trip_id = guide_entry.trip_id AND share_link.visibility = 'public'
+    ))
+    OR EXISTS (
+        SELECT 1 FROM public.trips
+        WHERE trips.id = guide_entry.trip_id AND trips.user_id = auth.uid()
+    )
+);
+
+CREATE POLICY "guide_entry_owner_write"
+ON public.guide_entry
+FOR ALL
+USING (EXISTS (
+    SELECT 1 FROM public.trips
+    WHERE trips.id = guide_entry.trip_id AND trips.user_id = auth.uid()
+))
+WITH CHECK (EXISTS (
+    SELECT 1 FROM public.trips
+    WHERE trips.id = guide_entry.trip_id AND trips.user_id = auth.uid()
+));
+
+-- guide_like: 비로그인 좋아요는 지원하지 않는다(단순화) — 본인 좋아요만 보고 관리한다.
+DROP POLICY IF EXISTS "guide_like_owner_all" ON public.guide_like;
+
+CREATE POLICY "guide_like_owner_all"
+ON public.guide_like
+FOR ALL
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);

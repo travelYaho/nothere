@@ -11,10 +11,13 @@ from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.models import (  # noqa: F401, E402
     ExperienceTag,
+    GuideEntry,
+    GuideLike,
     Place,
     PlaceExperienceTag,
     Profile,
     Region,
+    ShareLink,
     Trip,
     TripPlace,
     TripPlacePurpose,
