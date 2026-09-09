@@ -1,12 +1,17 @@
-"""STEP2 조건입력·수정·삭제(여행 생성/수정/삭제) 엔드포인트를 정의한다."""
+"""STEP2 조건입력·수정·삭제(여행 생성/수정/삭제) + Trip 액션(경로/확정/가이드/공유)
+엔드포인트를 정의한다.
+"""
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
 from app.db.session import get_db
+from app.domains.recommendation.service import RecommendationService
 from app.schemas.common import ApiResponse
+from app.schemas.envelope import ok
+from app.schemas.recommendation import ShareLinkRequest
 from app.schemas.trip import (
     TripConditionsUpdateRequest,
     TripConditionsUpdateResponse,
@@ -59,3 +64,47 @@ def delete_trip(
 ) -> None:
     """여행 일정을 하드 삭제한다(TripPlace 등은 FK cascade로 함께 삭제)."""
     TripService(db).delete_trip(current_user, trip_id)
+
+
+@router.get("/{trip_id}/remaining-congested")
+def remaining_congested(
+    trip_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    data = RecommendationService(db).remaining_congested(trip_id, current_user)
+    return ok(data)
+
+
+@router.post("/{trip_id}/confirm")
+def confirm_trip(
+    trip_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    data = RecommendationService(db).confirm(trip_id, current_user)
+    return ok(data)
+
+
+@router.get("/{trip_id}/guide")
+def trip_guide(
+    trip_id: UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    data = RecommendationService(db).get_guide(trip_id, current_user)
+    return ok(data)
+
+
+@router.post("/{trip_id}/share-link", status_code=status.HTTP_201_CREATED)
+def share_link(
+    trip_id: UUID,
+    payload: ShareLinkRequest | None = None,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    body = payload or ShareLinkRequest()
+    data = RecommendationService(db).create_share_link(
+        trip_id, current_user, body.visibility
+    )
+    return ok(data)

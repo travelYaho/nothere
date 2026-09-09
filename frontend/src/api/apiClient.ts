@@ -10,7 +10,8 @@
 import { getAccessToken } from "@/store/sessionStore"
 import { ApiError, NetworkError, type ApiErrorBody, type ApiSuccessBody } from "@/types/api"
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL
+// VITE_API_BASE_URL 은 "/api" 없는 원본 도메인이다(lib/api.ts 와 공유하는 컨벤션).
+const BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/api`
 
 type QueryParams = Record<string, string | number | boolean | undefined | null>
 

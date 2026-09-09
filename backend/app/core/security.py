@@ -57,7 +57,7 @@ def get_current_user(
         )
 
     user_id = UUID(str(auth_user.id))
-    # auth.users 와 별개로, 서비스에서 쓰는 profiles 행이 실제로 존재하는지 확인한다.
+    # auth.users 와 별개로, 서비스에서 쓰는 profile 행이 실제로 존재하는지 확인한다.
     profile = UserRepository(db).get_by_id(user_id)
     if profile is None:
         raise AppError(

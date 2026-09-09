@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from app.db.models import Profile, Trip  # noqa: F401
+from app.db import models as _models  # noqa: F401
 
 # 기본 연결 옵션과 SQLAlchemy 엔진 옵션을 분리해 Supabase 연결 특성에 맞게 조정한다.
 connect_args: dict = {"connect_timeout": 5}

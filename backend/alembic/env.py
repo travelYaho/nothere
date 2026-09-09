@@ -9,21 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
-from app.db.models import (  # noqa: F401, E402
-    ExperienceTag,
-    GuideEntry,
-    GuideLike,
-    Place,
-    PlaceExperienceTag,
-    Profile,
-    Region,
-    ShareLink,
-    Trip,
-    TripPlace,
-    TripPlacePurpose,
-    TripPreferredExperience,
-    UserLongTermPreference,
-)
+from app.db import models as _models  # noqa: F401, E402
 
 config = context.config
 if config.config_file_name is not None:

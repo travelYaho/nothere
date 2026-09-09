@@ -1,4 +1,4 @@
-"""가이드북 공유 링크(share_link) 모델이다.
+"""공유 링크(share_link) ORM.
 
 Trip 을 외부에 공개하는 단위로, `token` 으로 비로그인 사용자도 조회할 수
 있게 한다. `visibility` 는 링크를 아는 사람만(link) / 소유자만(private) /
@@ -16,7 +16,6 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.db.models.guide_like import GuideLike
-    from app.db.models.trip import Trip
 
 
 class ShareLinkVisibility:
@@ -29,7 +28,6 @@ class ShareLinkVisibility:
 
 
 class ShareLink(Base):
-    """Trip 1건을 공유 링크로 노출하는 share_link 모델."""
     __tablename__ = "share_link"
     __table_args__ = (
         CheckConstraint(
@@ -41,7 +39,7 @@ class ShareLink(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     trip_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("trips.id", ondelete="CASCADE"),
+        ForeignKey("trip.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -57,7 +55,6 @@ class ShareLink(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    trip: Mapped["Trip"] = relationship()
     likes: Mapped[list["GuideLike"]] = relationship(
         back_populates="share_link",
         cascade="all, delete-orphan",

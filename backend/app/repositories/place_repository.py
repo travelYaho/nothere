@@ -4,7 +4,8 @@ from uuid import UUID
 from geoalchemy2.elements import WKTElement
 from sqlalchemy.orm import Session
 
-from app.db.models.place import Place, PlaceExperienceTag
+from app.db.models.place import Place
+from app.db.models.preference import PlaceExperienceTag
 
 
 class PlaceRepository:

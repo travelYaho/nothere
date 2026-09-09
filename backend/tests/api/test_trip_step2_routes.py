@@ -35,7 +35,7 @@ def _auth_override():
 def test_list_regions_returns_data_envelope(client):
     fake_region = MagicMock(id=1)
     fake_region.name = "서울특별시"  # MagicMock(name=...)는 mock 자체의 repr용 이름이라 별도로 설정해야 한다.
-    with patch("app.api.v1.regions.RegionRepository") as MockRepo:
+    with patch("app.api.regions.RegionRepository") as MockRepo:
         MockRepo.return_value.list_supported.return_value = [fake_region]
         res = client.get("/api/regions")
 
@@ -47,7 +47,7 @@ def test_list_regions_returns_data_envelope(client):
 def test_list_experience_tags_returns_data_envelope(client):
     fake_tag = MagicMock(id=6)
     fake_tag.name = "카페·휴식"
-    with patch("app.api.v1.experience_tags.ExperienceTagRepository") as MockRepo:
+    with patch("app.api.experience_tags.ExperienceTagRepository") as MockRepo:
         MockRepo.return_value.list_active.return_value = [fake_tag]
         res = client.get("/api/experience-tags")
 

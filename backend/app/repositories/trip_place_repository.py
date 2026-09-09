@@ -5,7 +5,8 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.db.models.trip import Trip, TripPlace
+from app.db.models.trip import Trip
+from app.db.models.trip_place import TripPlace
 
 
 class TripPlaceRepository:

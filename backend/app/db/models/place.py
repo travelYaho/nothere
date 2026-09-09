@@ -1,85 +1,45 @@
-"""장소(관광지) 및 장소-경험태그 매핑을 저장하는 모델이다.
+"""TourAPI 기준 장소(place) ORM. location 은 PostGIS GEOGRAPHY.
 
-`location` 은 스키마 문서 원본대로 PostGIS GEOGRAPHY(POINT) 로 저장한다.
-Part3(홍수민) 의 경로/거리 계산이 이 컬럼을 직접 쓸 수 있어야 하므로
-latitude/longitude 컬럼으로 바꾸지 않는다. 검색 결과 표시용 address/category
-같은 부가 정보는 이 공유 테이블에 넣지 않고, 필요하면 /places/search 를
-구현하는 쪽에서 TourAPI 응답을 그대로 내려주거나 별도 캐시 테이블을 둔다.
-
-`expected_wait_minutes` 는 ERD 원본엔 없는 필드다. "장소 직접 추가"(Figma
-node 48:3842) 로 등록하는 커스텀 장소는 집중도 분석 대상이 아니라서
-(is_recommendable=False) 사용자가 직접 예상 대기시간을 입력하게 되어 있고,
-그 값을 저장할 곳이 필요해 추가했다.
-
-`address` 도 ERD 원본엔 없다. 원래 계획은 카카오 지오코딩으로 주소를 바로
-좌표(location)로 변환하는 거였는데, 카카오 콘솔에 "카카오맵" 제품이 아직
-비활성화 상태라 당장 못 쓴다. 그래서 지오코딩은 나중으로 미루고(지도 기능
-만들 때 배치로 좌표를 채워 넣기로 함), 우선 주소 원문만 텍스트로 저장한다.
-그동안 location 은 커스텀 장소에 한해 null 로 남는다.
+`expected_wait_minutes`/`address` 는 ERD 원본엔 없는 필드다. "장소 직접
+추가"(Figma node 48:3842) 로 등록하는 커스텀 장소는 집중도 분석 대상이 아니라서
+(is_recommendable=False) 사용자가 직접 예상 대기시간을 입력하게 되어 있고, 그
+값을 저장할 곳이 필요해 추가했다. 주소도 카카오 지오코딩("카카오맵" 제품
+비활성화로 당장 불가)이 가능해지기 전까지는 텍스트로만 저장해 둔다.
 """
-from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Any
 from uuid import UUID, uuid4
 
-from geoalchemy2 import Geography
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Numeric, SmallInteger, String
+from sqlalchemy import BigInteger, Boolean, ForeignKey, SmallInteger, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import UserDefinedType
 
 from app.db.base import Base
 
-if TYPE_CHECKING:
-    from app.db.models.experience_tag import ExperienceTag
-    from app.db.models.region import Region
-    from app.db.models.trip import TripPlace
+
+class Geography(UserDefinedType):
+    """PostGIS GEOGRAPHY 컬럼용 최소 타입."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **_kwargs: Any) -> str:
+        return "GEOGRAPHY(POINT,4326)"
 
 
 class Place(Base):
-    """TourAPI 등에서 수집한 장소 기준 정보를 저장하는 places 모델."""
-    __tablename__ = "places"
+    __tablename__ = "place"
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="tour_api")
-    tour_content_id: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    tour_content_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     region_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        ForeignKey("regions.id", ondelete="SET NULL"),
+        ForeignKey("region.id"),
         nullable=True,
         index=True,
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    location: Mapped[str | None] = mapped_column(
-        Geography(geometry_type="POINT", srid=4326),
-        nullable=True,
-    )
+    location: Mapped[Any | None] = mapped_column(Geography, nullable=True)
     is_recommendable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     expected_wait_minutes: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)
-
-    region: Mapped["Region | None"] = relationship(back_populates="places")
-    experience_tags: Mapped[list["PlaceExperienceTag"]] = relationship(back_populates="place")
-    trip_places: Mapped[list["TripPlace"]] = relationship(
-        back_populates="place",
-        foreign_keys="TripPlace.place_id",
-    )
-
-
-class PlaceExperienceTag(Base):
-    """장소가 어떤 경험 태그와 얼마나 관련 있는지 저장하는 복합키 매핑 모델."""
-    __tablename__ = "place_experience_tags"
-
-    place_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("places.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    experience_tag_id: Mapped[int] = mapped_column(
-        SmallInteger,
-        ForeignKey("experience_tags.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    weight: Mapped[float] = mapped_column(Numeric(4, 3), nullable=False, default=1.0)
-    source: Mapped[str] = mapped_column(String(20), nullable=False, default="tour_category")
-
-    place: Mapped["Place"] = relationship(back_populates="experience_tags")
-    experience_tag: Mapped["ExperienceTag"] = relationship(back_populates="place_tags")
