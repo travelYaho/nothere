@@ -1,21 +1,35 @@
 /**
- * TripAnalysisLoading — "일정을 점검하고 있어요" 로딩 화면.
+ * TripAnalysisLoading — "일정을 점검하고 있어요" 로딩 화면 (STEP4).
  * Figma: 여기말GO / node 48:2774 "일정 분석 로딩 화면"
  *
- * 정적 UI만 구현했다. 실제 혼잡도 분석(POST /trips/{tripId}/analysis)은
- * Part2(김도연)/Part3(홍수민) 담당 API라 제 백엔드엔 없다 — 그 API가 생기면
- * 여기서 호출하고 완료 후 결과 화면으로 navigate 하면 된다.
+ * 진입 시 POST /trips/{tripId}/analysis 를 호출해 집중도 분석을 실행하고,
+ * 완료되면 남은 혼잡 장소 확인 화면(STEP8)으로 이동한다.
  */
-import { useParams } from "react-router-dom"
+import { useEffect } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { Search } from "@/components/common/icons"
-import { StepHeader } from "@/features/trips/components/StepHeader"
+import { Button } from "@/components/common/primitives"
+import { FlowHeader } from "@/components/layout/navigation"
+import { useRunAnalysis } from "@/features/recommendation"
 
 export default function TripAnalysisLoading() {
   const { tripId } = useParams<{ tripId: string }>()
+  const navigate = useNavigate()
+  const { data, error, run } = useRunAnalysis(tripId)
+
+  useEffect(() => {
+    void run()
+  }, [run])
+
+  useEffect(() => {
+    if (data && tripId) {
+      navigate(`/trips/${tripId}/remaining`)
+    }
+  }, [data, tripId, navigate])
 
   return (
     <div className="flex flex-1 flex-col">
-      <StepHeader title="대안 찾기" step={1} totalSteps={2} />
+      <FlowHeader title="일정 점검" step={4} totalSteps={9} progress={4 / 9} />
 
       <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
         <span className="flex size-16 items-center justify-center rounded-full bg-primary/10">
@@ -34,6 +48,16 @@ export default function TripAnalysisLoading() {
         </div>
         {!tripId && (
           <p className="pt-8 text-[12px] text-congestion-high">tripId 를 찾을 수 없습니다.</p>
+        )}
+        {error && (
+          <>
+            <p className="pt-8 text-[12px] text-congestion-high">{error}</p>
+            <div className="w-60 pt-4">
+              <Button block onClick={() => void run()}>
+                다시 시도
+              </Button>
+            </div>
+          </>
         )}
       </div>
     </div>

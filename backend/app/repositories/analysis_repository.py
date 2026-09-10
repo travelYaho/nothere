@@ -21,7 +21,7 @@ class AnalysisRepository:
     def get_trip_owned(self, trip_id: UUID, user_id: UUID) -> Trip | None:
         return (
             self.db.query(Trip)
-            .options(joinedload(Trip.places))
+            .options(joinedload(Trip.trip_places))
             .filter(Trip.id == trip_id, Trip.user_id == user_id)
             .first()
         )
