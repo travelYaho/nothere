@@ -164,7 +164,7 @@ def test_area_code_is_forwarded_when_given(monkeypatch):
     monkeypatch.setattr(settings, "TOUR_API_KEY", "dummy-key")
     captured = {}
 
-    def _fake_get(url, params=None, timeout=None):
+    def _fake_get(url, params=None, timeout=None, **_kwargs):
         captured["params"] = params
         return httpx.Response(
             200,
@@ -177,3 +177,26 @@ def test_area_code_is_forwarded_when_given(monkeypatch):
     tour_api.search_places("궁", area_code="1")
 
     assert captured["params"]["areaCode"] == "1"
+
+
+def test_urlencoded_service_key_is_decoded_before_httpx(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "TOUR_API_KEY",
+        "abc%2Bdef%3D%3D",
+    )
+    captured = {}
+
+    def _fake_get(url, params=None, timeout=None, follow_redirects=None):
+        captured["params"] = params
+        return httpx.Response(
+            200,
+            json={"response": {"body": {"totalCount": 0, "items": ""}}},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    tour_api.search_places("궁")
+
+    assert captured["params"]["serviceKey"] == "abc+def=="

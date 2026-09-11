@@ -20,7 +20,7 @@ from app.core.exceptions import AppError, ErrorCode
 logger = logging.getLogger("yeogimalgo.tour_api")
 
 TOUR_API_BASE_URL = "https://apis.data.go.kr/B551011/KorService2"
-_TIMEOUT_SECONDS = 5.0
+_TIMEOUT_SECONDS = 10.0
 _UNAVAILABLE_MESSAGE = "장소 검색 서비스에 일시적으로 연결할 수 없습니다."
 
 NEARBY_BASE_URL = "https://apis.data.go.kr/B551011/KorService2/locationBasedList2"
@@ -45,10 +45,8 @@ def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPla
             status_code=503,
         )
 
-    # .env 의 서비스키는 이미 퍼센트 인코딩되어 있어, httpx 가 쿼리 파라미터를
-    # 만들며 다시 인코딩하면 이중 인코딩이 되어 인증에 실패한다(fetch_nearby_places 참고).
     params: dict[str, Any] = {
-        "serviceKey": unquote(settings.TOUR_API_KEY),
+        "serviceKey": settings.TOUR_API_KEY,
         "MobileOS": "ETC",
         "MobileApp": "yeogimalgo",
         "_type": "json",
@@ -63,15 +61,31 @@ def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPla
             f"{TOUR_API_BASE_URL}/searchKeyword2",
             params=params,
             timeout=_TIMEOUT_SECONDS,
+            follow_redirects=True,
         )
         response.raise_for_status()
         payload = response.json()
     except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("TourAPI search 호출 실패: %s", exc)
         raise AppError(
             ErrorCode.EXTERNAL_API_UNAVAILABLE,
             _UNAVAILABLE_MESSAGE,
             status_code=503,
         ) from exc
+
+    header = payload.get("response", {}).get("header", {}) if isinstance(payload, dict) else {}
+    result_code = header.get("resultCode")
+    if result_code and result_code != "0000":
+        logger.warning(
+            "TourAPI search resultCode=%s msg=%s",
+            result_code,
+            header.get("resultMsg"),
+        )
+        raise AppError(
+            ErrorCode.EXTERNAL_API_UNAVAILABLE,
+            _UNAVAILABLE_MESSAGE,
+            status_code=503,
+        )
 
     return [_to_place(item) for item in _extract_items(payload)]
 
