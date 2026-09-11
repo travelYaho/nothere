@@ -13,6 +13,7 @@ export type AnalysisItem = {
   resolutionStatus: string
   canRecommendAlternative: boolean
   analyzedAt: string | null
+  visitTime: string | null
 }
 
 export type AnalysisResponse = {

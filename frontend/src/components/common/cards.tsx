@@ -67,12 +67,15 @@ export function CongestionCard({
   time,
   place,
   level,
+  showActions = true,
   onAlternative,
   onKeep,
 }: {
   time: string
   place: string
   level: CongestionLevel
+  /** false면 혼잡도가 high여도 대안보기/유지 버튼을 숨긴다(예: 이미 "유지" 처리된 장소). */
+  showActions?: boolean
   onAlternative?: () => void
   onKeep?: () => void
 }) {
@@ -93,7 +96,7 @@ export function CongestionCard({
         </p>
         <CongestionBadge level={level} />
       </div>
-      {warn && (
+      {warn && showActions && (
         <div className="flex gap-2 pt-3">
           <Button block onClick={onAlternative}>
             대안 보기
