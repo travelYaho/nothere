@@ -45,12 +45,8 @@ def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPla
             status_code=503,
         )
 
-    # 공공데이터포털 키는 .env 에 %2B/%3D 로 들어오는 경우가 많다. httpx 가
-    # 한 번 더 인코딩하면 인증이 깨지므로, nearby 호출과 같이 먼저 디코딩한다.
-    service_key = unquote(settings.TOUR_API_KEY)
-
     params: dict[str, Any] = {
-        "serviceKey": service_key,
+        "serviceKey": settings.TOUR_API_KEY,
         "MobileOS": "ETC",
         "MobileApp": "yeogimalgo",
         "_type": "json",
