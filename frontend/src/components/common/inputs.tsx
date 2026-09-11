@@ -221,7 +221,12 @@ export function DatePicker({
   onChange?: (d: Date) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [view, setView] = useState(() => value ?? new Date(2026, 7, 1))
+  const today = useMemo(() => {
+    const t = new Date()
+    t.setHours(0, 0, 0, 0)
+    return t
+  }, [])
+  const [view, setView] = useState(() => value ?? today)
   const selected = value
 
   const grid = useMemo(() => {
@@ -288,28 +293,37 @@ export function DatePicker({
                 {w}
               </span>
             ))}
-            {grid.map((d, i) => (
-              <div key={i} className="flex justify-center py-0.5">
-                {d && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onChange?.(d)
-                      setOpen(false)
-                    }}
-                    className={[
-                      "flex h-9 w-9 items-center justify-center rounded-full text-[13px] transition-colors",
-                      same(d, selected)
-                        ? "bg-primary font-bold text-white"
-                        : "text-ink-soft hover:bg-canvas",
-                    ].join(" ")}
-                  >
-                    {d.getDate()}
-                  </button>
-                )}
-              </div>
-            ))}
+            {grid.map((d, i) => {
+              const disabled = d ? d < today : false
+              return (
+                <div key={i} className="flex justify-center py-0.5">
+                  {d && (
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => {
+                        onChange?.(d)
+                        setOpen(false)
+                      }}
+                      className={[
+                        "flex h-9 w-9 items-center justify-center rounded-full text-[13px] transition-colors",
+                        disabled
+                          ? "cursor-not-allowed text-ink-ghost"
+                          : same(d, selected)
+                            ? "bg-primary font-bold text-white"
+                            : "text-ink-soft hover:bg-canvas",
+                      ].join(" ")}
+                    >
+                      {d.getDate()}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
           </div>
+          <p className="pt-3 text-[11px] font-medium text-ink-faint">
+            오늘 이전의 날짜는 추가할 수 없습니다.
+          </p>
         </div>
       )}
     </div>
