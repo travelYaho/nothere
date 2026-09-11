@@ -20,7 +20,7 @@ from app.core.exceptions import AppError, ErrorCode
 logger = logging.getLogger("yeogimalgo.tour_api")
 
 TOUR_API_BASE_URL = "https://apis.data.go.kr/B551011/KorService2"
-_TIMEOUT_SECONDS = 5.0
+_TIMEOUT_SECONDS = 10.0
 _UNAVAILABLE_MESSAGE = "장소 검색 서비스에 일시적으로 연결할 수 없습니다."
 
 NEARBY_BASE_URL = "https://apis.data.go.kr/B551011/KorService2/locationBasedList2"
@@ -45,8 +45,12 @@ def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPla
             status_code=503,
         )
 
+    # 공공데이터포털 키는 .env 에 %2B/%3D 로 들어오는 경우가 많다. httpx 가
+    # 한 번 더 인코딩하면 인증이 깨지므로, nearby 호출과 같이 먼저 디코딩한다.
+    service_key = unquote(settings.TOUR_API_KEY)
+
     params: dict[str, Any] = {
-        "serviceKey": settings.TOUR_API_KEY,
+        "serviceKey": service_key,
         "MobileOS": "ETC",
         "MobileApp": "yeogimalgo",
         "_type": "json",
@@ -61,15 +65,31 @@ def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPla
             f"{TOUR_API_BASE_URL}/searchKeyword2",
             params=params,
             timeout=_TIMEOUT_SECONDS,
+            follow_redirects=True,
         )
         response.raise_for_status()
         payload = response.json()
     except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("TourAPI search 호출 실패: %s", exc)
         raise AppError(
             ErrorCode.EXTERNAL_API_UNAVAILABLE,
             _UNAVAILABLE_MESSAGE,
             status_code=503,
         ) from exc
+
+    header = payload.get("response", {}).get("header", {}) if isinstance(payload, dict) else {}
+    result_code = header.get("resultCode")
+    if result_code and result_code != "0000":
+        logger.warning(
+            "TourAPI search resultCode=%s msg=%s",
+            result_code,
+            header.get("resultMsg"),
+        )
+        raise AppError(
+            ErrorCode.EXTERNAL_API_UNAVAILABLE,
+            _UNAVAILABLE_MESSAGE,
+            status_code=503,
+        )
 
     return [_to_place(item) for item in _extract_items(payload)]
 
