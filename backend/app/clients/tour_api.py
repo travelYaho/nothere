@@ -45,8 +45,10 @@ def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPla
             status_code=503,
         )
 
+    # .env 의 서비스키는 이미 퍼센트 인코딩되어 있어, httpx 가 쿼리 파라미터를
+    # 만들며 다시 인코딩하면 이중 인코딩이 되어 인증에 실패한다(fetch_nearby_places 참고).
     params: dict[str, Any] = {
-        "serviceKey": settings.TOUR_API_KEY,
+        "serviceKey": unquote(settings.TOUR_API_KEY),
         "MobileOS": "ETC",
         "MobileApp": "yeogimalgo",
         "_type": "json",
