@@ -20,8 +20,8 @@ import {
   sortPlacesForDisplay,
   withVisitOrder,
 } from "@/features/trips/utils/placeOrder"
+import { TimetableDateHeader } from "@/components/common/TimetableDateHeader"
 import { ApiError } from "@/types/api"
-import { formatTimetableDate } from "@/utils/date"
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message
@@ -146,7 +146,6 @@ export default function ConfirmTrip() {
   const { dragIndex, pointerPos, gripProps, isDragging, isDropTarget } =
     useLongPressReorder(handleReorder)
 
-  const dateParts = travelDate ? formatTimetableDate(travelDate) : null
   const draggedPlace = dragIndex !== null ? places[dragIndex] : null
   const orderChanged = useMemo(
     () =>
@@ -204,21 +203,7 @@ export default function ConfirmTrip() {
 
       {!loading && !loadError && (
         <div className="flex flex-1 flex-col overflow-y-auto px-5 pb-24 pt-4">
-          {dateParts && (
-            <div>
-              <h2 className="text-[48px] font-extrabold leading-none tracking-[-1px] text-ink">
-                {dateParts.monthLabel}
-              </h2>
-              <div className="mt-1 flex items-end gap-2">
-                <p className="text-[40px] font-extrabold leading-none tracking-[-1.2px] text-ink">
-                  {dateParts.dayPadded}
-                </p>
-                <p className="pb-1 text-[13px] font-medium italic text-ink-muted">
-                  {dateParts.weekdayLabel}
-                </p>
-              </div>
-            </div>
-          )}
+          <TimetableDateHeader travelDate={travelDate} />
 
           {places.length === 0 ? (
             <p className="py-10 text-center text-[13px] text-ink-muted">
