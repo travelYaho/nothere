@@ -5,3 +5,29 @@ export function toDateOnlyString(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
 }
+
+const WEEKDAY_FULL_LABELS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"]
+
+const MONTH_FULL_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]
+
+export function formatTimetableDate(travelDate: string) {
+  const d = new Date(`${travelDate}T00:00:00`)
+  return {
+    monthLabel: MONTH_FULL_LABELS[d.getMonth()],
+    dayPadded: String(d.getDate()).padStart(2, "0"),
+    weekdayLabel: WEEKDAY_FULL_LABELS[d.getDay()],
+  }
+}

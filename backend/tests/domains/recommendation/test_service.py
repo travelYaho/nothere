@@ -9,7 +9,7 @@ from uuid import uuid4
 import pytest
 
 from app.clients.kakao_mobility import RouteResult
-from app.core.exceptions import AppError, ErrorCode
+from app.core.exceptions import AppError
 from app.domains.recommendation.service import RecommendationService
 from app.schemas.user import CurrentUser
 
@@ -18,24 +18,32 @@ def _user() -> CurrentUser:
     return CurrentUser(id=uuid4(), email="t@example.com", nickname="테스터", profile_image_url=None)
 
 
-def test_confirm_raises_when_pending_congested():
+def test_confirm_succeeds_when_pending_congested():
     db = MagicMock()
     svc = RecommendationService(db)
     trip_id = uuid4()
     user = _user()
-    trip = SimpleNamespace(id=trip_id, user_id=user.id, places=[])
+    trip = SimpleNamespace(
+        id=trip_id,
+        user_id=user.id,
+        trip_places=[SimpleNamespace(id=uuid4())],
+        status="draft",
+        confirmed_at=None,
+    )
 
     svc.repo.get_trip_owned = MagicMock(return_value=trip)
     svc.repo.remaining_congested = MagicMock(
         return_value=[(SimpleNamespace(id=uuid4()), SimpleNamespace(level="high"))]
     )
+    svc.repo.log_interaction = MagicMock()
 
-    with pytest.raises(AppError) as exc:
-        svc.confirm(trip_id, user)
+    result = svc.confirm(trip_id, user)
 
-    assert exc.value.status_code == 409
-    assert exc.value.code == ErrorCode.UNRESOLVED_CONGESTED_PLACES
-    assert exc.value.extra.get("pendingCount") == 1
+    assert result["status"] == "confirmed"
+    assert trip.status == "confirmed"
+    assert trip.confirmed_at is not None
+    db.commit.assert_called_once()
+    svc.repo.log_interaction.assert_called_once()
 
 
 def test_get_candidates_requires_prior_scoring():
