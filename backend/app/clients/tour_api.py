@@ -46,7 +46,7 @@ def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPla
         )
 
     params: dict[str, Any] = {
-        "serviceKey": settings.TOUR_API_KEY,
+        "serviceKey": unquote(settings.TOUR_API_KEY),
         "MobileOS": "ETC",
         "MobileApp": "yeogimalgo",
         "_type": "json",

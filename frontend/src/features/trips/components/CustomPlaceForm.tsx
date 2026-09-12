@@ -2,26 +2,61 @@
  * CustomPlaceForm — "장소 직접 추가" 화면.
  * Figma: 여기말GO / node 48:3842 (프레임 자체 이름은 "여행 조건 온보딩"으로
  * 잘못 붙어 있지만 실제 내용은 장소 직접 추가 폼이다 — 사용자 확인받음)
- *
- * "예상 대기시간" 칩의 "90분 이상"은 명세에 정확한 분 단위가 없어 120분으로
- * 잠정 매핑했다 — 실제 값이 정해지면 EXTRA_WAIT_OPTIONS 만 바꾸면 된다.
  */
-import { useEffect, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type FormEvent } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Button, Chip } from "@/components/common/primitives"
+import { Button } from "@/components/common/primitives"
 import { FieldLabel, TextInput } from "@/components/common/inputs"
+import { Close, Search } from "@/components/common/icons"
 import { StepHeader } from "@/features/trips/components/StepHeader"
 import { addCustomPlaceToTrip } from "@/features/trips/api/placesApi"
-import { listExperienceTags } from "@/features/trips/api/tripsApi"
-import type { ExperienceTag } from "@/features/trips/types"
 import { ApiError } from "@/types/api"
 
-const WAIT_OPTIONS: { label: string; value: number }[] = [
-  { label: "30분", value: 30 },
-  { label: "60분", value: 60 },
-  { label: "90분", value: 90 },
-  { label: "90분 이상", value: 120 },
-]
+/** 다음(카카오) 우편번호 서비스 — 실제 존재하는 도로명주소만 선택 가능하게 강제한다. */
+const DAUM_POSTCODE_SCRIPT_SRC = "https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
+
+interface DaumPostcodeData {
+  roadAddress: string
+  jibunAddress: string
+  autoRoadAddress: string
+  autoJibunAddress: string
+}
+
+declare global {
+  interface Window {
+    daum?: {
+      Postcode: new (options: {
+        oncomplete: (data: DaumPostcodeData) => void
+        width?: string | number
+        height?: string | number
+      }) => { embed: (el: HTMLElement) => void }
+    }
+  }
+}
+
+let daumPostcodeLoadPromise: Promise<void> | null = null
+
+function loadDaumPostcodeScript(): Promise<void> {
+  if (window.daum?.Postcode) return Promise.resolve()
+  if (daumPostcodeLoadPromise) return daumPostcodeLoadPromise
+
+  daumPostcodeLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script")
+    script.src = DAUM_POSTCODE_SCRIPT_SRC
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => {
+      daumPostcodeLoadPromise = null
+      reject(new Error("주소 검색 스크립트를 불러오지 못했습니다."))
+    }
+    document.head.appendChild(script)
+  })
+  return daumPostcodeLoadPromise
+}
+
+function pickRoadAddress(data: DaumPostcodeData): string {
+  return data.roadAddress || data.autoRoadAddress || data.jibunAddress || data.autoJibunAddress
+}
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message
@@ -38,27 +73,41 @@ export function CustomPlaceForm() {
   const { tripId } = useParams<{ tripId: string }>()
   const navigate = useNavigate()
 
-  const [tags, setTags] = useState<ExperienceTag[]>([])
-  const [loadingTags, setLoadingTags] = useState(true)
-
   const [name, setName] = useState("")
-  const [categoryTagId, setCategoryTagId] = useState<number | null>(null)
-  const [address, setAddress] = useState("")
-  const [waitMinutes, setWaitMinutes] = useState<number | null>(null)
+  const [baseAddress, setBaseAddress] = useState("")
+  const [detailAddress, setDetailAddress] = useState("")
+  const [visitTime, setVisitTime] = useState("")
 
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [searchingAddress, setSearchingAddress] = useState(false)
+  const [addressSearchOpen, setAddressSearchOpen] = useState(false)
+  const addressSearchRef = useRef<HTMLDivElement>(null)
+
+  async function handleSearchAddress() {
+    setError(null)
+    setSearchingAddress(true)
+    try {
+      await loadDaumPostcodeScript()
+      setAddressSearchOpen(true)
+    } catch (err) {
+      setError(toErrorMessage(err))
+    } finally {
+      setSearchingAddress(false)
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false
-    listExperienceTags()
-      .then((list) => !cancelled && setTags(list))
-      .catch((err) => !cancelled && setError(toErrorMessage(err)))
-      .finally(() => !cancelled && setLoadingTags(false))
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    if (!addressSearchOpen || !addressSearchRef.current || !window.daum) return
+    new window.daum.Postcode({
+      width: "100%",
+      height: "100%",
+      oncomplete: (data) => {
+        setBaseAddress(pickRoadAddress(data))
+        setAddressSearchOpen(false)
+      },
+    }).embed(addressSearchRef.current)
+  }, [addressSearchOpen])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -66,16 +115,16 @@ export function CustomPlaceForm() {
 
     if (!tripId) return
     if (!name.trim()) return setError("장소 이름을 입력해 주세요.")
-    if (categoryTagId === null) return setError("분류를 선택해 주세요.")
-    if (!address.trim()) return setError("주소를 입력해 주세요.")
+    if (!baseAddress) return setError("주소 검색을 통해 주소를 선택해 주세요.")
+
+    const address = [baseAddress, detailAddress.trim()].filter(Boolean).join(" ")
 
     setSubmitting(true)
     try {
       await addCustomPlaceToTrip(tripId, {
         name: name.trim(),
-        categoryTagId,
-        address: address.trim(),
-        expectedWaitMinutes: waitMinutes,
+        address,
+        visitTime: visitTime || null,
       })
       navigate(`/trips/${tripId}/places`)
     } catch (err) {
@@ -104,41 +153,36 @@ export function CustomPlaceForm() {
         </div>
 
         <div className="pt-5">
-          <FieldLabel required>분류</FieldLabel>
-          <div className="flex flex-wrap gap-2">
-            {loadingTags && <p className="text-[13px] text-ink-muted">불러오는 중...</p>}
-            {tags.map((tag) => (
-              <Chip
-                key={tag.id}
-                label={tag.name}
-                selected={categoryTagId === tag.id}
-                onClick={() => setCategoryTagId(tag.id)}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="pt-5">
           <FieldLabel required>주소</FieldLabel>
-          <TextInput
-            placeholder="예) 대전 유성구 대학로 291"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-          />
+          <button
+            type="button"
+            onClick={handleSearchAddress}
+            disabled={searchingAddress}
+            className="flex h-[52px] w-full items-center gap-2.5 rounded-[var(--radius-field)] border-[0.667px] border-line bg-surface px-4 text-left text-[14px] disabled:opacity-60"
+          >
+            <Search size={18} className="shrink-0 text-ink-faint" />
+            <span className={baseAddress ? "truncate text-ink" : "text-ink-ghost"}>
+              {searchingAddress ? "불러오는 중..." : (baseAddress || "주소 검색")}
+            </span>
+          </button>
+          {baseAddress && (
+            <TextInput
+              className="mt-2"
+              placeholder="상세주소 (예: 102동 1301호)"
+              value={detailAddress}
+              onChange={(e) => setDetailAddress(e.target.value)}
+            />
+          )}
         </div>
 
         <div className="pt-5 pb-4">
-          <FieldLabel>예상 대기시간</FieldLabel>
-          <div className="flex flex-wrap gap-2">
-            {WAIT_OPTIONS.map((opt) => (
-              <Chip
-                key={opt.value}
-                label={opt.label}
-                selected={waitMinutes === opt.value}
-                onClick={() => setWaitMinutes((prev) => (prev === opt.value ? null : opt.value))}
-              />
-            ))}
-          </div>
+          <FieldLabel hint="선택">방문 시간</FieldLabel>
+          <input
+            type="time"
+            value={visitTime}
+            onChange={(e) => setVisitTime(e.target.value)}
+            className="h-[52px] w-full rounded-[var(--radius-field)] border-[0.667px] border-line bg-surface px-4 text-[14px] text-ink outline-none"
+          />
         </div>
       </div>
 
@@ -148,6 +192,24 @@ export function CustomPlaceForm() {
           일정에 추가
         </Button>
       </div>
+
+      {addressSearchOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
+          <div className="flex h-[70vh] w-full max-w-[420px] flex-col overflow-hidden rounded-t-[var(--radius-banner)] bg-surface sm:rounded-[var(--radius-banner)]">
+            <div className="flex items-center justify-between border-b-[0.667px] border-line-soft px-4 py-3">
+              <span className="text-[14px] font-bold text-ink">주소 검색</span>
+              <button
+                type="button"
+                onClick={() => setAddressSearchOpen(false)}
+                className="rounded-full p-1 text-ink-faint hover:bg-canvas"
+              >
+                <Close size={18} />
+              </button>
+            </div>
+            <div ref={addressSearchRef} className="flex-1" />
+          </div>
+        </div>
+      )}
     </form>
   )
 }
