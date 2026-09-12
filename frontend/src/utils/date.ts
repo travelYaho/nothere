@@ -39,3 +39,14 @@ export function formatTimetableDate(travelDate: string) {
     weekdayLabel: WEEKDAY_FULL_LABELS[d.getDay()],
   }
 }
+
+const WEEKDAY_SHORT_LABELS = ["일", "월", "화", "수", "목", "금", "토"]
+
+/** Date -> "2026.08.15 (토)" */
+export function formatDottedDateWithWeekday(travelDate: string) {
+  const d = new Date(`${travelDate}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return travelDate
+  const month = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${d.getFullYear()}.${month}.${day} (${WEEKDAY_SHORT_LABELS[d.getDay()]})`
+}
