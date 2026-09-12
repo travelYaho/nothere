@@ -7,7 +7,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.db.models.place import Place
-from app.db.models.preference import PlaceExperienceTag
 
 
 def _classify_district_code_backfill(
@@ -36,8 +35,8 @@ def _classify_district_code_backfill(
 class PlaceRepository:
     """TourAPI 검색 결과를 내부 Place 로 get-or-create 하는 역할을 담당한다.
 
-    ``create()``/``add_experience_tag()``는 내부에서 커밋하지 않고 flush만 한다 — 호출자가
-    자신의 작업 단위 끝에서 한 번만 commit()하도록(호출부: PlaceService, RecommendationService).
+    ``create()``는 내부에서 커밋하지 않고 flush만 한다 — 호출자가 자신의 작업 단위 끝에서
+    한 번만 commit()하도록(호출부: PlaceService, RecommendationService).
     """
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -202,22 +201,3 @@ class PlaceRepository:
             select(Place.area_cd, Place.signgu_cd).where(Place.id == place_id)
         ).one()
         return _classify_district_code_backfill(current_area_cd, current_signgu_cd, area_cd, signgu_cd)
-
-    def add_experience_tag(
-        self,
-        place_id: UUID,
-        experience_tag_id: int,
-        *,
-        weight: float = 1.0,
-        source: str = "user_manual",
-    ) -> None:
-        """장소 직접 추가 시 선택한 '분류'를 place_experience_tags 에 연결한다."""
-        self.db.add(
-            PlaceExperienceTag(
-                place_id=place_id,
-                experience_tag_id=experience_tag_id,
-                weight=weight,
-                source=source,
-            )
-        )
-        self.db.flush()
