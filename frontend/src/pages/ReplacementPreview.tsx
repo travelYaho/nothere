@@ -29,7 +29,8 @@ export default function ReplacementPreviewPage() {
     try {
       await apply()
       setConfirmOpen(false)
-      navigate(`/trips/${tripId}/remaining`)
+      // 교체로 옛 분석이 지워졌으므로 결과 화면에서 재분석(POST)하도록 알려준다.
+      navigate(`/trips/${tripId}/remaining`, { state: { reanalyze: true } })
     } catch (e) {
       setApplyError(e instanceof Error ? e.message : "교체 실패")
     } finally {

@@ -13,14 +13,17 @@ export function useRunAnalysis(tripId: string | undefined) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const run = useCallback(async () => {
-    if (!tripId) return
+  const run = useCallback(async (): Promise<AnalysisResponse | null> => {
+    if (!tripId) return null
     setLoading(true)
     setError(null)
     try {
-      setData(await runAnalysis(token, tripId))
+      const result = await runAnalysis(token, tripId)
+      setData(result)
+      return result
     } catch (e) {
       setError(e instanceof Error ? e.message : "분석 실패")
+      return null
     } finally {
       setLoading(false)
     }

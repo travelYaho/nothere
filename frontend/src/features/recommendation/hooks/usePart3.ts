@@ -18,7 +18,7 @@ import type {
   ReplacementPreviewResponse,
 } from "../types/part3"
 
-/** 로그인 세션(Supabase)의 access token. 로그인 전이면 빈 문자열(백엔드 401). */
+/** 실제 Supabase 세션의 access token. 로그인 전이거나 세션 로딩 중이면 빈 문자열(백엔드 401). */
 export function useAccessToken(): string {
   const { session } = useSession()
   return session?.access_token ?? ""

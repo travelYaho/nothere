@@ -366,6 +366,7 @@ class AnalysisService:
                     "resolutionStatus": trip_place.resolution_status,
                     "canRecommendAlternative": not trip_place.is_fixed,
                     "analyzedAt": analysis.analyzed_at.isoformat() if analysis and analysis.analyzed_at else None,
+                    "visitTime": trip_place.visit_time.strftime("%H:%M") if trip_place.visit_time else None,
                 }
             )
 

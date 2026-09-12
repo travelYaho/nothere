@@ -1,7 +1,7 @@
 """AnalysisService(STEP4) 매칭/등급/파이프라인 단위 테스트."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -62,7 +62,7 @@ def test_run_analysis_raises_when_trip_empty():
     svc = AnalysisService(db)
     trip_id = uuid4()
     user = _user()
-    svc.repo.get_trip_owned = MagicMock(return_value=SimpleNamespace(id=trip_id, places=[]))
+    svc.repo.get_trip_owned = MagicMock(return_value=SimpleNamespace(id=trip_id, trip_places=[]))
 
     with pytest.raises(AppError) as exc:
         svc.run_analysis(user, trip_id)
@@ -83,7 +83,15 @@ def test_run_analysis_marks_region_not_supported_when_region_missing():
         id=trip_id,
         region_id=None,
         travel_date=None,
-        places=[SimpleNamespace(id=trip_place_id, place_id=place_id, is_fixed=False, resolution_status="pending")],
+        trip_places=[
+            SimpleNamespace(
+                id=trip_place_id,
+                place_id=place_id,
+                is_fixed=False,
+                resolution_status="pending",
+                visit_time=None,
+            )
+        ],
     )
     place = SimpleNamespace(id=place_id, name="이름없는장소")
 
@@ -178,7 +186,15 @@ def test_get_analysis_filters_crowded_only():
 
     trip = SimpleNamespace(
         id=trip_id,
-        places=[SimpleNamespace(id=tp_id, place_id=place_id, is_fixed=False, resolution_status="pending")],
+        trip_places=[
+            SimpleNamespace(
+                id=tp_id,
+                place_id=place_id,
+                is_fixed=False,
+                resolution_status="pending",
+                visit_time=time(10, 30),
+            )
+        ],
     )
     svc.repo.get_trip_owned = MagicMock(return_value=trip)
     svc.repo.get_places_map = MagicMock(return_value={place_id: SimpleNamespace(name="종묘")})
@@ -198,3 +214,32 @@ def test_get_analysis_filters_crowded_only():
     assert result["highConcentrationCount"] == 1
     assert len(result["items"]) == 1
     assert result["items"][0]["level"] == "high"
+    assert result["items"][0]["visitTime"] == "10:30"
+
+
+def test_get_analysis_visit_time_is_null_when_not_set():
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    place_id = uuid4()
+    tp_id = uuid4()
+
+    trip = SimpleNamespace(
+        id=trip_id,
+        trip_places=[
+            SimpleNamespace(
+                id=tp_id,
+                place_id=place_id,
+                is_fixed=False,
+                resolution_status="pending",
+                visit_time=None,
+            )
+        ],
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(return_value={place_id: SimpleNamespace(name="종묘")})
+    svc.repo.get_analysis_map = MagicMock(return_value={})
+
+    result = svc.get_analysis(user, trip_id, status_filter=None)
+    assert result["items"][0]["visitTime"] is None

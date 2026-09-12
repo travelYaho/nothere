@@ -1,31 +1,54 @@
 /**
- * TripAnalysisLoading — "일정을 점검하고 있어요" 로딩 화면 (STEP4).
+ * TripAnalysisLoading — "일정을 점검하고 있어요" 로딩 화면.
  * Figma: 여기말GO / node 48:2774 "일정 분석 로딩 화면"
  *
- * 진입 시 POST /trips/{tripId}/analysis 를 호출해 집중도 분석을 실행하고,
- * 완료되면 남은 혼잡 장소 확인 화면(STEP8)으로 이동한다.
+ * 마운트 시 STEP4 집중도 분석(POST /trips/{tripId}/analysis)을 실행하고, 성공하면 결과를
+ * 다시 조회하지 않고 그대로 들고 "일정 점검 결과" 화면(/remaining)으로 넘어간다. 실패하면
+ * 이 화면에 머물며 재시도할 수 있게 한다.
  */
-import { useEffect } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Search } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { FlowHeader } from "@/components/layout/navigation"
 import { useRunAnalysis } from "@/features/recommendation"
+import { useSession } from "@/store/sessionStore"
 
 export default function TripAnalysisLoading() {
   const { tripId } = useParams<{ tripId: string }>()
   const navigate = useNavigate()
-  const { data, error, run } = useRunAnalysis(tripId)
+  const { run, error, loading } = useRunAnalysis(tripId)
+  const { isLoading: sessionLoading } = useSession()
+
+  // 화면을 떠난 뒤(뒤로가기 등) 늦게 도착한 응답이 엉뚱하게 navigate 시키지 않도록,
+  // 그리고 StrictMode 이중 호출·연타로 분석 요청이 겹치지 않도록 두 ref로 막는다.
+  const mountedRef = useRef(true)
+  const inFlightRef = useRef(false)
 
   useEffect(() => {
-    void run()
-  }, [run])
-
-  useEffect(() => {
-    if (data && tripId) {
-      navigate(`/trips/${tripId}/remaining`)
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
     }
-  }, [data, tripId, navigate])
+  }, [])
+
+  const start = useCallback(() => {
+    if (!tripId || inFlightRef.current) return
+    inFlightRef.current = true
+    void run().then((result) => {
+      inFlightRef.current = false
+      if (!mountedRef.current) return
+      if (result) {
+        navigate(`/trips/${tripId}/remaining`, { state: { analysis: result } })
+      }
+    })
+  }, [tripId, run, navigate])
+
+  useEffect(() => {
+    // 세션(토큰) 로딩이 끝나기 전에 호출하면 항상 401로 실패하므로 기다렸다가 한 번만 부른다.
+    if (sessionLoading) return
+    start()
+  }, [sessionLoading, start])
 
   return (
     <div className="flex flex-1 flex-col">
@@ -49,15 +72,11 @@ export default function TripAnalysisLoading() {
         {!tripId && (
           <p className="pt-8 text-[12px] text-congestion-high">tripId 를 찾을 수 없습니다.</p>
         )}
-        {error && (
-          <>
-            <p className="pt-8 text-[12px] text-congestion-high">{error}</p>
-            <div className="w-60 pt-4">
-              <Button block onClick={() => void run()}>
-                다시 시도
-              </Button>
-            </div>
-          </>
+        {error && !loading && (
+          <div className="flex flex-col items-center gap-3 pt-8">
+            <p className="text-[13px] text-congestion-high">{error}</p>
+            <Button onClick={start}>다시 시도</Button>
+          </div>
         )}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/lib/supabase"
+import { updateTripPlaceVisit } from "@/features/trips/api/placesApi"
 import type {
   AnalysisResponse,
   CreateRecommendationRequestResponse,
@@ -56,6 +57,11 @@ export function fetchExperienceTags() {
   return v1Fetch<{ experienceTags: ExperienceTag[] }>(`${base}/experience-tags`, null).then(
     (res) => res.experienceTags,
   )
+}
+
+/** "유지" — 이 장소를 고정해 대안 탐색/재분석 대상에서 제외한다. */
+export function keepTripPlace(tripPlaceId: string) {
+  return updateTripPlaceVisit(tripPlaceId, { isFixed: true })
 }
 
 export function createRecommendationRequest(
