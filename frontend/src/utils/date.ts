@@ -6,7 +6,15 @@ export function toDateOnlyString(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-const WEEKDAY_FULL_LABELS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"]
+const WEEKDAY_FULL_LABELS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+]
 
 const MONTH_FULL_LABELS = [
   "January",
