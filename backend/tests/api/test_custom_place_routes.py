@@ -4,6 +4,7 @@ DB/Supabase 실접속 없이 검증한다.
 Kakao 지오코딩은 "카카오맵" 제품 비활성화로 당장 못 써서, 이 라우트는 주소를
 텍스트로만 저장하고 위경도는 채우지 않는다.
 """
+from datetime import time
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
@@ -36,37 +37,31 @@ def test_add_custom_place_success_returns_201(client):
     trip_id = uuid4()
     place_id = uuid4()
     with patch("app.services.place_service.TripRepository") as MockTripRepo, patch(
-        "app.services.place_service.ExperienceTagRepository"
-    ) as MockTagRepo, patch("app.services.place_service.PlaceRepository") as MockPlaceRepo, patch(
-        "app.services.place_service.TripPlaceRepository"
-    ) as MockTripPlaceRepo:
+        "app.services.place_service.PlaceRepository"
+    ) as MockPlaceRepo, patch("app.services.place_service.TripPlaceRepository") as MockTripPlaceRepo:
         MockTripRepo.return_value.get_owned_by_id.return_value = MagicMock(id=trip_id, region_id=1)
-        tag = MagicMock(id=2)
-        tag.name = "역사·문화"
-        MockTagRepo.return_value.get_active_by_ids.return_value = [tag]
         created_place = MagicMock(id=place_id)
         created_place.name = "유성푸르지오시티"
         MockPlaceRepo.return_value.create.return_value = created_place
         MockTripPlaceRepo.return_value.next_position.return_value = 1
         MockTripPlaceRepo.return_value.add.return_value = MagicMock(
-            id=uuid4(), trip_id=trip_id, position=1, is_fixed=False
+            id=uuid4(), trip_id=trip_id, position=1, is_fixed=False, visit_time=time(14, 30)
         )
 
         res = client.post(
             f"/api/trips/{trip_id}/places/custom",
             json={
                 "name": "유성푸르지오시티",
-                "categoryTagId": 2,
                 "address": "서울 종로구 사직로 161",
-                "expectedWaitMinutes": 60,
+                "visitTime": "14:30:00",
             },
         )
 
     assert res.status_code == 201
     body = res.json()
     assert body["data"]["name"] == "유성푸르지오시티"
-    assert body["data"]["category"] == "역사·문화"
     assert body["data"]["visitOrder"] == 1
+    assert body["data"]["visitTime"] == "14:30:00"
     MockPlaceRepo.return_value.create.assert_called_once_with(
         source_type="custom",
         tour_content_id=None,
@@ -75,23 +70,34 @@ def test_add_custom_place_success_returns_201(client):
         longitude=None,
         latitude=None,
         is_recommendable=False,
-        expected_wait_minutes=60,
         address="서울 종로구 사직로 161",
+    )
+    MockTripPlaceRepo.return_value.add.assert_called_once_with(
+        trip_id=trip_id, place_id=place_id, position=1, visit_time=time(14, 30)
     )
 
 
-def test_add_custom_place_unknown_category_returns_404(client):
+def test_add_custom_place_unknown_trip_returns_404(client):
     trip_id = uuid4()
-    with patch("app.services.place_service.TripRepository") as MockTripRepo, patch(
-        "app.services.place_service.ExperienceTagRepository"
-    ) as MockTagRepo:
-        MockTripRepo.return_value.get_owned_by_id.return_value = MagicMock(id=trip_id, region_id=1)
-        MockTagRepo.return_value.get_active_by_ids.return_value = []
+    with patch("app.services.place_service.TripRepository") as MockTripRepo:
+        MockTripRepo.return_value.get_owned_by_id.return_value = None
 
         res = client.post(
             f"/api/trips/{trip_id}/places/custom",
-            json={"name": "존재안하는곳", "categoryTagId": 999, "address": "서울 종로구"},
+            json={"name": "존재안하는곳", "address": "서울 종로구 사직로 161"},
         )
 
     assert res.status_code == 404
     assert res.json()["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+
+def test_add_custom_place_incomplete_address_returns_422(client):
+    trip_id = uuid4()
+
+    res = client.post(
+        f"/api/trips/{trip_id}/places/custom",
+        json={"name": "존재안하는곳", "address": "서울시"},
+    )
+
+    assert res.status_code == 422
+    assert res.json()["error"]["code"] == "VALIDATION_ERROR"

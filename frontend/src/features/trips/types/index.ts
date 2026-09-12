@@ -75,14 +75,12 @@ export interface TripPlaceAddResponse {
 
 export interface CustomPlaceAddRequest {
   name: string
-  categoryTagId: number
   address: string
-  expectedWaitMinutes?: number | null
+  visitTime?: string | null
 }
 
 export interface CustomPlaceAddResponse extends TripPlaceAddResponse {
   name: string
-  category: string
 }
 
 export interface TripPlaceOrderItem {

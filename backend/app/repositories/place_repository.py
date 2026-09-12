@@ -5,7 +5,6 @@ from geoalchemy2.elements import WKTElement
 from sqlalchemy.orm import Session
 
 from app.db.models.place import Place
-from app.db.models.preference import PlaceExperienceTag
 
 
 class PlaceRepository:
@@ -57,22 +56,3 @@ class PlaceRepository:
         self.db.commit()
         self.db.refresh(place)
         return place
-
-    def add_experience_tag(
-        self,
-        place_id: UUID,
-        experience_tag_id: int,
-        *,
-        weight: float = 1.0,
-        source: str = "user_manual",
-    ) -> None:
-        """장소 직접 추가 시 선택한 '분류'를 place_experience_tags 에 연결한다."""
-        self.db.add(
-            PlaceExperienceTag(
-                place_id=place_id,
-                experience_tag_id=experience_tag_id,
-                weight=weight,
-                source=source,
-            )
-        )
-        self.db.commit()

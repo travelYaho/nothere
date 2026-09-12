@@ -33,6 +33,32 @@ function formatVisitInfo(place: TripPlaceDetail): string {
   return place.visitTime ? `${place.visitTime.slice(0, 5)} 방문 예정` : "방문 시간 미설정"
 }
 
+// 목적 입력을 마친(건너뛰기 포함) tripPlaceId를 세션 동안 기억해 둔다.
+// GET 응답의 purposeTags 는 "건너뛰기(빈 배열)"와 "아직 안 물어봄"을 구분하지
+// 못하므로, 화면을 다시 열었을 때 이미 답한 장소를 건너뛰려면 이 기록이 필요하다.
+function answeredStorageKey(tripId: string): string {
+  return `trip-purpose-answered:${tripId}`
+}
+
+function loadAnsweredIds(tripId: string): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(answeredStorageKey(tripId))
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function markAnswered(tripId: string, tripPlaceId: string) {
+  try {
+    const ids = loadAnsweredIds(tripId)
+    ids.add(tripPlaceId)
+    sessionStorage.setItem(answeredStorageKey(tripId), JSON.stringify([...ids]))
+  } catch {
+    // 세션 저장소를 못 쓰면(프라이빗 모드 등) 그냥 이번 화면에서만 순서대로 진행한다.
+  }
+}
+
 export function TripPurposeForm() {
   const { tripId } = useParams<{ tripId: string }>()
   const navigate = useNavigate()
@@ -67,6 +93,14 @@ export function TripPurposeForm() {
         )
         if (cancelled) return
         setSelectedByPlace(Object.fromEntries(entries))
+
+        const answeredIds = loadAnsweredIds(tripId!)
+        const startIndex = tripDetail.places.findIndex((p) => !answeredIds.has(p.tripPlaceId))
+        if (startIndex === -1 && tripDetail.places.length > 0) {
+          navigate(`/trips/${tripId}/analysis`)
+          return
+        }
+        setPlaceIndex(Math.max(startIndex, 0))
       } catch (err) {
         if (!cancelled) setLoadError(toErrorMessage(err))
       } finally {
@@ -99,6 +133,7 @@ export function TripPurposeForm() {
     setError(null)
     try {
       await putTripPlacePurpose(currentPlace.tripPlaceId, tagIds)
+      markAnswered(tripId, currentPlace.tripPlaceId)
       if (isLastPlace) {
         navigate(`/trips/${tripId}/analysis`)
       } else {
