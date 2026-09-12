@@ -85,6 +85,23 @@ def test_explore_forwards_filters_to_repository(current_user):
         )
 
 
+def test_list_mine_maps_cards_and_forwards_owner_id(current_user):
+    with patch("app.services.guide_service.GuideRepository") as MockRepo:
+        MockRepo.return_value.list_owned.return_value = ([_card()], 3)
+
+        result = GuideService(MagicMock()).list_mine(current_user, page=1)
+
+        MockRepo.return_value.list_owned.assert_called_once_with(
+            owner_id=current_user.id, page=1
+        )
+
+    assert result.page == 1
+    assert result.total_count == 3
+    assert result.has_next is False  # page(1) * PAGE_SIZE(8) = 8, not < 3
+    assert len(result.guides) == 1
+    assert result.guides[0].token == "abc123XYZ"
+
+
 def test_filters_maps_regions_and_tags(current_user):
     region = MagicMock(id=1)
     region.name = "서울"

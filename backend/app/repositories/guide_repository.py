@@ -120,6 +120,47 @@ class GuideRepository:
         ]
         return cards, total_count
 
+    def list_owned(self, *, owner_id: UUID, page: int) -> tuple[list[GuideCard], int]:
+        """내가 만든(공유한) 가이드북 목록을 최근 공유순으로 페이지 단위로 반환한다.
+
+        list_public 과 달리 visibility 필터가 없다 — 본인 소유 트립이면 link/private
+        로 공유한 것도 보여야 한다. 같은 트립을 여러 번 공유(POST .../share-link 를
+        여러 번 호출)했을 수 있어, 트립당 가장 최근 활성 링크 하나만 카드로 뽑는다.
+        """
+        now = datetime.now(timezone.utc)
+        active = ShareLink.revoked_at.is_(None) & (
+            (ShareLink.expires_at.is_(None)) | (ShareLink.expires_at > now)
+        )
+        latest_created_at = (
+            select(func.max(ShareLink.created_at))
+            .where(ShareLink.trip_id == Trip.id)
+            .where(active)
+            .correlate(Trip)
+            .scalar_subquery()
+        )
+
+        query = (
+            self.db.query(ShareLink, Trip, Region)
+            .join(Trip, Trip.id == ShareLink.trip_id)
+            .join(Region, Region.id == Trip.region_id)
+            .filter(Trip.user_id == owner_id)
+            .filter(active)
+            .filter(ShareLink.created_at == latest_created_at)
+        )
+
+        total_count = query.count()
+        rows = (
+            query.order_by(ShareLink.created_at.desc())
+            .offset((page - 1) * PAGE_SIZE)
+            .limit(PAGE_SIZE)
+            .all()
+        )
+        cards = [
+            self._build_card(share_link, trip, region, viewer_id=owner_id)
+            for share_link, trip, region in rows
+        ]
+        return cards, total_count
+
     def _build_card(
         self, share_link: ShareLink, trip: Trip, region: Region, *, viewer_id: UUID
     ) -> GuideCard:

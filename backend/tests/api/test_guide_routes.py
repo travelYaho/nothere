@@ -73,6 +73,39 @@ def test_explore_parses_comma_separated_tag_ids(client):
         assert kwargs["liked_only"] is True
 
 
+def test_my_guides_returns_owned_guides(client):
+    with patch("app.services.guide_service.GuideRepository") as MockRepo:
+        from app.repositories.guide_repository import GuideCard
+
+        MockRepo.return_value.list_owned.return_value = (
+            [
+                GuideCard(
+                    trip_id=uuid4(),
+                    token="mine123",
+                    title="내가 만든 서울 코스",
+                    region_name="서울",
+                    place_count=3,
+                    tag_names=["맛집"],
+                    author_nickname="테스터",
+                    cover_image_url=None,
+                    like_count=1,
+                    is_liked_by_me=False,
+                )
+            ],
+            1,
+        )
+
+        res = client.get("/api/guides/mine")
+
+    assert res.status_code == 200
+    body = res.json()["data"]
+    assert body["page"] == 1
+    assert body["guides"][0]["token"] == "mine123"
+    MockRepo.return_value.list_owned.assert_called_once()
+    _, kwargs = MockRepo.return_value.list_owned.call_args
+    assert kwargs["page"] == 1
+
+
 def test_filters_returns_regions_and_tags(client):
     with patch("app.services.guide_service.GuideRepository") as MockRepo:
         region = MagicMock(id=1)

@@ -1,5 +1,5 @@
 /**
- * Bookmarks — "보관함" 화면. 확정/작성 중인 내 일정과, 좋아요한 가이드북을
+ * Bookmarks — "보관함" 화면. 확정/작성 중인 내 일정과, 내가 만든 가이드북을
  * 한 곳에 모아본다.
  * Figma: 여기말GO / node 132:2396 "보관함"
  *
@@ -8,11 +8,15 @@
  * 그래서 로컬 상태에서만 지운다 — 실제 여행 삭제(DELETE /trips/{id})는 하드
  * 삭제라 목업 id로 잘못 호출하면 안 되고, 목록 API가 생기면 그때 실 데이터 +
  * 실제 삭제로 교체하면 된다.
+ *
+ * "가이드북" 탭은 "좋아요한 가이드북"(GuideLiked 화면이 이미 따로 있음)이
+ * 아니라 내가 공유해서 만든 가이드북 목록이다 — GET /guides/mine.
  */
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { GuidebookCard, ScheduleCard } from "@/components/common/cards"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
-import { exploreGuides, unlikeGuide } from "@/features/guides/api/guidesApi"
+import { listMyGuides } from "@/features/guides/api/guidesApi"
 import type { GuideCard } from "@/features/guides/types"
 import { ApiError } from "@/types/api"
 
@@ -44,6 +48,7 @@ function toErrorMessage(err: unknown): string {
 }
 
 export default function Bookmarks() {
+  const navigate = useNavigate()
   const handleTabChange = useBottomTabNav()
   const [innerTab, setInnerTab] = useState<"trips" | "guidebooks">("trips")
 
@@ -58,7 +63,7 @@ export default function Bookmarks() {
   useEffect(() => {
     if (innerTab !== "guidebooks" || guidesLoaded) return
     setGuidesLoading(true)
-    exploreGuides({ liked: true, page: 1 })
+    listMyGuides(1)
       .then((res) => {
         setGuides(res.guides)
         setGuidesLoaded(true)
@@ -66,17 +71,6 @@ export default function Bookmarks() {
       .catch((err) => setGuidesError(toErrorMessage(err)))
       .finally(() => setGuidesLoading(false))
   }, [innerTab, guidesLoaded])
-
-  async function handleUnlikeGuide(guide: GuideCard) {
-    const previous = guides
-    setGuides((prev) => prev.filter((g) => g.token !== guide.token))
-    try {
-      await unlikeGuide(guide.token)
-    } catch (err) {
-      setGuides(previous)
-      setGuidesError(toErrorMessage(err))
-    }
-  }
 
   const filteredTrips = trips.filter((t) => statusFilter === "all" || t.status === statusFilter)
 
@@ -157,7 +151,7 @@ export default function Bookmarks() {
           )}
           {!guidesLoading && !guidesError && guides.length === 0 && (
             <p className="py-8 text-center text-[13px] text-ink-muted">
-              아직 좋아요한 가이드북이 없어요.
+              아직 만든 가이드북이 없어요.
             </p>
           )}
           {!guidesLoading && !guidesError && guides.length > 0 && (
@@ -173,7 +167,7 @@ export default function Bookmarks() {
                   coverImageUrl={guide.coverImageUrl}
                   likeCount={guide.likeCount}
                   isLikedByMe={guide.isLikedByMe}
-                  onToggleLike={() => void handleUnlikeGuide(guide)}
+                  onClick={() => navigate(`/guide/${guide.token}`)}
                 />
               ))}
             </div>

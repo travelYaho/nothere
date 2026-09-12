@@ -59,6 +59,28 @@ class GuideService:
             total_count=total_count,
         )
 
+    def list_mine(self, current_user: CurrentUser, *, page: int) -> ExploreDataResponse:
+        cards, total_count = self.guides.list_owned(owner_id=current_user.id, page=page)
+        return ExploreDataResponse(
+            guides=[
+                GuideCardResponse(
+                    token=card.token,
+                    title=card.title,
+                    region_name=card.region_name,
+                    place_count=card.place_count,
+                    tags=card.tag_names,
+                    author_nickname=card.author_nickname,
+                    cover_image_url=card.cover_image_url,
+                    like_count=card.like_count,
+                    is_liked_by_me=card.is_liked_by_me,
+                )
+                for card in cards
+            ],
+            page=page,
+            has_next=page * PAGE_SIZE < total_count,
+            total_count=total_count,
+        )
+
     def filters(self) -> FiltersDataResponse:
         return FiltersDataResponse(
             regions=[
