@@ -62,7 +62,7 @@ def test_run_analysis_raises_when_trip_empty():
     svc = AnalysisService(db)
     trip_id = uuid4()
     user = _user()
-    svc.repo.get_trip_owned = MagicMock(return_value=SimpleNamespace(id=trip_id, places=[]))
+    svc.repo.get_trip_owned = MagicMock(return_value=SimpleNamespace(id=trip_id, trip_places=[]))
 
     with pytest.raises(AppError) as exc:
         svc.run_analysis(user, trip_id)
@@ -83,7 +83,7 @@ def test_run_analysis_marks_region_not_supported_when_region_missing():
         id=trip_id,
         region_id=None,
         travel_date=None,
-        places=[
+        trip_places=[
             SimpleNamespace(
                 id=trip_place_id,
                 place_id=place_id,
@@ -186,7 +186,7 @@ def test_get_analysis_filters_crowded_only():
 
     trip = SimpleNamespace(
         id=trip_id,
-        places=[
+        trip_places=[
             SimpleNamespace(
                 id=tp_id,
                 place_id=place_id,
@@ -227,7 +227,7 @@ def test_get_analysis_visit_time_is_null_when_not_set():
 
     trip = SimpleNamespace(
         id=trip_id,
-        places=[
+        trip_places=[
             SimpleNamespace(
                 id=tp_id,
                 place_id=place_id,

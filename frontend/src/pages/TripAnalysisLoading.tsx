@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Search } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
-import { StepHeader } from "@/features/trips/components/StepHeader"
+import { FlowHeader } from "@/components/layout/navigation"
 import { useRunAnalysis } from "@/features/recommendation"
 import { useSession } from "@/store/sessionStore"
 
@@ -52,7 +52,7 @@ export default function TripAnalysisLoading() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <StepHeader title="대안 찾기" step={1} totalSteps={2} />
+      <FlowHeader title="일정 점검" step={4} totalSteps={9} progress={4 / 9} />
 
       <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
         <span className="flex size-16 items-center justify-center rounded-full bg-primary/10">

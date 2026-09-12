@@ -200,12 +200,12 @@ class AnalysisService:
 
     def run_analysis(self, user: CurrentUser, trip_id: UUID) -> dict:
         trip = self._get_trip_or_404(trip_id, user)
-        if not trip.places:
+        if not trip.trip_places:
             raise AppError(
                 ErrorCode.NO_PLACES_IN_TRIP, "일정에 등록된 장소가 없습니다.", status_code=422
             )
 
-        places_map = self.repo.get_places_map([p.place_id for p in trip.places])
+        places_map = self.repo.get_places_map([p.place_id for p in trip.trip_places])
         region = self.repo.get_region(trip.region_id)
         region_supported = region is not None and region.area_cd and region.signgu_cd
         spots, items_by_name, api_failed = get_region_spots_and_items(
@@ -213,7 +213,7 @@ class AnalysisService:
         )
 
         try:
-            for trip_place in trip.places:
+            for trip_place in trip.trip_places:
                 place = places_map.get(trip_place.place_id)
                 place_name = place.name if place else ""
                 self._analyze_place(
@@ -328,7 +328,7 @@ class AnalysisService:
 
     def get_analysis(self, user: CurrentUser, trip_id: UUID, status_filter: str | None) -> dict:
         trip = self._get_trip_or_404(trip_id, user)
-        places = trip.places or []
+        places = trip.trip_places or []
         places_map = self.repo.get_places_map([p.place_id for p in places])
         analysis_map = self.repo.get_analysis_map([p.id for p in places])
 

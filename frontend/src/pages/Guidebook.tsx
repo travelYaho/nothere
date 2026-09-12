@@ -31,7 +31,7 @@ export default function Guidebook() {
 
   return (
     <div className="relative flex flex-1 flex-col">
-      <BasicHeader title="가이드북" onBack={() => navigate(`/trips/${tripId}/confirm`)} />
+      <BasicHeader title="가이드북" />
       <div className="flex flex-1 flex-col gap-4 px-5 pb-10 pt-2">
         {loading && <p className="text-[13px] text-ink-muted">불러오는 중…</p>}
         {error && <p className="text-[13px] text-congestion-high">{error}</p>}
@@ -77,6 +77,12 @@ export default function Guidebook() {
             </Button>
             {shareMsg && <p className="text-[12px] text-ink-muted">{shareMsg}</p>}
           </>
+        )}
+
+        {!loading && (
+          <Button variant="ghost" block onClick={() => navigate("/home")}>
+            홈 화면
+          </Button>
         )}
       </div>
     </div>
