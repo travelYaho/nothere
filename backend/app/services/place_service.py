@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.clients import tour_api
 from app.core.exceptions import AppError, ErrorCode
-from app.repositories.experience_tag_repository import ExperienceTagRepository
 from app.repositories.place_repository import PlaceRepository
 from app.repositories.region_repository import RegionRepository
 from app.repositories.trip_place_repository import TripPlaceRepository
@@ -47,7 +46,6 @@ class PlaceService:
         self.trip_places = TripPlaceRepository(db)
         self.trips = TripRepository(db)
         self.regions = RegionRepository(db)
-        self.experience_tags = ExperienceTagRepository(db)
 
     def search_places(self, keyword: str, region_id: int | None) -> PlaceSearchResponse:
         area_code = None
@@ -135,12 +133,17 @@ class PlaceService:
         trip_id: UUID,
         payload: CustomPlaceAddRequest,
     ) -> CustomPlaceAddResponse:
-        """검색 결과에 없는 장소를 이름/분류/주소로 직접 등록한다(Figma node 48:3842).
+        """검색 결과에 없는 장소를 이름/주소로 직접 등록한다(Figma node 48:3842).
 
         커스텀 장소는 집중도 분석 대상이 아니므로(is_recommendable=False)
-        사용자가 예상 대기시간을 직접 입력한다. 위경도는 Kakao 지오코딩("카카오맵"
-        제품 비활성화로 당장 못 씀)이 가능해지면 나중에 배치로 채우기로 하고,
-        지금은 주소 원문만 텍스트로 저장한다(Place.address).
+        방문 시간도 검색 결과 등록(add_place_to_trip)과 동일하게 선택 입력이다.
+        위경도는 Kakao 지오코딩("카카오맵" 제품 비활성화로 당장 못 씀)이 가능해지면
+        나중에 배치로 채우기로 하고, 지금은 주소 원문만 텍스트로 저장한다(Place.address).
+
+        경험태그(분류) 선택은 받지 않는다 — is_recommendable=False 라 추천 후보
+        조회에서 애초에 제외되어 저장해도 쓰이지 않았고, STEP3 완료 직후
+        "방문 목적" 화면(TripPurposeForm)에서 같은 태그 목록을 다시 물어봐서
+        중복 입력으로만 느껴졌다.
         """
         trip = self.trips.get_owned_by_id(trip_id, current_user.id)
         if trip is None:
@@ -150,15 +153,6 @@ class PlaceService:
                 status_code=404,
             )
 
-        category_tags = self.experience_tags.get_active_by_ids([payload.category_tag_id])
-        if not category_tags:
-            raise AppError(
-                ErrorCode.RESOURCE_NOT_FOUND,
-                "선택한 분류를 찾을 수 없습니다.",
-                status_code=404,
-            )
-        category_tag = category_tags[0]
-
         place = self.places.create(
             source_type="custom",
             tour_content_id=None,
@@ -167,22 +161,25 @@ class PlaceService:
             longitude=None,
             latitude=None,
             is_recommendable=False,
-            expected_wait_minutes=payload.expected_wait_minutes,
             address=payload.address,
         )
-        self.places.add_experience_tag(place.id, category_tag.id)
 
         position = self.trip_places.next_position(trip_id)
-        trip_place = self.trip_places.add(trip_id=trip_id, place_id=place.id, position=position)
+        trip_place = self.trip_places.add(
+            trip_id=trip_id,
+            place_id=place.id,
+            position=position,
+            visit_time=payload.visit_time,
+        )
 
         return CustomPlaceAddResponse(
             trip_place_id=trip_place.id,
             trip_id=trip_place.trip_id,
             place_id=place.id,
             visit_order=trip_place.position,
+            visit_time=trip_place.visit_time,
             is_fixed=trip_place.is_fixed,
             name=place.name,
-            category=category_tag.name,
         )
 
     def remove_place_from_trip(self, current_user: CurrentUser, trip_place_id: UUID) -> None:
