@@ -237,7 +237,7 @@ export default function ConfirmTrip() {
                       key={place.tripPlaceId}
                       data-row-index={index}
                       className={[
-                        "flex items-center gap-2.5 border-b border-primary/35 py-2 transition-opacity",
+                        "flex items-center gap-2.5 border-b border-primary/35 py-1 transition-opacity",
                         isDragging(index) ? "opacity-40" : "",
                         isDropTarget(index) ? "bg-primary/10" : "",
                       ].join(" ")}
