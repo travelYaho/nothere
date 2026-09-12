@@ -200,3 +200,100 @@ def test_urlencoded_service_key_is_decoded_before_httpx(monkeypatch):
     tour_api.search_places("궁")
 
     assert captured["params"]["serviceKey"] == "abc+def=="
+
+
+# --- to_signgu_cd ---
+
+def test_to_signgu_cd_concatenates_area_and_signgu():
+    assert tour_api.to_signgu_cd("11", "290") == "11290"
+
+
+def test_to_signgu_cd_preserves_leading_zero():
+    assert tour_api.to_signgu_cd("11", "011") == "11011"
+
+
+def test_to_signgu_cd_returns_none_when_either_missing():
+    assert tour_api.to_signgu_cd(None, "290") is None
+    assert tour_api.to_signgu_cd("11", None) is None
+    assert tour_api.to_signgu_cd("11", "") is None
+
+
+def test_to_signgu_cd_accepts_already_5_digit_value_when_prefix_matches():
+    assert tour_api.to_signgu_cd("11", "11290") == "11290"
+
+
+def test_to_signgu_cd_rejects_5_digit_value_with_mismatched_prefix():
+    assert tour_api.to_signgu_cd("11", "26290") is None
+
+
+# --- fetch_nearby_places 빈/이상 응답 ---
+
+def test_fetch_nearby_places_returns_empty_list_when_items_is_empty_string(monkeypatch):
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "dummy-key")
+
+    def _fake_get(*args, **kwargs):
+        return httpx.Response(
+            200,
+            json={"response": {"header": {"resultCode": "0000"}, "body": {"totalCount": 0, "items": ""}}},
+            request=httpx.Request("GET", "https://example.com"),
+        )
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    assert tour_api.fetch_nearby_places(37.5, 127.0, 3000) == []
+
+
+def test_fetch_nearby_places_returns_empty_list_and_logs_on_unknown_items_shape(monkeypatch, caplog):
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "dummy-key")
+
+    def _fake_get(*args, **kwargs):
+        return httpx.Response(
+            200,
+            json={"response": {"header": {"resultCode": "0000"}, "body": {"totalCount": 5, "items": 12345}}},
+            request=httpx.Request("GET", "https://example.com"),
+        )
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    with caplog.at_level("WARNING"):
+        result = tour_api.fetch_nearby_places(37.5, 127.0, 3000)
+
+    assert result == []
+    assert any("items" in record.message for record in caplog.records)
+
+
+def test_fetch_nearby_places_fills_area_cd_and_signgu_cd(monkeypatch):
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "dummy-key")
+
+    def _fake_get(*args, **kwargs):
+        return httpx.Response(
+            200,
+            json={
+                "response": {
+                    "header": {"resultCode": "0000"},
+                    "body": {
+                        "totalCount": 1,
+                        "items": {
+                            "item": {
+                                "contentid": "294505",
+                                "title": "경국사(서울)",
+                                "mapx": "127.0056310926",
+                                "mapy": "37.6139242251",
+                                "lDongRegnCd": "11",
+                                "lDongSignguCd": "290",
+                                "cat2": "A0201",
+                            }
+                        },
+                    },
+                }
+            },
+            request=httpx.Request("GET", "https://example.com"),
+        )
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    result = tour_api.fetch_nearby_places(37.6, 127.0, 3000)
+
+    assert len(result) == 1
+    assert result[0].area_cd == "11"
+    assert result[0].signgu_cd == "11290"

@@ -1,13 +1,19 @@
 """STEP4 집중도 분석 비즈니스 로직.
 
-trip.region_id -> region.area_cd/signgu_cd 로 집중률 API(area_cd/signgu_cd 단위)를 호출한다.
-region에 코드가 아직 없으면(매핑 전) 지역 전체를 "region_not_supported"로 안전하게 처리한다.
+trip 전체가 아니라 place 하나하나가 가진 area_cd/signgu_cd(TourAPI lDongRegnCd/lDongSignguCd
+기준, place.area_cd/signgu_cd)로 집중률 API를 호출한다 — region.area_cd/signgu_cd 컬럼은
+스키마에 남아 있지만(tests/db/test_models.py 기준), region이 시/도 단위(서울특별시/
+부산광역시)로 시드돼 있어 구 단위 코드를 의미 있게 담을 수 없다. 그래서 이 도메인은 그
+컬럼을 읽지 않고 place 쪽 값만 쓴다. 같은 지역코드는 한 번의 분석 요청 안에서만 캐시하고
+요청이 끝나면 버린다. 지역코드가 없는 place는 그 장소 하나만 분석 불가로 처리하고 일정
+전체를 막지 않는다.
 """
 from __future__ import annotations
 
 import difflib
 import logging
 import re
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import date
@@ -39,7 +45,7 @@ class ConcentrationLevel:
 
 
 class UnknownReason:
-    REGION_NOT_SUPPORTED = "region_not_supported"
+    NO_DISTRICT_CODE = "no_district_code"
     NO_MAPPING = "no_mapping"
     MAPPING_PENDING = "mapping_pending"
     NO_FORECAST_DATA = "no_forecast_data"
@@ -159,32 +165,41 @@ def get_spots_and_items_for_codes(
     match_concentration_spot/calculate_congestion_level을 그대로 재사용한다.
     반환값의 마지막 bool은 API 호출 자체가 실패했는지 여부다.
     """
+    t0 = time.monotonic()
     try:
         api_items = fetch_concentration(area_cd, signgu_cd)
     except ConcentrationApiError as exc:
         logger.warning("집중률 API 호출 실패(area=%s, signgu=%s): %s", area_cd, signgu_cd, exc)
         return [], {}, True
+    logger.info(
+        "집중률 API 조회 완료(area=%s signgu=%s): %d건, %.2fs",
+        area_cd, signgu_cd, len(api_items), time.monotonic() - t0,
+    )
 
+    # 관광지명 기준으로 dedup해서 저장 대상을 만든다(같은 관광지가 최대 30일치 중복으로 온다).
+    # 응답 item의 지역코드가 요청과 다르면(드물지만 있을 수 있는 API 응답 이상) 그 항목 하나만
+    # 조용히 걸러내지 않고 이 시군구 조회 전체를 실패로 처리한다 — 현재 지역에 동명 관광지가
+    # 이미 저장돼 있으면 다른 지역 값이 섞여 들어가 엉뚱한 혼잡도가 표시될 수 있어서다.
+    unique_spots: dict[str, str] = {}  # tourist_name -> normalized_name
     for item in api_items:
-        repo.get_or_create_spot(
-            area_cd=item.area_cd,
-            signgu_cd=item.signgu_cd,
-            tourist_name=item.tourist_name,
-            normalized_name=normalize_name(item.tourist_name),
-        )
-    spots = repo.list_spots_by_region(area_cd, signgu_cd)
+        if item.area_cd != area_cd or item.signgu_cd != signgu_cd:
+            logger.warning(
+                "집중률 API 응답 지역코드 불일치(요청 area=%s signgu=%s, 응답 area=%s signgu=%s, "
+                "관광지=%s) — 이 시군구 조회 전체를 실패로 처리",
+                area_cd, signgu_cd, item.area_cd, item.signgu_cd, item.tourist_name,
+            )
+            return [], {}, True
+        unique_spots.setdefault(item.tourist_name, normalize_name(item.tourist_name))
+
+    t1 = time.monotonic()
+    spots = repo.bulk_upsert_spots(area_cd, signgu_cd, list(unique_spots.items()))
+    logger.info(
+        "spot 저장 완료(area=%s signgu=%s): %d종, %.2fs",
+        area_cd, signgu_cd, len(unique_spots), time.monotonic() - t1,
+    )
+
     items_by_name = _select_items_for_date(api_items, travel_date)
     return spots, items_by_name, False
-
-
-def get_region_spots_and_items(
-    repo: AnalysisRepository, region_id: int | None, travel_date: date | None = None
-) -> tuple[list[ConcentrationSpot], dict[str, ConcentrationItem], bool]:
-    """trip.region_id -> region.area_cd/signgu_cd 로 get_spots_and_items_for_codes를 호출한다."""
-    region = repo.get_region(region_id)
-    if region is None or not region.area_cd or not region.signgu_cd:
-        return [], {}, False
-    return get_spots_and_items_for_codes(repo, region.area_cd, region.signgu_cd, travel_date)
 
 
 class AnalysisService:
@@ -199,6 +214,7 @@ class AnalysisService:
         return trip
 
     def run_analysis(self, user: CurrentUser, trip_id: UUID) -> dict:
+        t0 = time.monotonic()
         trip = self._get_trip_or_404(trip_id, user)
         if not trip.trip_places:
             raise AppError(
@@ -206,46 +222,67 @@ class AnalysisService:
             )
 
         places_map = self.repo.get_places_map([p.place_id for p in trip.trip_places])
-        region = self.repo.get_region(trip.region_id)
-        region_supported = region is not None and region.area_cd and region.signgu_cd
-        spots, items_by_name, api_failed = get_region_spots_and_items(
-            self.repo, trip.region_id, trip.travel_date
-        )
+        # (area_cd, signgu_cd) -> (spots, items_by_name, api_failed). 이 run_analysis 호출
+        # 하나 안에서만 존재하고 끝나면 버려진다 — 여러 요청에 걸쳐 재사용하지 않는다.
+        region_cache: dict[tuple[str, str], tuple] = {}
 
+        # get_analysis()(응답 구성)까지 바깥의 하나의 try로 묶어서, 분석 루프가 아니라
+        # 응답 구성 단계에서 오류가 나도(예: get_analysis 내부 DB 조회 실패) 실패 시각
+        # 로그가 빠짐없이 남게 한다 — 루프만 감싸면 그 뒤 get_analysis() 실패는 로그 없이
+        # 그대로 새어나간다.
         try:
-            for trip_place in trip.trip_places:
-                place = places_map.get(trip_place.place_id)
-                place_name = place.name if place else ""
-                self._analyze_place(
-                    trip_place, place_name, region_supported, api_failed, spots, items_by_name
-                )
-        except SQLAlchemyError as exc:
-            self.db.rollback()
-            raise AppError(
-                ErrorCode.DB_ERROR, "분석 결과를 저장하는 중 오류가 발생했습니다.", status_code=500
-            ) from exc
+            try:
+                for trip_place in trip.trip_places:
+                    place = places_map.get(trip_place.place_id)
+                    self._analyze_place(trip_place, place, trip.travel_date, region_cache)
+            except SQLAlchemyError as exc:
+                self.db.rollback()
+                raise AppError(
+                    ErrorCode.DB_ERROR, "분석 결과를 저장하는 중 오류가 발생했습니다.", status_code=500
+                ) from exc
 
-        return self.get_analysis(user, trip_id, status_filter=None)
+            result = self.get_analysis(user, trip_id, status_filter=None)
+        except Exception:
+            logger.error(
+                "run_analysis 실패(trip_id=%s): %.2fs 경과 후 오류", trip_id, time.monotonic() - t0
+            )
+            raise
+        else:
+            logger.info(
+                "run_analysis 완료(trip_id=%s, 장소 %d개): 응답 구성 포함 총 %.2fs",
+                trip_id, len(trip.trip_places), time.monotonic() - t0,
+            )
+            return result
 
     def _analyze_place(
         self,
         trip_place: TripPlace,
-        place_name: str,
-        region_supported: bool,
-        api_failed: bool,
-        spots: list[ConcentrationSpot],
-        items_by_name: dict[str, ConcentrationItem],
+        place,
+        travel_date,
+        region_cache: dict[tuple[str, str], tuple],
     ) -> None:
-        if not region_supported:
+        place_name = place.name if place else ""
+        area_cd = place.area_cd if place else None
+        signgu_cd = place.signgu_cd if place else None
+
+        if not area_cd or not signgu_cd:
+            # 이 장소만 지역코드가 없는 것 — 일정 전체가 아니라 이 장소만 분석 불가 처리한다.
             self.repo.upsert_mapping(trip_place.place_id, None, None, None, "no_mapping")
             self.repo.upsert_analysis(
                 trip_place.id,
                 AnalysisStatus.UNAVAILABLE,
                 None,
-                UnknownReason.REGION_NOT_SUPPORTED,
+                UnknownReason.NO_DISTRICT_CODE,
                 RULE_VERSION,
             )
             return
+
+        cache_key = (area_cd, signgu_cd)
+        if cache_key not in region_cache:
+            region_cache[cache_key] = get_spots_and_items_for_codes(
+                self.repo, area_cd, signgu_cd, travel_date
+            )
+        spots, items_by_name, api_failed = region_cache[cache_key]
 
         if api_failed:
             self.repo.upsert_analysis(trip_place.id, AnalysisStatus.FAILED, None, None, None)
@@ -339,7 +376,7 @@ class AnalysisService:
             analysis = analysis_map.get(trip_place.id)
             level = analysis.level if analysis else None
             analysis_status = analysis.analysis_status if analysis else AnalysisStatus.UNAVAILABLE
-            unknown_reason = analysis.unknown_reason if analysis else UnknownReason.REGION_NOT_SUPPORTED
+            unknown_reason = analysis.unknown_reason if analysis else UnknownReason.NO_DISTRICT_CODE
             rule_version = analysis.rule_version if analysis else None
 
             if level == ConcentrationLevel.HIGH:

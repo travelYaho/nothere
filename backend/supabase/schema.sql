@@ -68,7 +68,10 @@ CREATE TABLE public.place (
   region_id BIGINT NULL REFERENCES public.region (id),
   name VARCHAR(200) NOT NULL,
   location GEOGRAPHY(POINT, 4326) NULL,
-  is_recommendable BOOLEAN NOT NULL DEFAULT TRUE
+  is_recommendable BOOLEAN NOT NULL DEFAULT TRUE,
+  area_cd VARCHAR(20) NULL,
+  signgu_cd VARCHAR(20) NULL,
+  UNIQUE (source_type, tour_content_id)
 );
 
 CREATE INDEX ix_place_region_id ON public.place (region_id);

@@ -204,6 +204,8 @@ def generate_candidates(
             name=row["name"],
             latitude=row["lat"],
             longitude=row["lng"],
+            area_cd=row.get("area_cd"),
+            signgu_cd=row.get("signgu_cd"),
         )
         for row in pool
     ]
