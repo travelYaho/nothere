@@ -158,7 +158,7 @@ export default function Bookmarks() {
             <div className="flex flex-col gap-2.5 pb-4">
               {guides.map((guide) => (
                 <GuidebookCard
-                  key={guide.token}
+                  key={guide.tripId}
                   title={guide.title}
                   regionName={guide.regionName}
                   placeCount={guide.placeCount}
@@ -167,7 +167,7 @@ export default function Bookmarks() {
                   coverImageUrl={guide.coverImageUrl}
                   likeCount={guide.likeCount}
                   isLikedByMe={guide.isLikedByMe}
-                  onClick={() => navigate(`/guide/${guide.token}`)}
+                  onClick={() => navigate(`/trips/${guide.tripId}/guide`)}
                 />
               ))}
             </div>

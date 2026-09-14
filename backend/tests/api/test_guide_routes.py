@@ -74,13 +74,14 @@ def test_explore_parses_comma_separated_tag_ids(client):
 
 
 def test_my_guides_returns_owned_guides(client):
+    trip_id = uuid4()
     with patch("app.services.guide_service.GuideRepository") as MockRepo:
         from app.repositories.guide_repository import GuideCard
 
         MockRepo.return_value.list_owned.return_value = (
             [
                 GuideCard(
-                    trip_id=uuid4(),
+                    trip_id=trip_id,
                     token="mine123",
                     title="내가 만든 서울 코스",
                     region_name="서울",
@@ -101,9 +102,43 @@ def test_my_guides_returns_owned_guides(client):
     body = res.json()["data"]
     assert body["page"] == 1
     assert body["guides"][0]["token"] == "mine123"
+    assert body["guides"][0]["tripId"] == str(trip_id)
     MockRepo.return_value.list_owned.assert_called_once()
     _, kwargs = MockRepo.return_value.list_owned.call_args
     assert kwargs["page"] == 1
+
+
+def test_my_guides_unshared_trip_has_null_token(client):
+    """공유 링크를 한 번도 안 만든 확정 트립도 목록엔 나와야 하고, token 은 null 이어야 한다."""
+    trip_id = uuid4()
+    with patch("app.services.guide_service.GuideRepository") as MockRepo:
+        from app.repositories.guide_repository import GuideCard
+
+        MockRepo.return_value.list_owned.return_value = (
+            [
+                GuideCard(
+                    trip_id=trip_id,
+                    token=None,
+                    title="아직 공유 안 한 부산 여행",
+                    region_name="부산",
+                    place_count=2,
+                    tag_names=[],
+                    author_nickname="테스터",
+                    cover_image_url=None,
+                    like_count=0,
+                    is_liked_by_me=False,
+                )
+            ],
+            1,
+        )
+
+        res = client.get("/api/guides/mine")
+
+    assert res.status_code == 200
+    body = res.json()["data"]
+    assert body["guides"][0]["token"] is None
+    assert body["guides"][0]["tripId"] == str(trip_id)
+    assert body["guides"][0]["likeCount"] == 0
 
 
 def test_filters_returns_regions_and_tags(client):

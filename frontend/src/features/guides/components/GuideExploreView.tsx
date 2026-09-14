@@ -157,7 +157,7 @@ export function GuideExploreView() {
           <div className="flex flex-col gap-2.5">
             {guides.map((guide) => (
               <GuidebookCard
-                key={guide.token}
+                key={guide.tripId}
                 title={guide.title}
                 regionName={guide.regionName}
                 placeCount={guide.placeCount}

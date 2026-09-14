@@ -102,6 +102,21 @@ def test_list_mine_maps_cards_and_forwards_owner_id(current_user):
     assert result.guides[0].token == "abc123XYZ"
 
 
+def test_list_mine_card_without_share_link_has_null_token_and_zero_likes(current_user):
+    """공유 링크를 한 번도 안 만든 확정 트립도 '내가 만든' 목록엔 보여야 한다."""
+    unshared = _card(token=None, like_count=0, is_liked_by_me=False)
+    with patch("app.services.guide_service.GuideRepository") as MockRepo:
+        MockRepo.return_value.list_owned.return_value = ([unshared], 1)
+
+        result = GuideService(MagicMock()).list_mine(current_user, page=1)
+
+    card = result.guides[0]
+    assert card.token is None
+    assert card.like_count == 0
+    assert card.is_liked_by_me is False
+    assert card.trip_id == unshared.trip_id
+
+
 def test_filters_maps_regions_and_tags(current_user):
     region = MagicMock(id=1)
     region.name = "서울"

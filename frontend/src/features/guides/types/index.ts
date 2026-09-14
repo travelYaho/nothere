@@ -2,7 +2,9 @@
 export type GuideSort = "popular" | "recent"
 
 export interface GuideCard {
-  token: string
+  tripId: string
+  /** 공유 링크가 있을 때만 값이 있다 — "내가 만든" 목록은 공유 안 한 트립도 포함해서 null 일 수 있다. */
+  token: string | null
   title: string
   regionName: string
   placeCount: number
