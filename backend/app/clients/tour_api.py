@@ -27,10 +27,14 @@ NEARBY_BASE_URL = "https://apis.data.go.kr/B551011/KorService2/locationBasedList
 
 
 class TourApiPlace(BaseModel):
-    """TourAPI 검색 결과 한 건을 정규화한 DTO."""
+    """TourAPI 검색 결과 한 건을 정규화한 DTO.
+
+    cat1/cat2/cat3 는 사람이 읽을 이름이 아니라 "A02060600" 같은 분류 코드라
+    화면에 그대로 보여줄 수 없다 — 코드→이름 변환표가 생기기 전까지는 아예
+    내려주지 않는다.
+    """
     content_id: str
     name: str
-    category: str | None = None
     address: str | None = None
     latitude: float | None = None
     longitude: float | None = None
@@ -115,7 +119,6 @@ def _to_place(item: dict) -> TourApiPlace:
     return TourApiPlace(
         content_id=str(item.get("contentid", "")),
         name=item.get("title", ""),
-        category=item.get("cat3") or item.get("cat1"),
         address=item.get("addr1"),
         latitude=_to_float(item.get("mapy")),
         longitude=_to_float(item.get("mapx")),

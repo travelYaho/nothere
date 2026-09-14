@@ -23,6 +23,7 @@ export function StepHeader({
       <div className="flex w-full items-center justify-between">
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={onBack ?? (() => navigate(-1))}
             className="-ml-1 rounded-full p-0.5 text-ink hover:bg-ink/5"
           >

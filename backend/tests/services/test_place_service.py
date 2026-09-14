@@ -34,7 +34,7 @@ def test_search_places_creates_new_place_when_not_seen_before():
     service.places.create.return_value = new_place
 
     tour_result = TourApiPlace(
-        content_id="126508", name="경복궁", category="역사·문화",
+        content_id="126508", name="경복궁",
         address="서울 종로구", latitude=37.579617, longitude=126.977041,
     )
     with patch("app.services.place_service.tour_api.search_places", return_value=[tour_result]):

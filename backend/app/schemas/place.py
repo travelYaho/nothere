@@ -25,7 +25,6 @@ class PlaceSearchItem(APIModel):
     """TourAPI 검색 결과 한 건 — placeId 는 우리 내부 Place.id(UUID)다."""
     place_id: UUID
     name: str
-    category: str | None = None
     address: str | None = None
     latitude: float | None = None
     longitude: float | None = None

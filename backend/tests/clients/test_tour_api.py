@@ -106,7 +106,6 @@ def test_single_result_item_is_not_a_list_but_still_parsed(monkeypatch):
                             "item": {
                                 "contentid": "12345",
                                 "title": "경복궁",
-                                "cat3": "역사·문화",
                                 "addr1": "서울 종로구",
                                 "mapx": "126.977041",
                                 "mapy": "37.579617",
@@ -126,7 +125,6 @@ def test_single_result_item_is_not_a_list_but_still_parsed(monkeypatch):
     place = results[0]
     assert place.content_id == "12345"
     assert place.name == "경복궁"
-    assert place.category == "역사·문화"
     assert place.latitude == pytest.approx(37.579617)
     assert place.longitude == pytest.approx(126.977041)
 
