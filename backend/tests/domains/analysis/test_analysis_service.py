@@ -1,13 +1,14 @@
 """AnalysisService(STEP4) 매칭/등급/파이프라인 단위 테스트."""
 from __future__ import annotations
 
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
+from app.clients.concentration_api import ConcentrationItem
 from app.core.exceptions import AppError, ErrorCode
 from app.domains.analysis.service import (
     AnalysisService,
@@ -15,6 +16,7 @@ from app.domains.analysis.service import (
     ConcentrationLevel,
     UnknownReason,
     calculate_congestion_level,
+    get_spots_and_items_for_codes,
     match_concentration_spot,
     normalize_name,
 )
@@ -25,8 +27,14 @@ def _user() -> CurrentUser:
     return CurrentUser(id=uuid4(), email="t@example.com", nickname="테스터", profile_image_url=None)
 
 
-def _spot(name: str, normalized: str | None = None):
-    return SimpleNamespace(id=1, tourist_name=name, normalized_name=normalized or normalize_name(name))
+def _spot(name: str, normalized: str | None = None, area_cd: str = "11", signgu_cd: str = "11110"):
+    return SimpleNamespace(
+        id=1,
+        tourist_name=name,
+        normalized_name=normalized or normalize_name(name),
+        area_cd=area_cd,
+        signgu_cd=signgu_cd,
+    )
 
 
 def test_calculate_congestion_level_uses_cutoffs():
@@ -71,7 +79,8 @@ def test_run_analysis_raises_when_trip_empty():
     assert exc.value.status_code == 422
 
 
-def test_run_analysis_marks_region_not_supported_when_region_missing():
+def test_run_analysis_marks_no_district_code_when_place_missing_codes():
+    """place에 area_cd/signgu_cd가 없으면(예: 커스텀 장소) 그 장소만 분석 불가 처리한다."""
     db = MagicMock()
     svc = AnalysisService(db)
     user = _user()
@@ -81,7 +90,6 @@ def test_run_analysis_marks_region_not_supported_when_region_missing():
 
     trip = SimpleNamespace(
         id=trip_id,
-        region_id=None,
         travel_date=None,
         trip_places=[
             SimpleNamespace(
@@ -93,16 +101,15 @@ def test_run_analysis_marks_region_not_supported_when_region_missing():
             )
         ],
     )
-    place = SimpleNamespace(id=place_id, name="이름없는장소")
+    place = SimpleNamespace(id=place_id, name="이름없는장소", area_cd=None, signgu_cd=None)
 
     svc.repo.get_trip_owned = MagicMock(return_value=trip)
     svc.repo.get_places_map = MagicMock(return_value={place_id: place})
-    svc.repo.get_region = MagicMock(return_value=None)
     svc.repo.upsert_mapping = MagicMock()
     saved_analysis = SimpleNamespace(
         analysis_status=AnalysisStatus.UNAVAILABLE,
         level=None,
-        unknown_reason=UnknownReason.REGION_NOT_SUPPORTED,
+        unknown_reason=UnknownReason.NO_DISTRICT_CODE,
         rule_version="v1",
         analyzed_at=datetime.now(timezone.utc),
     )
@@ -113,7 +120,7 @@ def test_run_analysis_marks_region_not_supported_when_region_missing():
 
     assert result["tripId"] == str(trip_id)
     assert result["items"][0]["analysisStatus"] == AnalysisStatus.UNAVAILABLE
-    assert result["items"][0]["unknownReason"] == UnknownReason.REGION_NOT_SUPPORTED
+    assert result["items"][0]["unknownReason"] == UnknownReason.NO_DISTRICT_CODE
     svc.repo.upsert_mapping.assert_called_once_with(place_id, None, None, None, "no_mapping")
 
 
@@ -122,6 +129,7 @@ def test_analyze_place_uses_reviewed_mapping_without_rematching():
     db = MagicMock()
     svc = AnalysisService(db)
     trip_place = SimpleNamespace(id=uuid4(), place_id=uuid4(), is_fixed=False, resolution_status="pending")
+    place = SimpleNamespace(name="아무 이름", area_cd="11", signgu_cd="11110")
 
     approved_spot = _spot("실제승인된장소")
     reviewed_mapping = SimpleNamespace(status="approved", concentration_spot_id=approved_spot.id)
@@ -135,15 +143,9 @@ def test_analyze_place_uses_reviewed_mapping_without_rematching():
     # 쓰이지 않아야 한다 — 만약 이 spots를 썼다면 아래 assert에서 다른 값이 저장됐을 것이다.
     decoy_spots = [_spot("자동매칭이_고른_엉뚱한장소")]
     items_by_name = {"실제승인된장소": SimpleNamespace(raw_value=10.0, base_ymd="20260910")}
+    region_cache = {("11", "11110"): (decoy_spots, items_by_name, False)}
 
-    svc._analyze_place(
-        trip_place,
-        place_name="아무 이름",
-        region_supported=True,
-        api_failed=False,
-        spots=decoy_spots,
-        items_by_name=items_by_name,
-    )
+    svc._analyze_place(trip_place, place, travel_date=None, region_cache=region_cache)
 
     svc.repo.upsert_mapping.assert_not_called()
     svc.repo.upsert_analysis.assert_called_once_with(
@@ -151,29 +153,253 @@ def test_analyze_place_uses_reviewed_mapping_without_rematching():
     )
 
 
+def test_analyze_place_reviewed_mapping_with_district_mismatch_is_flagged_for_review():
+    """승인된 매핑이 가리키는 spot의 구와 place의 현재 구가 다르면(동명이인 관광지가 다른
+    구에 있을 수 있음) 등급을 계산하지 않고 재검수 필요로 표시한다 — 매핑 레코드 자체는
+    건드리지 않는다(코드 리뷰로 발견, 2026-09-14)."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    trip_place = SimpleNamespace(id=uuid4(), place_id=uuid4(), is_fixed=False, resolution_status="pending")
+    place = SimpleNamespace(name="아무 이름", area_cd="11", signgu_cd="11110")
+
+    # 승인된 spot은 다른 구(26/26290) 소속인데 place는 11/11110 — 이름은 같아도 다른 구.
+    mismatched_spot = _spot("동명이인장소", area_cd="26", signgu_cd="26290")
+    reviewed_mapping = SimpleNamespace(status="approved", concentration_spot_id=mismatched_spot.id)
+
+    svc.repo.get_mapping = MagicMock(return_value=reviewed_mapping)
+    svc.repo.get_spot = MagicMock(return_value=mismatched_spot)
+    svc.repo.upsert_analysis = MagicMock()
+    svc.repo.upsert_mapping = MagicMock()
+
+    items_by_name = {"동명이인장소": SimpleNamespace(raw_value=10.0, base_ymd="20260910")}
+    region_cache = {("11", "11110"): ([mismatched_spot], items_by_name, False)}
+
+    svc._analyze_place(trip_place, place, travel_date=None, region_cache=region_cache)
+
+    # 매핑 레코드는 자동으로 건드리지 않는다(삭제/상태변경 없음).
+    svc.repo.upsert_mapping.assert_not_called()
+    svc.repo.upsert_analysis.assert_called_once_with(
+        trip_place.id, AnalysisStatus.UNAVAILABLE, None, UnknownReason.MAPPING_PENDING, "v1"
+    )
+
+
 def test_analyze_place_rejected_mapping_is_treated_as_no_mapping():
     db = MagicMock()
     svc = AnalysisService(db)
     trip_place = SimpleNamespace(id=uuid4(), place_id=uuid4(), is_fixed=False, resolution_status="pending")
+    place = SimpleNamespace(name="아무 이름", area_cd="11", signgu_cd="11110")
 
     rejected_mapping = SimpleNamespace(status="rejected", concentration_spot_id=None)
     svc.repo.get_mapping = MagicMock(return_value=rejected_mapping)
     svc.repo.upsert_analysis = MagicMock()
     svc.repo.upsert_mapping = MagicMock()
 
-    svc._analyze_place(
-        trip_place,
-        place_name="아무 이름",
-        region_supported=True,
-        api_failed=False,
-        spots=[_spot("아무거나")],
-        items_by_name={},
-    )
+    region_cache = {("11", "11110"): ([_spot("아무거나")], {}, False)}
+    svc._analyze_place(trip_place, place, travel_date=None, region_cache=region_cache)
 
     svc.repo.upsert_mapping.assert_not_called()
     svc.repo.upsert_analysis.assert_called_once_with(
         trip_place.id, AnalysisStatus.UNAVAILABLE, None, UnknownReason.NO_MAPPING, "v1"
     )
+
+
+def test_run_analysis_caches_district_lookup_across_places_in_same_district(monkeypatch):
+    """같은 (area_cd, signgu_cd)를 가진 place 두 개가 있으면 집중률 API를 한 번만 호출한다."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    place_id_1, place_id_2 = uuid4(), uuid4()
+    tp_id_1, tp_id_2 = uuid4(), uuid4()
+
+    place_1 = SimpleNamespace(id=place_id_1, name="장소1", area_cd="11", signgu_cd="11110")
+    place_2 = SimpleNamespace(id=place_id_2, name="장소2", area_cd="11", signgu_cd="11110")
+    trip = SimpleNamespace(
+        id=trip_id,
+        travel_date=None,
+        trip_places=[
+            SimpleNamespace(id=tp_id_1, place_id=place_id_1, is_fixed=False, resolution_status="pending", visit_time=None),
+            SimpleNamespace(id=tp_id_2, place_id=place_id_2, is_fixed=False, resolution_status="pending", visit_time=None),
+        ],
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(return_value={place_id_1: place_1, place_id_2: place_2})
+    svc.repo.get_mapping = MagicMock(return_value=None)
+    svc.repo.upsert_mapping = MagicMock()
+    svc.repo.upsert_analysis = MagicMock(
+        return_value=SimpleNamespace(
+            analysis_status="unavailable", level=None, unknown_reason="no_mapping",
+            rule_version="v1", analyzed_at=None,
+        )
+    )
+    svc.repo.get_analysis_map = MagicMock(return_value={})
+
+    call_count = {"n": 0}
+
+    def fake_get_spots_and_items_for_codes(repo, area_cd, signgu_cd, travel_date):
+        call_count["n"] += 1
+        return [], {}, False
+
+    monkeypatch.setattr(
+        "app.domains.analysis.service.get_spots_and_items_for_codes",
+        fake_get_spots_and_items_for_codes,
+    )
+
+    svc.run_analysis(user, trip_id)
+
+    assert call_count["n"] == 1
+
+
+def test_run_analysis_isolates_failure_to_places_sharing_the_failed_district(monkeypatch):
+    """구 하나의 집중률 API 호출이 실패하면, 그 구를 공유하는 장소들은 함께 failed가 되고
+    다른 구의 장소는 영향 없이 정상 분석된다 — "장소 하나만"이 아니라 "같은 구 전체"가 맞는
+    경계다(요청 하나 안에서 구 단위로 API 응답을 공유하는 캐시 설계이므로)."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+
+    place_a1 = uuid4()  # 구 A, 실패
+    place_a2 = uuid4()  # 구 A, 실패(같은 구를 공유해서 함께 실패)
+    place_b1 = uuid4()  # 구 B, 정상
+    tp_a1, tp_a2, tp_b1 = uuid4(), uuid4(), uuid4()
+
+    places_map = {
+        place_a1: SimpleNamespace(id=place_a1, name="장소A1", area_cd="11", signgu_cd="11110"),
+        place_a2: SimpleNamespace(id=place_a2, name="장소A2", area_cd="11", signgu_cd="11110"),
+        place_b1: SimpleNamespace(id=place_b1, name="장소B1", area_cd="11", signgu_cd="11140"),
+    }
+    trip = SimpleNamespace(
+        id=trip_id,
+        travel_date=None,
+        trip_places=[
+            SimpleNamespace(id=tp_a1, place_id=place_a1, is_fixed=False, resolution_status="pending", visit_time=None),
+            SimpleNamespace(id=tp_a2, place_id=place_a2, is_fixed=False, resolution_status="pending", visit_time=None),
+            SimpleNamespace(id=tp_b1, place_id=place_b1, is_fixed=False, resolution_status="pending", visit_time=None),
+        ],
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(return_value=places_map)
+    svc.repo.get_mapping = MagicMock(return_value=None)
+    svc.repo.upsert_mapping = MagicMock()
+
+    saved: dict[UUID, str] = {}
+
+    def fake_upsert_analysis(trip_place_id, analysis_status, level, unknown_reason, rule_version):
+        saved[trip_place_id] = analysis_status
+        return SimpleNamespace(
+            analysis_status=analysis_status, level=level, unknown_reason=unknown_reason,
+            rule_version=rule_version, analyzed_at=None,
+        )
+
+    svc.repo.upsert_analysis = MagicMock(side_effect=fake_upsert_analysis)
+    svc.repo.get_analysis_map = MagicMock(return_value={})
+
+    def fake_get_spots_and_items_for_codes(repo, area_cd, signgu_cd, travel_date):
+        if signgu_cd == "11110":  # 구 A만 API 실패
+            return [], {}, True
+        return [], {}, False  # 구 B는 정상이지만 매칭 실패(no_mapping) — 크래시만 아니면 됨
+
+    monkeypatch.setattr(
+        "app.domains.analysis.service.get_spots_and_items_for_codes",
+        fake_get_spots_and_items_for_codes,
+    )
+
+    svc.run_analysis(user, trip_id)
+
+    assert saved[tp_a1] == AnalysisStatus.FAILED
+    assert saved[tp_a2] == AnalysisStatus.FAILED
+    assert saved[tp_b1] != AnalysisStatus.FAILED
+
+
+# --- get_spots_and_items_for_codes: N+1 DB 왕복 제거 + 지역코드 검증 (2026-09-13) ---
+
+def test_get_spots_and_items_for_codes_dedups_same_spot_across_dates(monkeypatch):
+    """같은 관광지가 30일치처럼 여러 날짜로 중복 응답돼도 bulk_upsert_spots는 이름 기준으로
+    한 번만 부른다 — 예전엔 행마다 DB에 물어봐서 응답이 수천 행이면 DB 왕복도 그만큼이었다."""
+    items = [
+        ConcentrationItem(tourist_name="경국사", area_cd="11", signgu_cd="11290", base_ymd="20260101", raw_value=10.0),
+        ConcentrationItem(tourist_name="경국사", area_cd="11", signgu_cd="11290", base_ymd="20260102", raw_value=90.0),
+        ConcentrationItem(tourist_name="경국사", area_cd="11", signgu_cd="11290", base_ymd="20260103", raw_value=50.0),
+    ]
+    monkeypatch.setattr(
+        "app.domains.analysis.service.fetch_concentration", lambda area_cd, signgu_cd: items
+    )
+    repo = MagicMock()
+    repo.bulk_upsert_spots = MagicMock(return_value=[_spot("경국사")])
+
+    spots, items_by_name, api_failed = get_spots_and_items_for_codes(
+        repo, "11", "11290", travel_date=date(2026, 1, 2)
+    )
+
+    assert api_failed is False
+    repo.bulk_upsert_spots.assert_called_once_with(
+        "11", "11290", [("경국사", normalize_name("경국사"))]
+    )
+    assert items_by_name["경국사"].raw_value == 90.0  # travel_date(01-02)에 해당하는 값만 선택
+
+
+def test_get_spots_and_items_for_codes_fails_whole_district_on_region_mismatch(monkeypatch):
+    """응답 item의 지역코드가 요청과 다르면 그 항목만 조용히 빼지 않고 이 시군구 조회
+    전체를 실패로 처리한다 — 현재 지역에 동명 관광지가 이미 있으면 다른 지역 값이 섞여
+    들어갈 수 있어서, 부분적으로 걸러내는 대신 확실하게 실패시킨다."""
+    items = [
+        ConcentrationItem(tourist_name="정상장소", area_cd="11", signgu_cd="11290", base_ymd="20260101", raw_value=10.0),
+        ConcentrationItem(tourist_name="다른지역장소", area_cd="26", signgu_cd="26290", base_ymd="20260101", raw_value=20.0),
+    ]
+    monkeypatch.setattr(
+        "app.domains.analysis.service.fetch_concentration", lambda area_cd, signgu_cd: items
+    )
+    repo = MagicMock()
+
+    result = get_spots_and_items_for_codes(repo, "11", "11290")
+
+    assert result == ([], {}, True)
+    repo.bulk_upsert_spots.assert_not_called()
+
+
+def test_run_analysis_logs_failure_time_when_response_construction_fails(monkeypatch, caplog):
+    """분석 루프가 아니라 get_analysis()(응답 구성) 단계에서 실패해도 실패 시각 로그가
+    남아야 한다 — try가 분석 루프만 감싸면 이 경로는 로그 없이 그대로 새어나간다
+    (2026-09-13 피드백으로 발견한 로그 공백)."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    place_id, tp_id = uuid4(), uuid4()
+
+    place = SimpleNamespace(id=place_id, name="장소", area_cd="11", signgu_cd="11110")
+    trip = SimpleNamespace(
+        id=trip_id,
+        travel_date=None,
+        trip_places=[
+            SimpleNamespace(
+                id=tp_id, place_id=place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            ),
+        ],
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(return_value={place_id: place})
+    svc.repo.get_mapping = MagicMock(return_value=None)
+    svc.repo.upsert_mapping = MagicMock()
+    svc.repo.upsert_analysis = MagicMock(
+        return_value=SimpleNamespace(
+            analysis_status="unavailable", level=None, unknown_reason="no_mapping",
+            rule_version="v1", analyzed_at=None,
+        )
+    )
+    monkeypatch.setattr(
+        "app.domains.analysis.service.get_spots_and_items_for_codes",
+        lambda repo, area_cd, signgu_cd, travel_date: ([], {}, False),
+    )
+    svc.get_analysis = MagicMock(side_effect=RuntimeError("응답 구성 중 DB 오류"))
+
+    with caplog.at_level("ERROR", logger="yeogimalgo.analysis"):
+        with pytest.raises(RuntimeError):
+            svc.run_analysis(user, trip_id)
+
+    assert any("run_analysis 실패" in record.message for record in caplog.records)
 
 
 def test_get_analysis_filters_crowded_only():
@@ -215,6 +441,39 @@ def test_get_analysis_filters_crowded_only():
     assert len(result["items"]) == 1
     assert result["items"][0]["level"] == "high"
     assert result["items"][0]["visitTime"] == "10:30"
+
+
+def test_get_analysis_does_not_default_unknown_reason_to_no_district_code_when_never_analyzed():
+    """analysis 레코드가 아예 없는 건 "아직 분석 안 함"이지 "지역코드 없음"이 아니다 —
+    place에 유효한 area_cd/signgu_cd가 있어도 run_analysis()를 한 번도 안 돌렸으면
+    unknownReason을 NO_DISTRICT_CODE로 단정하지 않는다(코드 리뷰로 발견한 오분류,
+    2026-09-14)."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    place_id = uuid4()
+    tp_id = uuid4()
+
+    trip = SimpleNamespace(
+        id=trip_id,
+        trip_places=[
+            SimpleNamespace(
+                id=tp_id, place_id=place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            )
+        ],
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(
+        return_value={place_id: SimpleNamespace(name="경국사", area_cd="11", signgu_cd="11290")}
+    )
+    svc.repo.get_analysis_map = MagicMock(return_value={})  # 분석 레코드 자체가 없음
+
+    result = svc.get_analysis(user, trip_id, status_filter=None)
+
+    assert result["items"][0]["analysisStatus"] == AnalysisStatus.UNAVAILABLE
+    assert result["items"][0]["unknownReason"] is None
 
 
 def test_get_analysis_visit_time_is_null_when_not_set():

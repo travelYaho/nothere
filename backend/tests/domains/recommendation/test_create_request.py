@@ -90,7 +90,7 @@ def test_create_request_creates_candidates_from_tour_api(monkeypatch):
     )
 
     created_place = SimpleNamespace(id=uuid4())
-    svc.repo.get_or_create_place_by_tour_content_id = MagicMock(return_value=created_place)
+    svc.places.get_or_create = MagicMock(return_value=created_place)
     svc.repo.upsert_place_experience_tags = MagicMock()
 
     saved_request = SimpleNamespace(id=uuid4())
@@ -108,6 +108,15 @@ def test_create_request_creates_candidates_from_tour_api(monkeypatch):
     assert row_dicts[0]["candidate_place_id"] == created_place.id
     assert row_dicts[0]["feasibility_status"] == "UNKNOWN"
     assert isinstance(row_dicts[0]["experience_score"], Decimal)
+    svc.places.get_or_create.assert_called_once_with(
+        source_type="tour_api",
+        tour_content_id="tour-1",
+        name="창덕궁",
+        longitude=127.0,
+        latitude=37.58,
+        area_cd="11",
+        signgu_cd="11110",
+    )
 
 
 def test_create_request_no_candidate_status_when_all_filtered(monkeypatch):

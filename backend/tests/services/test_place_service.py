@@ -28,14 +28,17 @@ def _current_user():
 # --- search_places ---
 
 def test_search_places_creates_new_place_when_not_seen_before():
+    """get_or_create()가 새 place를 만들어 돌려주는 경로 — 신규/재사용 판단 자체는 이제
+    PlaceRepository.get_or_create() 내부(원자적 ON CONFLICT) 책임이라 여기서는 서비스가
+    그 결과를 그대로 응답에 반영하는지만 확인한다(내부 분기는 test_place_repository.py)."""
     service = _service_with_mocks()
-    service.places.get_by_source.return_value = None
-    new_place = MagicMock(id=uuid4())
-    service.places.create.return_value = new_place
+    new_place = MagicMock(id=uuid4(), area_cd="11", signgu_cd="11110")
+    service.places.get_or_create.return_value = new_place
 
     tour_result = TourApiPlace(
         content_id="126508", name="경복궁", category="역사·문화",
         address="서울 종로구", latitude=37.579617, longitude=126.977041,
+        area_cd="11", signgu_cd="11110",
     )
     with patch("app.services.place_service.tour_api.search_places", return_value=[tour_result]):
         result = service.search_places("경복궁", region_id=1)
@@ -43,20 +46,20 @@ def test_search_places_creates_new_place_when_not_seen_before():
     assert len(result.places) == 1
     assert result.places[0].place_id == new_place.id
     assert result.places[0].name == "경복궁"
-    service.places.create.assert_called_once()
+    service.places.get_or_create.assert_called_once()
+    service.db.commit.assert_called_once()
 
 
 def test_search_places_reuses_existing_place_for_same_content_id():
     service = _service_with_mocks()
-    existing_place = MagicMock(id=uuid4())
-    service.places.get_by_source.return_value = existing_place
+    existing_place = MagicMock(id=uuid4(), area_cd="11", signgu_cd="11110")
+    service.places.get_or_create.return_value = existing_place
 
     tour_result = TourApiPlace(content_id="126508", name="경복궁")
     with patch("app.services.place_service.tour_api.search_places", return_value=[tour_result]):
         result = service.search_places("경복궁", region_id=None)
 
     assert result.places[0].place_id == existing_place.id
-    service.places.create.assert_not_called()
 
 
 def test_search_places_maps_region_id_to_tour_api_area_code():

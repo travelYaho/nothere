@@ -60,19 +60,25 @@ class PlaceService:
 
         results = tour_api.search_places(keyword, area_code=area_code)
         items = [self._get_or_create_place(result, region_id) for result in results]
+        # get_or_create()/보충 로직이 flush만 하므로, 검색으로 새로 만든/보충한 place가
+        # 요청 종료 후에도 남도록 여기서 한 번만 commit한다.
+        self.db.commit()
         return PlaceSearchResponse(places=items)
 
     def _get_or_create_place(self, result: tour_api.TourApiPlace, region_id: int | None) -> PlaceSearchItem:
-        place = self.places.get_by_source("tour_api", result.content_id)
-        if place is None:
-            place = self.places.create(
-                source_type="tour_api",
-                tour_content_id=result.content_id or None,
-                region_id=region_id,
-                name=result.name,
-                longitude=result.longitude,
-                latitude=result.latitude,
-            )
+        place = self.places.get_or_create(
+            source_type="tour_api",
+            tour_content_id=result.content_id or None,
+            region_id=region_id,
+            name=result.name,
+            longitude=result.longitude,
+            latitude=result.latitude,
+            area_cd=result.area_cd,
+            signgu_cd=result.signgu_cd,
+        )
+        # 지역코드 보충은 PlaceRepository.get_or_create() 내부(충돌 폴백 경로)에서 이미
+        # 처리된다 — STEP3(여기)·STEP6(recommendation/service.py)가 같은 메서드를 거치므로
+        # 별도 보충 로직을 여기 다시 두지 않는다.
         return PlaceSearchItem(
             place_id=place.id,
             name=result.name,
