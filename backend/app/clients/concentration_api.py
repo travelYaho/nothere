@@ -211,7 +211,20 @@ def fetch_concentration(
                 retryable=False,
             )
         for page_no in range(2, required_pages + 1):
-            items, _ = _fetch_page_with_retry(area_cd, signgu_cd, service_key, page_no, tourist_name)
+            items, page_total_count = _fetch_page_with_retry(
+                area_cd, signgu_cd, service_key, page_no, tourist_name
+            )
+            if page_total_count != total_count:
+                # 페이지를 여러 번 나눠 부르는 동안 원본 데이터가 갱신되면(드묾) totalCount가
+                # 페이지마다 달라질 수 있다 — 이걸 무시하고 계속 모으면 처음 계산한 페이지
+                # 수·완결성 검증 기준이 이미 낡은 값이 돼서, 실제로는 불완전한 결과를
+                # "완료"로 반환할 위험이 있다. 조용히 넘어가지 않고 재시도 가능한 실패로 던진다.
+                raise ConcentrationApiError(
+                    f"페이지 조회 중 totalCount가 변경되었습니다"
+                    f"(1페이지={total_count}, {page_no}페이지={page_total_count})",
+                    result_code=None,
+                    retryable=True,
+                )
             all_items.extend(items)
 
     if len(all_items) < total_count:

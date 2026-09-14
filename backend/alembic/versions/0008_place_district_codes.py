@@ -23,6 +23,17 @@ area_cd/signgu_cd 컬럼과 (source_type, tour_content_id) UNIQUE를 반영해�
 으로 맞춘다 — 이미 head인 실제 공유 Supabase(0008 미적용)에서는 컬럼이 없으므로 정상적으로
 새로 추가되고, 신규 DB에서는 0001이 이미 만든 걸 건너뛴다. UNIQUE 제약은 IF NOT EXISTS 구문이
 없어(구버전 Postgres 호환) 컬럼 조합 기준으로 존재 여부를 직접 확인하는 DO 블록으로 감싼다.
+
+Edited: 2026-09-14 — 코드 리뷰로 두 가지 보완.
+1. 제약 존재 확인 쿼리가 스키마 제한 없이 relname='place'만 봐서, 다른 스키마에 우연히
+   같은 이름의 테이블·제약이 있으면 오판할 수 있었다 — public 스키마로 명시 제한.
+2. 이 마이그레이션 이전 배포 코드는 SELECT-then-INSERT라 동시 요청 두 개가 같은
+   (source_type, tour_content_id)로 place를 동시에 만들면 이론적으로 중복 행이 생길 수
+   있었다(3차 조사에서 이 DB엔 실제로 0건임을 직접 확인했지만, 그 확인에 영원히 기대는
+   대신 방어적으로 짜는 게 맞다). 중복이 있으면 ALTER TABLE이 알아보기 힘든 Postgres 기본
+   에러로 실패하는 대신, 0007의 태그 공존 검사와 같은 방식으로 먼저 검사해서 명확한 이유와
+   함께 그 자리에서 실패시킨다 — 자동 병합(대표 행 선정 + 여러 테이블 FK 재연결)은 하지
+   않는다(중복이 실제로 발견되면 그때 상황에 맞게 수동으로 처리하는 게 더 안전하다).
 """
 from typing import Sequence, Union
 
@@ -33,6 +44,25 @@ down_revision: Union[str, Sequence[str], None] = "0007_merge_seed_heads"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+_CHECK_NO_DUPLICATE_PLACES_SQL = """
+DO $$
+DECLARE dup_count int;
+BEGIN
+  SELECT count(*) INTO dup_count FROM (
+    SELECT source_type, tour_content_id
+    FROM public.place
+    WHERE source_type IS NOT NULL AND tour_content_id IS NOT NULL
+    GROUP BY source_type, tour_content_id
+    HAVING count(*) > 1
+  ) dups;
+  IF dup_count > 0 THEN
+    RAISE EXCEPTION
+      'place에 (source_type, tour_content_id) 중복이 % 건 있어 UNIQUE 제약을 추가할 수 없습니다 — 수동 병합이 필요합니다',
+      dup_count;
+  END IF;
+END $$;
+"""
+
 _ADD_UNIQUE_CONSTRAINT_SQL = """
 DO $$
 DECLARE has_unique boolean;
@@ -42,6 +72,7 @@ BEGIN
     FROM pg_constraint c
     JOIN pg_class t ON t.oid = c.conrelid
     WHERE t.relname = 'place'
+      AND t.relnamespace = 'public'::regnamespace
       AND c.contype = 'u'
       AND c.conkey = ARRAY[
         (SELECT attnum FROM pg_attribute WHERE attrelid = t.oid AND attname = 'source_type'),
@@ -59,6 +90,7 @@ END $$;
 def upgrade() -> None:
     op.execute("ALTER TABLE public.place ADD COLUMN IF NOT EXISTS area_cd VARCHAR(20) NULL;")
     op.execute("ALTER TABLE public.place ADD COLUMN IF NOT EXISTS signgu_cd VARCHAR(20) NULL;")
+    op.execute(_CHECK_NO_DUPLICATE_PLACES_SQL)
     op.execute(_ADD_UNIQUE_CONSTRAINT_SQL)
 
 

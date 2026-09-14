@@ -93,6 +93,37 @@ def test_fetch_concentration_dynamically_paginates_by_total_count(monkeypatch):
     assert len(result) == 250
 
 
+def test_fetch_concentration_raises_when_total_count_changes_mid_pagination(monkeypatch):
+    """1페이지 응답 기준으로 필요한 페이지 수·완결성 기준을 정했는데, 이후 페이지에서
+    totalCount가 달라지면(원본 데이터가 조회 도중 갱신된 경우) 낡은 기준으로 불완전한
+    결과를 "완료"로 반환하지 않고 즉시 실패한다."""
+    monkeypatch.setattr(settings, "CONCENTRATION_API_KEY", "dummy-key")
+
+    def _fake_get(url, params=None, **kwargs):
+        page_no = params["pageNo"]
+        if page_no == 1:
+            items = [
+                {"tAtsNm": f"장소1-{i}", "areaCd": "11", "signguCd": "11110", "baseYmd": "20260101", "cnctrRate": "1.0"}
+                for i in range(100)
+            ]
+            return _response(
+                {"response": {"header": _header(), "body": {"totalCount": 150, "items": {"item": items}}}}
+            )
+        # 2페이지 응답에서 totalCount가 150 -> 250으로 바뀌어 온다.
+        items = [
+            {"tAtsNm": f"장소2-{i}", "areaCd": "11", "signguCd": "11110", "baseYmd": "20260101", "cnctrRate": "1.0"}
+            for i in range(100)
+        ]
+        return _response(
+            {"response": {"header": _header(), "body": {"totalCount": 250, "items": {"item": items}}}}
+        )
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    with pytest.raises(concentration_api.ConcentrationApiError):
+        concentration_api.fetch_concentration("11", "11110")
+
+
 def test_fetch_concentration_retries_unexpectedly_empty_page_then_succeeds(monkeypatch):
     """총 200건인데 2페이지가 한 번 비어 오면(일시적 장애) 재시도해서 결국 다 모은다."""
     monkeypatch.setattr(settings, "CONCENTRATION_API_KEY", "dummy-key")

@@ -291,7 +291,7 @@ class AnalysisService:
         existing = self.repo.get_mapping(trip_place.place_id)
         if existing is not None and existing.status in (MappingStatus.APPROVED, MappingStatus.REJECTED):
             # 사람이 이미 확정한 매핑이 있으면 자동 재매칭을 하지 않고 그 결과를 그대로 쓴다.
-            self._apply_reviewed_mapping(trip_place, existing, items_by_name)
+            self._apply_reviewed_mapping(trip_place, existing, items_by_name, area_cd, signgu_cd)
             return
 
         match = match_concentration_spot(place_name, spots)
@@ -335,6 +335,8 @@ class AnalysisService:
         trip_place: TripPlace,
         mapping: PlaceConcentrationMapping,
         items_by_name: dict[str, ConcentrationItem],
+        area_cd: str,
+        signgu_cd: str,
     ) -> None:
         if mapping.status == MappingStatus.REJECTED or mapping.concentration_spot_id is None:
             self.repo.upsert_analysis(
@@ -346,6 +348,23 @@ class AnalysisService:
         if spot is None:
             self.repo.upsert_analysis(
                 trip_place.id, AnalysisStatus.UNAVAILABLE, None, UnknownReason.NO_MAPPING, RULE_VERSION
+            )
+            return
+
+        if spot.area_cd != area_cd or spot.signgu_cd != signgu_cd:
+            # 승인된 매핑이 가리키는 spot의 구와 이 place의 현재 구가 다르다 — 사람이 승인할
+            # 당시부터 잘못 매칭했거나(이름만 보고 승인), place 지역코드가 애플리케이션 코드를
+            # 거치지 않고(수동 DB 수정 등) 바뀐 경우다. 두 경우 다 apply_district_code_backfill()
+            # 의 충돌 감지로는 막을 수 없다(그건 자동 백필 경로만 보호한다). 승인/거절 기록
+            # 자체는 사람의 판단 이력이라 자동으로 지우거나 바꾸지 않고, 이 분석 결과만 등급을
+            # 내지 않고 재검수 필요로 표시한다 — 동명이인 관광지의 다른 지역 값을 정상 결과인
+            # 것처럼 보여주는 걸 막는다(코드 리뷰로 발견, 2026-09-14).
+            self.repo.upsert_analysis(
+                trip_place.id,
+                AnalysisStatus.UNAVAILABLE,
+                None,
+                UnknownReason.MAPPING_PENDING,
+                RULE_VERSION,
             )
             return
 
@@ -376,7 +395,12 @@ class AnalysisService:
             analysis = analysis_map.get(trip_place.id)
             level = analysis.level if analysis else None
             analysis_status = analysis.analysis_status if analysis else AnalysisStatus.UNAVAILABLE
-            unknown_reason = analysis.unknown_reason if analysis else UnknownReason.NO_DISTRICT_CODE
+            # analysis가 없는 건 "아직 분석을 실행한 적이 없다"는 뜻이지 "지역코드가 없다"는
+            # 뜻이 아니다 — 실제로 지역코드가 멀쩡한 place도 run_analysis()를 아직 한 번도
+            # 안 돌렸으면 여기 걸린다. NO_DISTRICT_CODE로 단정하면 원인 파악을 오히려
+            # 헷갈리게 하므로(코드 리뷰로 발견, 2026-09-14) 분석 자체를 안 한 경우는
+            # unknown_reason을 비워서 "아직 모름"과 "분석해봤는데 이유가 있어 안 됨"을 구분한다.
+            unknown_reason = analysis.unknown_reason if analysis else None
             rule_version = analysis.rule_version if analysis else None
 
             if level == ConcentrationLevel.HIGH:

@@ -27,8 +27,14 @@ def _user() -> CurrentUser:
     return CurrentUser(id=uuid4(), email="t@example.com", nickname="테스터", profile_image_url=None)
 
 
-def _spot(name: str, normalized: str | None = None):
-    return SimpleNamespace(id=1, tourist_name=name, normalized_name=normalized or normalize_name(name))
+def _spot(name: str, normalized: str | None = None, area_cd: str = "11", signgu_cd: str = "11110"):
+    return SimpleNamespace(
+        id=1,
+        tourist_name=name,
+        normalized_name=normalized or normalize_name(name),
+        area_cd=area_cd,
+        signgu_cd=signgu_cd,
+    )
 
 
 def test_calculate_congestion_level_uses_cutoffs():
@@ -144,6 +150,36 @@ def test_analyze_place_uses_reviewed_mapping_without_rematching():
     svc.repo.upsert_mapping.assert_not_called()
     svc.repo.upsert_analysis.assert_called_once_with(
         trip_place.id, AnalysisStatus.SUCCESS, ConcentrationLevel.LOW, None, "v1"
+    )
+
+
+def test_analyze_place_reviewed_mapping_with_district_mismatch_is_flagged_for_review():
+    """승인된 매핑이 가리키는 spot의 구와 place의 현재 구가 다르면(동명이인 관광지가 다른
+    구에 있을 수 있음) 등급을 계산하지 않고 재검수 필요로 표시한다 — 매핑 레코드 자체는
+    건드리지 않는다(코드 리뷰로 발견, 2026-09-14)."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    trip_place = SimpleNamespace(id=uuid4(), place_id=uuid4(), is_fixed=False, resolution_status="pending")
+    place = SimpleNamespace(name="아무 이름", area_cd="11", signgu_cd="11110")
+
+    # 승인된 spot은 다른 구(26/26290) 소속인데 place는 11/11110 — 이름은 같아도 다른 구.
+    mismatched_spot = _spot("동명이인장소", area_cd="26", signgu_cd="26290")
+    reviewed_mapping = SimpleNamespace(status="approved", concentration_spot_id=mismatched_spot.id)
+
+    svc.repo.get_mapping = MagicMock(return_value=reviewed_mapping)
+    svc.repo.get_spot = MagicMock(return_value=mismatched_spot)
+    svc.repo.upsert_analysis = MagicMock()
+    svc.repo.upsert_mapping = MagicMock()
+
+    items_by_name = {"동명이인장소": SimpleNamespace(raw_value=10.0, base_ymd="20260910")}
+    region_cache = {("11", "11110"): ([mismatched_spot], items_by_name, False)}
+
+    svc._analyze_place(trip_place, place, travel_date=None, region_cache=region_cache)
+
+    # 매핑 레코드는 자동으로 건드리지 않는다(삭제/상태변경 없음).
+    svc.repo.upsert_mapping.assert_not_called()
+    svc.repo.upsert_analysis.assert_called_once_with(
+        trip_place.id, AnalysisStatus.UNAVAILABLE, None, UnknownReason.MAPPING_PENDING, "v1"
     )
 
 
@@ -405,6 +441,39 @@ def test_get_analysis_filters_crowded_only():
     assert len(result["items"]) == 1
     assert result["items"][0]["level"] == "high"
     assert result["items"][0]["visitTime"] == "10:30"
+
+
+def test_get_analysis_does_not_default_unknown_reason_to_no_district_code_when_never_analyzed():
+    """analysis 레코드가 아예 없는 건 "아직 분석 안 함"이지 "지역코드 없음"이 아니다 —
+    place에 유효한 area_cd/signgu_cd가 있어도 run_analysis()를 한 번도 안 돌렸으면
+    unknownReason을 NO_DISTRICT_CODE로 단정하지 않는다(코드 리뷰로 발견한 오분류,
+    2026-09-14)."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    place_id = uuid4()
+    tp_id = uuid4()
+
+    trip = SimpleNamespace(
+        id=trip_id,
+        trip_places=[
+            SimpleNamespace(
+                id=tp_id, place_id=place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            )
+        ],
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(
+        return_value={place_id: SimpleNamespace(name="경국사", area_cd="11", signgu_cd="11290")}
+    )
+    svc.repo.get_analysis_map = MagicMock(return_value={})  # 분석 레코드 자체가 없음
+
+    result = svc.get_analysis(user, trip_id, status_filter=None)
+
+    assert result["items"][0]["analysisStatus"] == AnalysisStatus.UNAVAILABLE
+    assert result["items"][0]["unknownReason"] is None
 
 
 def test_get_analysis_visit_time_is_null_when_not_set():
