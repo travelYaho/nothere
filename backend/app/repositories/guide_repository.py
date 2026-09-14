@@ -142,7 +142,7 @@ class GuideRepository:
             select(ShareLink.id)
             .where(ShareLink.trip_id == Trip.id)
             .where(active)
-            .order_by(ShareLink.created_at.desc())
+            .order_by(ShareLink.created_at.desc(), ShareLink.id.desc())
             .limit(1)
             .correlate(Trip)
             .scalar_subquery()
@@ -158,7 +158,7 @@ class GuideRepository:
 
         total_count = query.count()
         rows = (
-            query.order_by(Trip.updated_at.desc())
+            query.order_by(Trip.updated_at.desc(), Trip.id.desc())
             .offset((page - 1) * PAGE_SIZE)
             .limit(PAGE_SIZE)
             .all()

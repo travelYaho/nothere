@@ -2,7 +2,7 @@
  * 공유 링크 공개 가이드북 (비로그인)
  */
 import { useEffect } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useLocation, useNavigate, useParams } from "react-router-dom"
 import { ChangeLogItem, ScheduleCard } from "@/components/common/cards"
 import { BasicHeader } from "@/components/layout/navigation"
 import { toUiCongestion, useConfirmGuide } from "@/features/recommendation"
@@ -10,15 +10,27 @@ import { toUiCongestion, useConfirmGuide } from "@/features/recommendation"
 export default function SharedGuide() {
   const { token } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { guide, loading, error, loadPublic } = useConfirmGuide(undefined)
 
   useEffect(() => {
     if (token) void loadPublic(token)
   }, [token, loadPublic])
 
+  // 카톡/문자 등으로 공유된 링크를 눌러 앱 히스토리 없이 바로 들어온 경우
+  // navigate(-1)이 아무 반응도 안 해서(뒤로갈 곳이 없음) 다시 못 나가게 된다.
+  // react-router는 이런 "직접 진입"에서 location.key를 "default"로 둔다.
+  function handleBack() {
+    if (location.key === "default") {
+      navigate("/")
+    } else {
+      navigate(-1)
+    }
+  }
+
   return (
     <div className="relative flex flex-1 flex-col">
-      <BasicHeader title="공유 가이드북" onBack={() => navigate(-1)} />
+      <BasicHeader title="공유 가이드북" onBack={handleBack} />
       <div className="flex flex-1 flex-col gap-4 px-5 pb-10 pt-2">
         {loading && <p className="text-[13px] text-ink-muted">불러오는 중…</p>}
         {error && <p className="text-[13px] text-congestion-high">{error}</p>}

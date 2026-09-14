@@ -15,6 +15,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { GuidebookCard, ScheduleCard } from "@/components/common/cards"
+import { Button } from "@/components/common/primitives"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 import { listMyGuides } from "@/features/guides/api/guidesApi"
 import type { GuideCard } from "@/features/guides/types"
@@ -56,21 +57,41 @@ export default function Bookmarks() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
 
   const [guides, setGuides] = useState<GuideCard[]>([])
+  const [guidesPage, setGuidesPage] = useState(1)
+  const [guidesHasNext, setGuidesHasNext] = useState(false)
   const [guidesLoaded, setGuidesLoaded] = useState(false)
   const [guidesLoading, setGuidesLoading] = useState(false)
+  const [guidesLoadingMore, setGuidesLoadingMore] = useState(false)
   const [guidesError, setGuidesError] = useState<string | null>(null)
 
   useEffect(() => {
     if (innerTab !== "guidebooks" || guidesLoaded) return
     setGuidesLoading(true)
+    setGuidesError(null)
     listMyGuides(1)
       .then((res) => {
         setGuides(res.guides)
+        setGuidesPage(1)
+        setGuidesHasNext(res.hasNext)
         setGuidesLoaded(true)
       })
       .catch((err) => setGuidesError(toErrorMessage(err)))
       .finally(() => setGuidesLoading(false))
   }, [innerTab, guidesLoaded])
+
+  async function loadMoreGuides() {
+    setGuidesLoadingMore(true)
+    try {
+      const res = await listMyGuides(guidesPage + 1)
+      setGuides((prev) => [...prev, ...res.guides])
+      setGuidesHasNext(res.hasNext)
+      setGuidesPage((p) => p + 1)
+    } catch (err) {
+      setGuidesError(toErrorMessage(err))
+    } finally {
+      setGuidesLoadingMore(false)
+    }
+  }
 
   const filteredTrips = trips.filter((t) => statusFilter === "all" || t.status === statusFilter)
 
@@ -170,6 +191,13 @@ export default function Bookmarks() {
                   onClick={() => navigate(`/trips/${guide.tripId}/guide`)}
                 />
               ))}
+            </div>
+          )}
+          {!guidesLoading && !guidesError && guidesHasNext && (
+            <div className="pb-4">
+              <Button variant="ghost" block loading={guidesLoadingMore} onClick={() => void loadMoreGuides()}>
+                더보기
+              </Button>
             </div>
           )}
         </div>
