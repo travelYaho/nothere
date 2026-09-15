@@ -109,7 +109,7 @@ class RecommendationService:
                 ),
             )
             enriched = candidate_pipeline.enrich_candidates(
-                generated, trip.travel_date, purpose_tag_codes, self.analysis_repo
+                generated, trip.travel_date, purpose_tag_codes, self.analysis_repo, self.places
             )
             survivors, excluded_count = candidate_pipeline.filter_candidates(
                 enriched, duplicate_names, experience_threshold

@@ -135,6 +135,36 @@ def match_concentration_spot(place_name: str, spots: list[ConcentrationSpot]) ->
     return MatchResult(None, None, None, "no_mapping")
 
 
+def resolve_reviewed_mapping(
+    mapping: PlaceConcentrationMapping,
+    spot: ConcentrationSpot | None,
+    items_by_name: dict[str, ConcentrationItem],
+    area_cd: str | None,
+    signgu_cd: str | None,
+) -> tuple[str | None, str | None]:
+    """사람이 승인/거절한 매핑을 그대로 신뢰해 등급을 계산한다 — 순수 함수(DB 접근 없음).
+
+    STEP4(AnalysisService._apply_reviewed_mapping, 분석 결과를 저장)와 STEP6
+    (candidates.py::enrich_candidates, 후보 congestion_level만 계산)이 같은 판정 규칙을
+    쓰도록 공유한다. 반환값: (level, unknown_reason) — 등급을 낼 수 있으면
+    (level, None), 없으면 (None, 그 사유).
+    """
+    if mapping.status == MappingStatus.REJECTED or mapping.concentration_spot_id is None:
+        return None, UnknownReason.NO_MAPPING
+    if spot is None:
+        return None, UnknownReason.NO_MAPPING
+    if spot.area_cd != area_cd or spot.signgu_cd != signgu_cd:
+        # 승인된 매핑이 가리키는 spot의 구와 조회 대상 구가 다르다 — 사람이 승인할 당시부터
+        # 잘못 매칭했거나, place 지역코드가 애플리케이션 코드를 거치지 않고 바뀐 경우다.
+        # 승인/거절 기록 자체는 건드리지 않고 이 판정만 재검수 필요로 표시한다 — 동명이인
+        # 관광지의 다른 지역 값을 정상 결과처럼 보여주는 걸 막는다.
+        return None, UnknownReason.MAPPING_PENDING
+    item = items_by_name.get(spot.tourist_name)
+    if item is None or item.raw_value is None:
+        return None, UnknownReason.NO_FORECAST_DATA
+    return calculate_congestion_level(item.raw_value, RULE_VERSION), None
+
+
 def _select_items_for_date(
     api_items: list[ConcentrationItem], travel_date: date | None
 ) -> dict[str, ConcentrationItem]:
@@ -338,49 +368,16 @@ class AnalysisService:
         area_cd: str,
         signgu_cd: str,
     ) -> None:
-        if mapping.status == MappingStatus.REJECTED or mapping.concentration_spot_id is None:
-            self.repo.upsert_analysis(
-                trip_place.id, AnalysisStatus.UNAVAILABLE, None, UnknownReason.NO_MAPPING, RULE_VERSION
-            )
-            return
-
-        spot = self.repo.get_spot(mapping.concentration_spot_id)
-        if spot is None:
-            self.repo.upsert_analysis(
-                trip_place.id, AnalysisStatus.UNAVAILABLE, None, UnknownReason.NO_MAPPING, RULE_VERSION
-            )
-            return
-
-        if spot.area_cd != area_cd or spot.signgu_cd != signgu_cd:
-            # 승인된 매핑이 가리키는 spot의 구와 이 place의 현재 구가 다르다 — 사람이 승인할
-            # 당시부터 잘못 매칭했거나(이름만 보고 승인), place 지역코드가 애플리케이션 코드를
-            # 거치지 않고(수동 DB 수정 등) 바뀐 경우다. 두 경우 다 apply_district_code_backfill()
-            # 의 충돌 감지로는 막을 수 없다(그건 자동 백필 경로만 보호한다). 승인/거절 기록
-            # 자체는 사람의 판단 이력이라 자동으로 지우거나 바꾸지 않고, 이 분석 결과만 등급을
-            # 내지 않고 재검수 필요로 표시한다 — 동명이인 관광지의 다른 지역 값을 정상 결과인
-            # 것처럼 보여주는 걸 막는다(코드 리뷰로 발견, 2026-09-14).
-            self.repo.upsert_analysis(
-                trip_place.id,
-                AnalysisStatus.UNAVAILABLE,
-                None,
-                UnknownReason.MAPPING_PENDING,
-                RULE_VERSION,
-            )
-            return
-
-        item = items_by_name.get(spot.tourist_name)
-        if item is None or item.raw_value is None:
-            self.repo.upsert_analysis(
-                trip_place.id,
-                AnalysisStatus.UNAVAILABLE,
-                None,
-                UnknownReason.NO_FORECAST_DATA,
-                RULE_VERSION,
-            )
-            return
-
-        level = calculate_congestion_level(item.raw_value, RULE_VERSION)
-        self.repo.upsert_analysis(trip_place.id, AnalysisStatus.SUCCESS, level, None, RULE_VERSION)
+        spot = (
+            self.repo.get_spot(mapping.concentration_spot_id)
+            if mapping.concentration_spot_id is not None
+            else None
+        )
+        level, reason = resolve_reviewed_mapping(mapping, spot, items_by_name, area_cd, signgu_cd)
+        if level is None:
+            self.repo.upsert_analysis(trip_place.id, AnalysisStatus.UNAVAILABLE, None, reason, RULE_VERSION)
+        else:
+            self.repo.upsert_analysis(trip_place.id, AnalysisStatus.SUCCESS, level, None, RULE_VERSION)
 
     def get_analysis(self, user: CurrentUser, trip_id: UUID, status_filter: str | None) -> dict:
         trip = self._get_trip_or_404(trip_id, user)

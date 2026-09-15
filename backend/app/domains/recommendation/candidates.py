@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import date
+from uuid import UUID
 
 from app.clients.tour_api import TourPlaceItem, fetch_nearby_places
 from app.domains.analysis.service import (
@@ -16,8 +17,10 @@ from app.domains.analysis.service import (
     calculate_congestion_level,
     get_spots_and_items_for_codes,
     match_concentration_spot,
+    resolve_reviewed_mapping,
 )
 from app.repositories.analysis_repository import AnalysisRepository
+from app.repositories.place_repository import PlaceRepository
 
 # 자동으로 확대되는 반경 단계(km). relaxed_experience는 사용자가 직접 선택했을 때만 쓴다.
 RADIUS_KM_BY_MODE = {
@@ -211,32 +214,119 @@ def generate_candidates(
     ]
 
 
+def _resolve_effective_district(
+    candidate_area_cd: str | None,
+    candidate_signgu_cd: str | None,
+    place_area_cd: str | None,
+    place_signgu_cd: str | None,
+) -> tuple[str | None, str | None, bool]:
+    """이번 응답의 지역코드와 기존 place에 저장된 지역코드 중 실제로 쓸 값을 정한다.
+
+    순수 함수(DB 접근 없음). place.area_cd/signgu_cd는 apply_district_code_backfill()의
+    충돌 감지 때문에 한 번 채워지면 다른 값으로 조용히 덮어써지지 않는다 — 즉 나중에
+    STEP4가 실제로 쓸 지역코드는 "이번 응답 값"이 아니라 "기존 place에 저장된 값"이다.
+    여기서 이번 응답 값만 보고 등급을 계산하면, 이 후보를 실제로 적용한 뒤 STEP4가 보여줄
+    값과 지금 STEP6에서 보여준 값이 다른 지역 기준일 수 있다(코드 리뷰로 발견,
+    2026-09-15). 반환값: (effective_area_cd, effective_signgu_cd, conflict).
+
+    place_repository._classify_district_code_backfill()과 반드시 같은 충돌 규칙을 써야
+    한다 — 필드 단위로 비교한다. 2라운드 리뷰로 발견: 처음엔 "저장된 두 필드 중 하나라도
+    없으면 저장값 자체가 없는 것으로 취급"했는데, 이러면 area_cd="11", signgu_cd=None처럼
+    "부분 저장" 상태에서 area_cd="11"이라는 실제 저장값이 있는데도 통째로 무시하고 후보의
+    area_cd="26"을 그냥 써버렸다 — 저장 단계 백필은 area_cd만으로도 충돌을 잡아서 거부하는데
+    (기존 값 유지) STEP6는 그걸 모르고 확정 등급을 냈다.
+    """
+    if not candidate_area_cd or not candidate_signgu_cd:
+        # 이번 응답에 완전한 코드가 없다 — place에 저장된 값이 있으면(부분 저장이어도) 그걸
+        # 쓰고, 없으면 지역코드 없음으로 취급한다(호출부가 자연히 unknown 처리).
+        return place_area_cd, place_signgu_cd, False
+    if place_area_cd and place_area_cd != candidate_area_cd:
+        return None, None, True
+    if place_signgu_cd and place_signgu_cd != candidate_signgu_cd:
+        return None, None, True
+    if place_area_cd and place_signgu_cd:
+        # 저장된 값이 완전하고 충돌도 없다 — 나중에 STEP4가 실제로 쓸 값(저장값)을 신뢰한다.
+        return place_area_cd, place_signgu_cd, False
+    return candidate_area_cd, candidate_signgu_cd, False
+
+
 def enrich_candidates(
     candidates: list[CandidateSource],
     travel_date: date | None,
     purpose_tag_codes: list[str],
     analysis_repo: AnalysisRepository,
+    place_repo: PlaceRepository,
 ) -> list[EnrichedCandidate]:
     """집중률 매핑/판정을 후보에도 재사용해서 congestion_level을 채운다.
 
     area_cd/signgu_cd는 TourAPI 응답(lDongRegnCd/lDongSignguCd)에서 이미 채워져 있으므로
     STEP4처럼 trip.region_id -> region 매핑을 다시 거치지 않는다. DB 후보 풀 항목은
     지역 코드가 없어(place에 region_id가 비어 있을 수 있음) congestion_level="unknown"으로 둔다.
+
+    후보가 이미 DB에 있는 place(수동 검수를 거쳤을 수 있음)와 연결되면 STEP4와 동일한
+    규칙(resolve_reviewed_mapping)으로 승인/거절 판정을 우선 반영한다 — 판정 기준은
+    "place가 이미 있는지"가 아니라 "그 place에 approved/rejected 매핑이 있는지"다. place가
+    있어도 매핑이 없으면(한 번도 분석된 적 없음) 자동매칭한다. 다만 검수대기(review_required)
+    상태는 STEP4와 달리 여기서는 재평가하지 않고 unknown으로 유지한다 — 자동 재매칭이
+    우연히 "exact"로 나오면 사람이 검토하기도 전에 확정 등급처럼 보일 수 있기 때문이다.
+    STEP4는 기존 동작을 그대로 두므로(범위 밖) 둘 사이에 일시적 비대칭이 생기는데,
+    review_required를 진짜로 어떻게 해소할지는 검수 경로 자체를 만드는 후속 이슈에서
+    STEP4까지 포함해 같이 정한다 — 과소 확신이 과대 확신보다 안전하다고 판단해 여기서는
+    보수적인 쪽을 택한다.
     """
+    # 기존 place 일괄 조회 — TourAPI 후보는 (source_type, tour_content_id)로, DB 후보 풀
+    # 항목은 candidate.id 자체가 이미 place_id라 별도 조회가 필요 없다. 후보마다
+    # get_by_source()를 부르면 후보 수만큼 쿼리가 나가므로 일괄 조회로 묶는다.
+    existing_by_source = place_repo.get_by_sources(
+        [("tour_api", c.id) for c in candidates if c.from_tour_api]
+    )
+
     enriched: list[EnrichedCandidate] = []
     region_cache: dict[tuple[str, str], tuple] = {}
     for candidate in candidates:
-        if candidate.area_cd and candidate.signgu_cd:
-            cache_key = (candidate.area_cd, candidate.signgu_cd)
+        if candidate.from_tour_api:
+            existing_place = existing_by_source.get(("tour_api", candidate.id))
+        else:
+            existing_place = place_repo.get_by_id(UUID(candidate.id))
+        mapping = analysis_repo.get_mapping(existing_place.id) if existing_place else None
+
+        area_cd, signgu_cd, district_conflict = _resolve_effective_district(
+            candidate.area_cd,
+            candidate.signgu_cd,
+            existing_place.area_cd if existing_place else None,
+            existing_place.signgu_cd if existing_place else None,
+        )
+
+        if district_conflict:
+            spots, items_by_name, api_failed = [], {}, False
+        elif area_cd and signgu_cd:
+            cache_key = (area_cd, signgu_cd)
             if cache_key not in region_cache:
                 region_cache[cache_key] = get_spots_and_items_for_codes(
-                    analysis_repo, candidate.area_cd, candidate.signgu_cd, travel_date
+                    analysis_repo, area_cd, signgu_cd, travel_date
                 )
             spots, items_by_name, api_failed = region_cache[cache_key]
         else:
             spots, items_by_name, api_failed = [], {}, False
 
-        if api_failed or not spots:
+        if district_conflict or api_failed:
+            level = "unknown"
+        elif mapping is not None and mapping.status == MappingStatus.REVIEW_REQUIRED:
+            # 검수대기는 재평가하지 않는다 — 위 함수 docstring 참고.
+            level = "unknown"
+        elif mapping is not None and mapping.status in (MappingStatus.APPROVED, MappingStatus.REJECTED):
+            # 사람이 이미 확정한 매핑이 있으면 자동 재매칭하지 않고 그 결과를 그대로 쓴다
+            # (STEP4의 _apply_reviewed_mapping과 같은 규칙을 resolve_reviewed_mapping으로 공유).
+            spot = (
+                analysis_repo.get_spot(mapping.concentration_spot_id)
+                if mapping.concentration_spot_id is not None
+                else None
+            )
+            resolved_level, _ = resolve_reviewed_mapping(
+                mapping, spot, items_by_name, area_cd, signgu_cd
+            )
+            level = resolved_level or "unknown"
+        elif not spots:
             level = "unknown"
         else:
             match = match_concentration_spot(candidate.name, spots)
