@@ -182,9 +182,9 @@ def test_apply_replacement_clears_old_analysis_in_same_commit():
     reason = SimpleNamespace(is_eligible=True, recommend_reason="추천", not_recommend_reason=None)
     route = SimpleNamespace(extra_minutes=5)
 
-    svc.repo.get_trip_place = MagicMock(return_value=tp)
+    svc.repo.get_trip_place_for_update = MagicMock(return_value=tp)
     svc.repo.get_trip_owned = MagicMock(return_value=trip)
-    svc.repo.get_candidate = MagicMock(return_value=cand)
+    svc.repo.get_candidate_for_trip_place = MagicMock(return_value=cand)
     svc.repo.get_ranking_by_candidate = MagicMock(return_value=ranking)
     svc.repo.get_reason_by_candidate = MagicMock(return_value=reason)
     svc.repo.get_route_by_candidate = MagicMock(return_value=route)
@@ -203,3 +203,165 @@ def test_apply_replacement_clears_old_analysis_in_same_commit():
     svc.analysis_repo.clear_analysis_for_trip_place.assert_called_once_with(trip_place_id)
     assert call_order == ["clear", "commit"]  # commit 전에 clear가 끝나 있어야 같은 트랜잭션
     assert result["resolutionStatus"] == "replaced"
+    svc.repo.get_trip_place_for_update.assert_called_once_with(trip_place_id)
+    svc.repo.get_candidate_for_trip_place.assert_called_once_with(candidate_id, trip_place_id)
+
+
+def test_apply_replacement_rejects_candidate_from_another_trip_place():
+    """candidate_id가 다른 trip_place(다른 사용자 포함)의 추천 요청에서 나온 것이면
+    get_candidate_for_trip_place()가 None을 돌려주고, 그대로 404 처리돼야 한다 —
+    id만으로 조회하면 이 검증 없이 통과했었다(코드 리뷰로 발견)."""
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    candidate_id = uuid4()
+
+    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4(), is_fixed=False)
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+
+    svc.repo.get_trip_place_for_update = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_candidate_for_trip_place = MagicMock(return_value=None)
+
+    with pytest.raises(AppError) as exc:
+        svc.apply_replacement(trip_place_id, candidate_id, user)
+
+    assert exc.value.status_code == 404
+    svc.repo.get_candidate_for_trip_place.assert_called_once_with(candidate_id, trip_place_id)
+
+
+def test_revert_replacement_clears_analysis_and_reverts_place():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    replacement_id = uuid4()
+    from_place_id = uuid4()
+    to_place_id = uuid4()
+
+    replacement = SimpleNamespace(
+        id=replacement_id,
+        trip_place_id=trip_place_id,
+        from_place_id=from_place_id,
+        to_place_id=to_place_id,
+        reverted_at=None,
+        ranking_id=uuid4(),
+    )
+    tp = SimpleNamespace(
+        id=trip_place_id, trip_id=trip_id, place_id=to_place_id, resolution_status="replaced",
+    )
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+
+    svc.repo.get_replacement = MagicMock(return_value=replacement)
+    svc.repo.get_trip_place_for_update = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    # active_replacement: 취소 대상 확인 시엔 이 replacement 자신, flush 후 재조회 시엔
+    # 남은 게 없다고(=완전히 pending으로) 답하게 한다.
+    svc.repo.active_replacement = MagicMock(side_effect=[replacement, None])
+    svc.repo.log_interaction = MagicMock()
+    svc.analysis_repo.clear_analysis_for_trip_place = MagicMock()
+
+    result = svc.revert_replacement(replacement_id, user)
+
+    assert tp.place_id == from_place_id
+    assert tp.resolution_status == "pending"
+    assert replacement.reverted_at is not None
+    svc.analysis_repo.clear_analysis_for_trip_place.assert_called_once_with(trip_place_id)
+    db.flush.assert_called_once()  # active_replacement 재조회 전에 reverted_at이 반영돼야 함
+    assert result["resolutionStatus"] == "pending"
+
+
+def test_revert_replacement_keeps_replaced_status_when_older_replacement_remains():
+    """A→B→C로 두 번 교체된 뒤 최신(B→C)만 되돌리면, 아직 안 되돌린 A→B가 남아있으므로
+    resolution_status가 "pending"이 아니라 "replaced"로 유지돼야 한다."""
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    replacement_id = uuid4()
+    older_replacement = SimpleNamespace(id=uuid4(), reverted_at=None)
+
+    replacement = SimpleNamespace(
+        id=replacement_id,
+        trip_place_id=trip_place_id,
+        from_place_id=uuid4(),
+        to_place_id=uuid4(),
+        reverted_at=None,
+        ranking_id=uuid4(),
+    )
+    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4(), resolution_status="replaced")
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+
+    svc.repo.get_replacement = MagicMock(return_value=replacement)
+    svc.repo.get_trip_place_for_update = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.active_replacement = MagicMock(side_effect=[replacement, older_replacement])
+    svc.repo.log_interaction = MagicMock()
+    svc.analysis_repo.clear_analysis_for_trip_place = MagicMock()
+
+    result = svc.revert_replacement(replacement_id, user)
+
+    assert tp.resolution_status == "replaced"
+    assert result["resolutionStatus"] == "replaced"
+
+
+def test_revert_replacement_rejects_when_not_the_latest_active_replacement():
+    """A→B→C→B 패턴: place_id만 비교하면 오래된 A→B 교체도 "지금 place_id와 같다"는
+    이유로 취소가 통과해버렸다. 실제로 지금 활성 상태인 교체(C→B, 다른 id)와 다르면
+    거부해야 한다."""
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    old_replacement_id = uuid4()
+    currently_active = SimpleNamespace(id=uuid4(), reverted_at=None)
+
+    old_replacement = SimpleNamespace(
+        id=old_replacement_id,
+        trip_place_id=trip_place_id,
+        from_place_id=uuid4(),
+        to_place_id=uuid4(),
+        reverted_at=None,
+        ranking_id=uuid4(),
+    )
+    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4(), resolution_status="replaced")
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+
+    svc.repo.get_replacement = MagicMock(return_value=old_replacement)
+    svc.repo.get_trip_place_for_update = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.active_replacement = MagicMock(return_value=currently_active)
+
+    with pytest.raises(AppError) as exc:
+        svc.revert_replacement(old_replacement_id, user)
+
+    assert exc.value.status_code == 409
+
+
+def test_revert_replacement_rejects_when_already_reverted():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    replacement_id = uuid4()
+
+    replacement = SimpleNamespace(
+        id=replacement_id, trip_place_id=trip_place_id, reverted_at=MagicMock(),
+    )
+    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4())
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+
+    svc.repo.get_replacement = MagicMock(return_value=replacement)
+    svc.repo.get_trip_place_for_update = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+
+    with pytest.raises(AppError) as exc:
+        svc.revert_replacement(replacement_id, user)
+
+    assert exc.value.status_code == 409
