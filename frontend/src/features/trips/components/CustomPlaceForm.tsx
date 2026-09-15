@@ -9,11 +9,29 @@ import { Button } from "@/components/common/primitives"
 import { FieldLabel, TextInput } from "@/components/common/inputs"
 import { Close, Search } from "@/components/common/icons"
 import { StepHeader } from "@/features/trips/components/StepHeader"
+import { getTripDetail } from "@/features/trips/api/tripsApi"
 import { addCustomPlaceToTrip } from "@/features/trips/api/placesApi"
 import { ApiError } from "@/types/api"
 
 /** 다음(카카오) 우편번호 서비스 — 실제 존재하는 도로명주소만 선택 가능하게 강제한다. */
 const DAUM_POSTCODE_SCRIPT_SRC = "https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
+
+/**
+ * 여행 지역 밖 주소를 걸러내기 위한 시/도 접두어 매핑.
+ * 다음 우편번호 검색 결과 주소는 regions 테이블의 정식 명칭("서울특별시")이
+ * 아니라 "서울"처럼 축약된 형태로 내려오므로 그 축약형으로 매칭한다
+ * (백엔드 PlaceService._REGION_ADDRESS_PREFIXES 와 동일한 기준).
+ */
+const REGION_ADDRESS_PREFIXES: Record<string, string[]> = {
+  서울특별시: ["서울"],
+  부산광역시: ["부산"],
+}
+
+function isAddressInRegion(address: string, regionName: string | null): boolean {
+  const prefixes = regionName ? REGION_ADDRESS_PREFIXES[regionName] : undefined
+  if (!prefixes) return true
+  return prefixes.some((prefix) => address.startsWith(prefix))
+}
 
 interface DaumPostcodeData {
   roadAddress: string
@@ -77,12 +95,20 @@ export function CustomPlaceForm() {
   const [baseAddress, setBaseAddress] = useState("")
   const [detailAddress, setDetailAddress] = useState("")
   const [visitTime, setVisitTime] = useState("")
+  const [regionName, setRegionName] = useState<string | null>(null)
 
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [searchingAddress, setSearchingAddress] = useState(false)
   const [addressSearchOpen, setAddressSearchOpen] = useState(false)
   const addressSearchRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!tripId) return
+    getTripDetail(tripId)
+      .then((detail) => setRegionName(detail.regionName))
+      .catch(() => setRegionName(null))
+  }, [tripId])
 
   async function handleSearchAddress() {
     setError(null)
@@ -103,8 +129,14 @@ export function CustomPlaceForm() {
       width: "100%",
       height: "100%",
       oncomplete: (data) => {
-        setBaseAddress(pickRoadAddress(data))
+        const address = pickRoadAddress(data)
         setAddressSearchOpen(false)
+        if (!isAddressInRegion(address, regionName)) {
+          setError(`${regionName} 지역 내 주소만 등록할 수 있어요.`)
+          return
+        }
+        setError(null)
+        setBaseAddress(address)
       },
     }).embed(addressSearchRef.current)
   }, [addressSearchOpen])

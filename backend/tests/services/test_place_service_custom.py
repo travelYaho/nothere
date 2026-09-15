@@ -84,3 +84,40 @@ def test_add_custom_place_unknown_trip_returns_404():
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.code == ErrorCode.RESOURCE_NOT_FOUND
+
+
+def test_add_custom_place_address_outside_trip_region_returns_400():
+    service = _service_with_mocks()
+    trip = MagicMock(id=uuid4(), region_id=1)  # 서울특별시
+    trip.region.name = "서울특별시"
+    service.trips.get_owned_by_id.return_value = trip
+
+    with pytest.raises(AppError) as exc_info:
+        service.add_custom_place_to_trip(
+            _current_user(), uuid4(), _payload(address="부산 해운대구 해운대해변로 264")
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == ErrorCode.ADDRESS_NOT_FOUND
+    service.places.create.assert_not_called()
+
+
+def test_add_custom_place_without_trip_region_skips_region_check():
+    service = _service_with_mocks()
+    trip_id = uuid4()
+    place_id = uuid4()
+    trip = MagicMock(id=trip_id, region_id=None)
+    service.trips.get_owned_by_id.return_value = trip
+    created_place = MagicMock(id=place_id)
+    created_place.name = "유성푸르지오시티"
+    service.places.create.return_value = created_place
+    service.trip_places.next_position.return_value = 1
+    service.trip_places.add.return_value = MagicMock(
+        id=uuid4(), trip_id=trip_id, position=1, is_fixed=False, visit_time=time(14, 30)
+    )
+
+    result = service.add_custom_place_to_trip(
+        _current_user(), trip_id, _payload(address="부산 해운대구 해운대해변로 264")
+    )
+
+    assert result.visit_order == 1

@@ -58,7 +58,6 @@ export interface TripDetailResponse {
 export interface PlaceSearchItem {
   placeId: string
   name: string
-  category: string | null
   address: string | null
   latitude: number | null
   longitude: number | null
