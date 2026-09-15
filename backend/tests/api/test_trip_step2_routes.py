@@ -13,7 +13,8 @@ from app.db.session import get_db
 from app.main import app
 from app.schemas.user import CurrentUser
 
-TOMORROW = (date.today() + timedelta(days=1)).isoformat()
+TOMORROW_DATE = date.today() + timedelta(days=1)
+TOMORROW = TOMORROW_DATE.isoformat()
 
 
 @pytest.fixture
@@ -57,6 +58,9 @@ def test_list_experience_tags_returns_data_envelope(client):
 
 
 def test_create_trip_success_returns_201_with_data_envelope(client):
+    # 하드코딩된 과거 날짜는 오늘 날짜가 그 시점을 지나면 서비스의 과거 날짜 검증에 걸려
+    # 테스트가 깨진다 — TOMORROW_DATE 기준으로 기대 제목도 함께 계산한다.
+    expected_title = f"{TOMORROW_DATE.strftime('%Y.%m.%d')} 가족 여행"
     with patch("app.services.trip_service.RegionRepository") as MockRegionRepo, patch(
         "app.services.trip_service.ExperienceTagRepository"
     ) as MockTagRepo, patch("app.services.trip_service.TripRepository") as MockTripRepo:
@@ -64,7 +68,7 @@ def test_create_trip_success_returns_201_with_data_envelope(client):
         MockTagRepo.return_value.get_active_by_ids.return_value = [6, 1, 3]
         MockTripRepo.return_value.create_trip.return_value = MagicMock(
             id=uuid4(),
-            title="2026.09.12 가족 여행",
+            title=expected_title,
             status="draft",
             current_step=3,
             created_at="2026-08-28T10:00:00Z",
@@ -74,7 +78,7 @@ def test_create_trip_success_returns_201_with_data_envelope(client):
             "/api/trips",
             json={
                 "title": None,
-                "travelDate": "2026-09-12",
+                "travelDate": TOMORROW,
                 "regionId": 12,
                 "companionType": "family",
                 "transportMode": "public_transit",
@@ -85,7 +89,7 @@ def test_create_trip_success_returns_201_with_data_envelope(client):
 
     assert res.status_code == 201
     body = res.json()
-    assert body["data"]["title"] == "2026.09.12 가족 여행"
+    assert body["data"]["title"] == expected_title
     assert body["data"]["status"] == "draft"
     assert body["data"]["currentStep"] == 3
 

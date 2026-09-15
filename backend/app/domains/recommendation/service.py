@@ -27,6 +27,7 @@ from app.domains.recommendation.scoring import (
     to_decimal,
 )
 from app.repositories.analysis_repository import AnalysisRepository
+from app.repositories.place_repository import PlaceRepository
 from app.repositories.recommendation_repository import RecommendationRepository
 from app.schemas.user import CurrentUser
 from app.utils.geo import get_place_coords
@@ -37,6 +38,7 @@ class RecommendationService:
         self.db = db
         self.repo = RecommendationRepository(db)
         self.analysis_repo = AnalysisRepository(db)
+        self.places = PlaceRepository(db)
         self.routes = RouteService(db)
 
     def create_request(
@@ -146,12 +148,14 @@ class RecommendationService:
         """TourAPI 후보는 place 행을 확보하고 place_experience_tag(tour_category)도 채운다."""
         source = candidate.source
         if source.from_tour_api:
-            place = self.repo.get_or_create_place_by_tour_content_id(
-                source.id,
-                source.name,
-                source.latitude,
-                source.longitude,
-                address=source.address,
+            place = self.places.get_or_create(
+                source_type="tour_api",
+                tour_content_id=source.id,
+                name=source.name,
+                longitude=source.longitude,
+                latitude=source.latitude,
+                area_cd=source.area_cd,
+                signgu_cd=source.signgu_cd,
             )
             place_id = place.id
             weights = {

@@ -270,42 +270,6 @@ class RecommendationRepository:
         rows = self.db.query(Place).filter(Place.id.in_(place_ids)).all()
         return {row.id: row for row in rows}
 
-    def get_or_create_place_by_tour_content_id(
-        self,
-        tour_content_id: str,
-        name: str,
-        latitude: float,
-        longitude: float,
-        address: str | None = None,
-    ) -> Place:
-        place = (
-            self.db.query(Place).filter(Place.tour_content_id == tour_content_id).first()
-        )
-        if place is not None:
-            if address and not place.address:
-                place.address = address
-                self.db.flush()
-            return place
-        place = Place(
-            source_type="tour_api",
-            tour_content_id=tour_content_id,
-            name=name,
-            is_recommendable=True,
-            address=address,
-        )
-        self.db.add(place)
-        self.db.flush()
-        self.db.execute(
-            text(
-                "UPDATE place SET location = ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography "
-                "WHERE id = :id"
-            ),
-            {"lng": longitude, "lat": latitude, "id": str(place.id)},
-        )
-        self.db.flush()
-        self.db.refresh(place)
-        return place
-
     def list_nearby_recommendable_places(
         self,
         latitude: float,
@@ -318,7 +282,7 @@ class RecommendationRepository:
         rows = self.db.execute(
             text(
                 """
-                SELECT id, name, tour_content_id,
+                SELECT id, name, tour_content_id, area_cd, signgu_cd,
                        ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
                 FROM place
                 WHERE is_recommendable = TRUE

@@ -38,8 +38,9 @@ def test_search_places_returns_data_envelope(client):
             TourApiPlace(content_id="126508", name="경복궁", category="역사·문화",
                          address="서울 종로구", latitude=37.579617, longitude=126.977041)
         ]
-        MockPlaceRepo.return_value.get_by_source.return_value = None
-        MockPlaceRepo.return_value.create.return_value = MagicMock(id=uuid4())
+        MockPlaceRepo.return_value.get_or_create.return_value = MagicMock(
+            id=uuid4(), area_cd="11", signgu_cd="11110"
+        )
 
         res = client.get("/api/places/search", params={"keyword": "경복궁", "regionId": 1})
 

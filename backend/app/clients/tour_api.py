@@ -5,6 +5,9 @@
   EXTERNAL_API_UNAVAILABLE(503) 로 명확히 실패하도록 감싼다.
 - ``fetch_nearby_places``: STEP6 대안 후보 탐색. 이쪽은 실패해도 예외를 던지지 않고 빈
   리스트를 반환해서, 후보 생성 쪽이 DB 후보 풀로 조용히 대체하게 한다.
+
+두 함수 다 lDongRegnCd/lDongSignguCd(구 단위 코드)를 응답에서 읽어 place.area_cd/signgu_cd로
+쓸 값을 만드는데, 그 변환은 ``to_signgu_cd()`` 하나로 공유한다.
 """
 import logging
 from dataclasses import dataclass
@@ -26,6 +29,40 @@ _UNAVAILABLE_MESSAGE = "장소 검색 서비스에 일시적으로 연결할 수
 NEARBY_BASE_URL = "https://apis.data.go.kr/B551011/KorService2/locationBasedList2"
 
 
+def to_signgu_cd(l_dong_regn_cd: str | None, l_dong_signgu_cd: str | None) -> str | None:
+    """TourAPI의 lDongRegnCd(2자리)+lDongSignguCd(3자리)를 집중률 API의 signguCd(5자리)로 만든다.
+
+    실측으로 확인된 형식: areaCd="11", signguCd="11290"(이어붙인 값)일 때만 정상 데이터가
+    온다(signguCd="290" 단독은 resultCode=0000인데 0건). 이미 5자리로 들어오면(다른 경로에서
+    실수로 합쳐진 값 등) 앞 2자리가 area_cd와 실제로 일치할 때만 그대로 돌려주고, 안 맞으면
+    다른 지역 코드가 섞인 것이므로 None을 돌려준다.
+
+    형식 검증을 여기서 명시적으로 한다 — 예전에는 5자리가 아니면 무조건 이어붙이기만 해서,
+    예를 들어 signgu_cd가 2자리("29")로 잘려서 오면 "1129" 같은 4자리 값이 그대로
+    place.area_cd/signgu_cd에 저장되고 집중률 조회 키로 쓰이는 문제가 있었다. area_cd는
+    2자리 숫자, signgu_cd는 3자리 숫자(또는 접두사가 일치하는 5자리) 형식을 벗어나면
+    None을 돌려준다.
+
+    입력이 문자열이 아닐 수도 있다 — TourAPI가 lDongRegnCd를 JSON 숫자로 주면(실측된 적은
+    없지만 공공데이터 API 특성상 배제 못 함) 곧바로 len()을 부르다 TypeError가 난다.
+    문자열이 아니면 형식이 안 맞는 것으로 보고 None을 돌려준다(문자열로 강제 변환해서
+    "맞춰 쓰지" 않는다 — 실제로 뭘 의미하는지 모르는 타입을 추측해서 저장하지 않는다).
+    """
+    if not l_dong_regn_cd or not l_dong_signgu_cd:
+        return None
+    if not isinstance(l_dong_regn_cd, str) or not isinstance(l_dong_signgu_cd, str):
+        return None
+    if not (len(l_dong_regn_cd) == 2 and l_dong_regn_cd.isdigit()):
+        return None
+    if len(l_dong_signgu_cd) == 5:
+        if not l_dong_signgu_cd.isdigit():
+            return None
+        return l_dong_signgu_cd if l_dong_signgu_cd.startswith(l_dong_regn_cd) else None
+    if not (len(l_dong_signgu_cd) == 3 and l_dong_signgu_cd.isdigit()):
+        return None
+    return f"{l_dong_regn_cd}{l_dong_signgu_cd}"
+
+
 class TourApiPlace(BaseModel):
     """TourAPI 검색 결과 한 건을 정규화한 DTO."""
     content_id: str
@@ -34,6 +71,8 @@ class TourApiPlace(BaseModel):
     address: str | None = None
     latitude: float | None = None
     longitude: float | None = None
+    area_cd: str | None = None
+    signgu_cd: str | None = None
 
 
 def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPlace]:
@@ -112,6 +151,7 @@ def _extract_items(payload: dict) -> list[dict]:
 
 
 def _to_place(item: dict) -> TourApiPlace:
+    l_dong_regn = item.get("lDongRegnCd") or None
     return TourApiPlace(
         content_id=str(item.get("contentid", "")),
         name=item.get("title", ""),
@@ -119,6 +159,8 @@ def _to_place(item: dict) -> TourApiPlace:
         address=item.get("addr1"),
         latitude=_to_float(item.get("mapy")),
         longitude=_to_float(item.get("mapx")),
+        area_cd=l_dong_regn,
+        signgu_cd=to_signgu_cd(l_dong_regn, item.get("lDongSignguCd") or None),
     )
 
 
@@ -147,7 +189,12 @@ class TourPlaceItem:
 
 
 def fetch_nearby_places(latitude: float, longitude: float, radius_m: int) -> list[TourPlaceItem]:
-    """중심 좌표 기준 반경(m) 내 관광지 목록을 거리순으로 반환한다. 실패 시 빈 리스트."""
+    """중심 좌표 기준 반경(m) 내 관광지 목록을 거리순으로 반환한다. 실패 시 빈 리스트.
+
+    이 함수는 실패해도 예외를 던지지 않는다(설계 의도: 후보 생성 쪽이 DB 후보 풀로 조용히
+    대체). 다만 items가 낯선/빈 모양일 때는 동작(빈 리스트 반환)은 그대로 두되 경고 로그는
+    남겨서, 운영 중에 "진짜 0건"과 "이상한 응답이라 조용히 0건 처리된 것"을 구분할 수 있게 한다.
+    """
     if not settings.TOUR_API_KEY:
         return []
 
@@ -175,19 +222,49 @@ def fetch_nearby_places(latitude: float, longitude: float, radius_m: int) -> lis
     except httpx.HTTPError as exc:
         logger.warning("TourAPI 호출 실패: %s", exc)
         return []
-
-    header = payload.get("response", {}).get("header", {})
-    if header.get("resultCode") != "0000":
-        logger.warning("TourAPI resultCode=%s", header.get("resultCode"))
+    except ValueError as exc:
+        # response.json()의 JSONDecodeError는 ValueError의 서브클래스다.
+        logger.warning("TourAPI 응답이 올바른 JSON이 아닙니다: %s", exc)
         return []
 
-    body = payload.get("response", {}).get("body", {})
-    raw_items = body.get("items", {}).get("item", [])
-    if isinstance(raw_items, dict):
-        raw_items = [raw_items]
+    try:
+        header = payload.get("response", {}).get("header", {})
+        if header.get("resultCode") != "0000":
+            logger.warning("TourAPI resultCode=%s", header.get("resultCode"))
+            return []
+
+        body = payload.get("response", {}).get("body", {})
+        raw_items_container = body.get("items")
+        if not isinstance(raw_items_container, dict):
+            # 실측으로 확인된 모양: 결과 0건일 때 items가 dict가 아니라 빈 문자열("")로 온다.
+            # 그 외 낯선 모양이 오더라도(관측된 적은 없음) 이 함수의 계약(절대 예외 안 던짐)을
+            # 지키기 위해 빈 리스트로 처리하되, 조용히 넘어가지 않고 경고는 남긴다.
+            if raw_items_container not in (None, ""):
+                logger.warning("TourAPI 응답의 items 모양이 예상과 다름: %r", type(raw_items_container))
+            return []
+        raw_items = raw_items_container.get("item", [])
+        if isinstance(raw_items, dict):
+            raw_items = [raw_items]
+        elif not isinstance(raw_items, list):
+            # items.item이 리스트도 dict도 아니면(예: 숫자, None) 아래 for 루프가
+            # TypeError로 죽는다 — 이 함수의 "절대 예외 안 던짐" 계약을 지키기 위해
+            # 빈 리스트로 처리한다.
+            logger.warning("TourAPI 응답의 items.item 모양이 예상과 다름: %r", type(raw_items))
+            return []
+    except (AttributeError, TypeError) as exc:
+        # payload/response/body/items 중 어느 하나가 dict가 아니거나(예: payload 자체가
+        # 리스트) JSON에서 명시적으로 null이면(키는 있는데 값이 None이라 .get(key, {})의
+        # 기본값이 적용 안 됨) 그 다음 체이닝에서 AttributeError가 난다 — 이 함수는 절대
+        # 예외를 던지지 않는 게 계약이므로 여기서 전부 빈 리스트로 흡수한다.
+        logger.warning("TourAPI 응답 구조가 예상과 다릅니다: %s", exc)
+        return []
 
     items: list[TourPlaceItem] = []
     for item in raw_items:
+        if not isinstance(item, dict):
+            # 리스트 안에 dict가 아닌 원소(문자열, None 등)가 섞이면 item.get()에서
+            # AttributeError가 난다 — 그 원소만 건너뛰고 나머지는 계속 처리한다.
+            continue
         try:
             lat = float(item.get("mapy"))
             lon = float(item.get("mapx"))
@@ -196,7 +273,6 @@ def fetch_nearby_places(latitude: float, longitude: float, radius_m: int) -> lis
 
         l_dong_regn = item.get("lDongRegnCd") or None
         l_dong_signgu = item.get("lDongSignguCd") or None
-        signgu_cd = f"{l_dong_regn}{l_dong_signgu}" if l_dong_regn and l_dong_signgu else None
 
         items.append(
             TourPlaceItem(
@@ -206,7 +282,7 @@ def fetch_nearby_places(latitude: float, longitude: float, radius_m: int) -> lis
                 longitude=lon,
                 address=item.get("addr1") or None,
                 area_cd=l_dong_regn,
-                signgu_cd=signgu_cd,
+                signgu_cd=to_signgu_cd(l_dong_regn, l_dong_signgu),
                 category_code=item.get("cat2") or None,
             )
         )
