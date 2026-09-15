@@ -147,7 +147,11 @@ class RecommendationService:
         source = candidate.source
         if source.from_tour_api:
             place = self.repo.get_or_create_place_by_tour_content_id(
-                source.id, source.name, source.latitude, source.longitude
+                source.id,
+                source.name,
+                source.latitude,
+                source.longitude,
+                address=source.address,
             )
             place_id = place.id
             weights = {
@@ -340,6 +344,9 @@ class RecommendationService:
                 400,
             )
 
+        tags_map = self.repo.list_place_tags_map(
+            [cand.candidate_place_id for cand, *_ in scored]
+        )
         candidates = []
         for cand, ranking, route, reason in scored:
             place = self.repo.get_place(cand.candidate_place_id)
@@ -362,6 +369,8 @@ class RecommendationService:
                     "reasonText": reason_text,
                     "isEligible": reason.is_eligible if reason else False,
                     "exclusionReason": reason.exclusion_reason if reason else None,
+                    "tags": tags_map.get(cand.candidate_place_id, []),
+                    "address": place.address if place else None,
                 }
             )
 

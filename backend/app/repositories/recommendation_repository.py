@@ -271,18 +271,27 @@ class RecommendationRepository:
         return {row.id: row for row in rows}
 
     def get_or_create_place_by_tour_content_id(
-        self, tour_content_id: str, name: str, latitude: float, longitude: float
+        self,
+        tour_content_id: str,
+        name: str,
+        latitude: float,
+        longitude: float,
+        address: str | None = None,
     ) -> Place:
         place = (
             self.db.query(Place).filter(Place.tour_content_id == tour_content_id).first()
         )
         if place is not None:
+            if address and not place.address:
+                place.address = address
+                self.db.flush()
             return place
         place = Place(
             source_type="tour_api",
             tour_content_id=tour_content_id,
             name=name,
             is_recommendable=True,
+            address=address,
         )
         self.db.add(place)
         self.db.flush()
@@ -370,6 +379,27 @@ class RecommendationRepository:
             )
             self.db.execute(stmt)
         self.db.flush()
+
+    def list_place_tags_map(self, place_ids: list[UUID]) -> dict[UUID, list[dict]]:
+        """place_id → [{id, name}] 경험 태그. 가중치 높은 순."""
+        if not place_ids:
+            return {}
+        rows = (
+            self.db.query(PlaceExperienceTag, ExperienceTag)
+            .join(ExperienceTag, ExperienceTag.id == PlaceExperienceTag.experience_tag_id)
+            .filter(PlaceExperienceTag.place_id.in_(place_ids))
+            .order_by(PlaceExperienceTag.weight.desc(), ExperienceTag.display_order.asc())
+            .all()
+        )
+        result: dict[UUID, list[dict]] = {}
+        seen: dict[UUID, set[int]] = {}
+        for pet, tag in rows:
+            already = seen.setdefault(pet.place_id, set())
+            if tag.id in already:
+                continue
+            already.add(tag.id)
+            result.setdefault(pet.place_id, []).append({"id": tag.id, "name": tag.name})
+        return result
 
     def create_request_with_candidates(
         self,

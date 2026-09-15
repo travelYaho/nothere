@@ -22,26 +22,35 @@ export type RouteScoresResponse = {
   candidates: RouteScoredCandidate[]
 }
 
+export type CompareCandidateTag = {
+  id: number
+  name: string
+}
+
+export type CompareCandidate = {
+  candidateId: string
+  placeName: string
+  experienceScore: number
+  routeScore: number
+  congestionLevel: CongestionLevelApi
+  congestionImprovement: string
+  extraMinutes: number | null
+  distancePrevM: number | null
+  distanceNextM: number | null
+  reasonText: string | null
+  isEligible: boolean
+  exclusionReason: string | null
+  tags?: CompareCandidateTag[]
+  address?: string | null
+}
+
 export type CompareCandidatesResponse = {
   originalPlace: {
     placeId: string
     name: string
     congestionLevel: CongestionLevelApi
   }
-  candidates: {
-    candidateId: string
-    placeName: string
-    experienceScore: number
-    routeScore: number
-    congestionLevel: CongestionLevelApi
-    congestionImprovement: string
-    extraMinutes: number | null
-    distancePrevM: number | null
-    distanceNextM: number | null
-    reasonText: string | null
-    isEligible: boolean
-    exclusionReason: string | null
-  }[]
+  candidates: CompareCandidate[]
   requestId: string
   tripPlaceId: string
 }

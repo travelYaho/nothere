@@ -47,10 +47,10 @@ export default function RecommendationPurpose() {
   return (
     <div className="relative flex flex-1 flex-col">
       <FlowHeader
-        title="방문 목적 선택"
-        step={5}
-        totalSteps={9}
-        progress={5 / 9}
+        title="대안 찾기"
+        step={1}
+        totalSteps={2}
+        progress={0.5}
         onBack={() => navigate(-1)}
       />
       <div className="flex flex-1 flex-col gap-4 px-5 pb-10 pt-2">
