@@ -14,6 +14,8 @@ export type AnalysisItem = {
   canRecommendAlternative: boolean
   analyzedAt: string | null
   visitTime: string | null
+  wasReplaced?: boolean
+  replacedFrom?: string | null
 }
 
 export type AnalysisResponse = {

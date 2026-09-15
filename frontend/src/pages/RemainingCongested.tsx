@@ -1,8 +1,9 @@
 /**
  * 일정 점검 결과 — STEP4 분석 결과를 전체 장소 목록으로 보여주고,
  * 혼잡한 장소는 카드에서 바로 대안보기/유지를 할 수 있게 한다.
+ * 장소를 한 곳이라도 교체한 뒤에는 Figma 점검 결과(교체 후) 레이아웃을 쓴다.
  */
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import { CongestionCard } from "@/components/common/cards"
 import { Button } from "@/components/common/primitives"
@@ -22,6 +23,10 @@ type LocationState = {
   reanalyze?: boolean
 } | null
 
+function isCrowdedPending(item: AnalysisItem) {
+  return item.level === "high" && item.resolutionStatus === "pending" && !item.isFixed
+}
+
 export default function RemainingCongested() {
   const { tripId } = useParams()
   const navigate = useNavigate()
@@ -35,6 +40,7 @@ export default function RemainingCongested() {
   const [error, setError] = useState<string | null>(null)
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
   const [keepErrors, setKeepErrors] = useState<Record<string, string>>({})
+  const firstCrowdedRef = useRef<HTMLDivElement>(null)
 
   // location.state는 새로고침에도 남아 있을 수 있다. 재렌더/재실행 때마다 다시 읽으면
   // 그 사이 지워졌는지에 따라 분기가 흔들릴 수 있으므로, 이 마운트에서 처음 읽은 값을
@@ -124,12 +130,44 @@ export default function RemainingCongested() {
     }
   }
 
-  const crowdedCount = (items ?? []).filter(
-    (item) => item.level === "high" && item.resolutionStatus === "pending" && !item.isFixed,
-  ).length
+  const crowdedCount = (items ?? []).filter(isCrowdedPending).length
+  const hasReplaced = (items ?? []).some((item) => Boolean(item.wasReplaced && item.replacedFrom))
+  const firstCrowdedId = (items ?? []).find(isCrowdedPending)?.tripPlaceId
+
+  const goConfirm = () => navigate(`/trips/${tripId}/confirm`)
+  const scrollToRemaining = () => {
+    firstCrowdedRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+  }
+
+  const placeList = items
+    ? items.map((item) => {
+        const showActions = item.resolutionStatus === "pending" && !item.isFixed
+        const isFirstCrowded = item.tripPlaceId === firstCrowdedId
+        return (
+          <div key={item.tripPlaceId} ref={isFirstCrowded ? firstCrowdedRef : undefined}>
+            <CongestionCard
+              time={item.visitTime ?? ""}
+              place={item.placeName}
+              level={toUiCongestion(item.level)}
+              showActions={showActions}
+              replacedFrom={item.replacedFrom}
+              onAlternative={() =>
+                navigate(`/trips/${tripId}/places/${item.tripPlaceId}/purpose`)
+              }
+              onKeep={() => void handleKeep(item)}
+            />
+            {keepErrors[item.tripPlaceId] && (
+              <p className="mt-1 text-[12px] text-congestion-high">
+                {keepErrors[item.tripPlaceId]}
+              </p>
+            )}
+          </div>
+        )
+      })
+    : null
 
   return (
-    <div className="relative flex flex-1 flex-col">
+    <div className="relative flex min-h-screen flex-1 flex-col">
       <BasicHeader
         title="일정 점검 결과"
         onBack={() => navigate(-1)}
@@ -142,60 +180,77 @@ export default function RemainingCongested() {
           </button>
         }
       />
-      <div className="flex flex-1 flex-col gap-4 px-5 pb-10 pt-2">
-        {loading && <p className="text-[13px] text-ink-muted">확인 중…</p>}
-        {error && <p className="text-[13px] text-congestion-high">{error}</p>}
 
-        {!loading && !error && items && (
-          <>
-            <div>
-              <p className="text-[14px] font-bold text-ink">
-                {crowdedCount > 0
-                  ? `혼잡이 예상되는 장소 ${crowdedCount}곳`
-                  : "모든 혼잡 장소를 확인했어요"}
+      {loading && <p className="px-5 pt-2 text-[13px] text-ink-muted">확인 중…</p>}
+      {error && <p className="px-5 pt-2 text-[13px] text-congestion-high">{error}</p>}
+
+      {!loading && !error && items && hasReplaced && (
+        <>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2">
+            <div className="rounded-2xl bg-[#E8F6EE] px-4 py-[14px]">
+              <p className="text-[15px] font-extrabold leading-[22.5px] text-[#1F8A56]">
+                {crowdedCount > 0 ? `남은 혼잡 ${crowdedCount}곳` : "모든 혼잡 장소를 확인했어요"}
               </p>
               {crowdedCount > 0 && (
-                <p className="mt-1 text-[13px] text-ink-muted">
-                  한 곳씩 가까운 대안으로 바꿀 수 있어요
+                <p className="pt-0.5 text-[12px] font-medium leading-[18px] text-[#4A8A6C]">
+                  계속 점검하거나 지금 확정할 수 있어요
                 </p>
               )}
             </div>
 
-            <div className="flex flex-col gap-3">
-              {items.map((item) => {
-                const showActions = item.resolutionStatus === "pending" && !item.isFixed
-                return (
-                  <div key={item.tripPlaceId}>
-                    <CongestionCard
-                      time={item.visitTime ?? ""}
-                      place={item.placeName}
-                      level={toUiCongestion(item.level)}
-                      showActions={showActions}
-                      onAlternative={() =>
-                        navigate(`/trips/${tripId}/places/${item.tripPlaceId}/purpose`)
-                      }
-                      onKeep={() => void handleKeep(item)}
-                    />
-                    {keepErrors[item.tripPlaceId] && (
-                      <p className="mt-1 text-[12px] text-congestion-high">
-                        {keepErrors[item.tripPlaceId]}
-                      </p>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            <div className="flex flex-col gap-2.5 pt-3">{placeList}</div>
 
-            <p className="text-[12px] text-ink-faint">
-              일정표는 실시간 정보가 아니며 실제 상황과 다를 수 있어요.
+            <p className="py-4 text-center text-[11px] leading-[16.5px] text-ink-ghost">
+              교체 후 이동시간·집중도는 자동 재계산됩니다.
             </p>
+          </div>
 
-            <Button block onClick={() => navigate(`/trips/${tripId}/confirm`)}>
-              현재 일정으로 확정
-            </Button>
-          </>
-        )}
-      </div>
+          <div className="border-t-[0.667px] border-line-soft bg-white/95 px-4 pb-6 pt-3">
+            <div className="flex gap-2.5">
+              <Button
+                variant="ghost"
+                onClick={scrollToRemaining}
+                className="h-[54px] min-w-0 flex-1 px-4 text-[15px] font-bold"
+              >
+                계속 점검하기
+              </Button>
+              <Button
+                onClick={goConfirm}
+                className="h-[54px] min-w-0 flex-1 text-[16px] font-extrabold"
+              >
+                현재 일정으로 확정
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {!loading && !error && items && !hasReplaced && (
+        <div className="flex flex-1 flex-col gap-4 px-5 pb-10 pt-2">
+          <div>
+            <p className="text-[14px] font-bold text-ink">
+              {crowdedCount > 0
+                ? `혼잡이 예상되는 장소 ${crowdedCount}곳`
+                : "모든 혼잡 장소를 확인했어요"}
+            </p>
+            {crowdedCount > 0 && (
+              <p className="mt-1 text-[13px] text-ink-muted">
+                한 곳씩 가까운 대안으로 바꿀 수 있어요
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3">{placeList}</div>
+
+          <p className="text-[12px] text-ink-faint">
+            일정표는 실시간 정보가 아니며 실제 상황과 다를 수 있어요.
+          </p>
+
+          <Button block onClick={goConfirm}>
+            현재 일정으로 확정
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

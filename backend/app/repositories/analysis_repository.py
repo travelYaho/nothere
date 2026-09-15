@@ -3,12 +3,14 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import desc
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.concentration import ConcentrationSpot, PlaceConcentrationMapping
 from app.db.models.place import Place
 from app.db.models.recommendation import TripPlaceAnalysis
+from app.db.models.replacement import Replacement
 from app.db.models.trip import Trip
 
 _HUMAN_REVIEWED_STATUSES = {"approved", "rejected"}
@@ -169,3 +171,22 @@ class AnalysisRepository:
             .all()
         )
         return {row.trip_place_id: row for row in rows}
+
+    def get_active_replacements_map(self, trip_place_ids: list[UUID]) -> dict[UUID, Replacement]:
+        """되돌리지 않은 교체 이력만, trip_place당 가장 최근 1건."""
+        if not trip_place_ids:
+            return {}
+        rows = (
+            self.db.query(Replacement)
+            .filter(
+                Replacement.trip_place_id.in_(trip_place_ids),
+                Replacement.reverted_at.is_(None),
+            )
+            .order_by(desc(Replacement.applied_at))
+            .all()
+        )
+        result: dict[UUID, Replacement] = {}
+        for row in rows:
+            if row.trip_place_id not in result:
+                result[row.trip_place_id] = row
+        return result
