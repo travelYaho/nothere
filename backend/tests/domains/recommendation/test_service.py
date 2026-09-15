@@ -72,6 +72,60 @@ def test_get_candidates_requires_prior_scoring():
     assert "경로 점수" in exc.value.message
 
 
+def test_get_candidates_includes_tags_and_address():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    request_id = uuid4()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    cand_place_id = uuid4()
+    candidate_id = uuid4()
+
+    req = SimpleNamespace(id=request_id, trip_place_id=trip_place_id, status="success")
+    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4())
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+    cand = SimpleNamespace(
+        id=candidate_id,
+        candidate_place_id=cand_place_id,
+        experience_score=Decimal("0.8000"),
+        congestion_level="low",
+    )
+    ranking = SimpleNamespace(route_score=Decimal("0.7000"))
+    route = SimpleNamespace(extra_minutes=12, distance_prev_m=2400, distance_next_m=3100)
+    reason = SimpleNamespace(
+        recommend_reason="기존 방문 목적과 유사해요",
+        not_recommend_reason=None,
+        is_eligible=True,
+        exclusion_reason=None,
+    )
+
+    svc.repo.get_request = MagicMock(return_value=req)
+    svc.repo.get_trip_place = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_place = MagicMock(
+        side_effect=lambda pid: SimpleNamespace(
+            name="서울한방진흥센터" if pid == cand_place_id else "경복궁",
+            address="서울 동대문구 약령시로 21" if pid == cand_place_id else None,
+        )
+    )
+    svc.repo.latest_analysis = MagicMock(return_value=SimpleNamespace(level="high"))
+    svc.repo.list_scored_for_request = MagicMock(return_value=[(cand, ranking, route, reason)])
+    svc.repo.list_place_tags_map = MagicMock(
+        return_value={cand_place_id: [{"id": 2, "name": "역사·문화"}, {"id": 4, "name": "사진·전망"}]}
+    )
+
+    result = svc.get_candidates(request_id, user)
+
+    assert result["originalPlace"]["name"] == "경복궁"
+    assert result["candidates"][0]["address"] == "서울 동대문구 약령시로 21"
+    assert result["candidates"][0]["tags"] == [
+        {"id": 2, "name": "역사·문화"},
+        {"id": 4, "name": "사진·전망"},
+    ]
+    svc.repo.list_place_tags_map.assert_called_once()
+
+
 def test_score_routes_returns_route_score_without_rank_or_total():
     db = MagicMock()
     svc = RecommendationService(db)

@@ -83,6 +83,7 @@ def test_create_request_creates_candidates_from_tour_api(monkeypatch):
         area_cd="11",
         signgu_cd="11110",
         category_code="A0201",
+        address="서울 종로구 율곡로 99",
     )
     monkeypatch.setattr(candidate_pipeline, "fetch_nearby_places", lambda *a, **k: [tour_item])
     monkeypatch.setattr(
@@ -102,6 +103,9 @@ def test_create_request_creates_candidates_from_tour_api(monkeypatch):
 
     assert result["status"] == "success"
     assert result["candidateCount"] == 1
+    svc.repo.get_or_create_place_by_tour_content_id.assert_called_once()
+    _, create_kwargs = svc.repo.get_or_create_place_by_tour_content_id.call_args
+    assert create_kwargs.get("address") == "서울 종로구 율곡로 99"
     svc.repo.create_request_with_candidates.assert_called_once()
     args, _ = svc.repo.create_request_with_candidates.call_args
     row_dicts = args[3]
