@@ -24,9 +24,13 @@ _CARD_TAG_LIMIT = 2
 
 @dataclass
 class GuideCard:
-    """탐색/좋아요 목록 한 칸을 조립하는 데 필요한 원시 데이터 묶음."""
+    """탐색/좋아요/내 목록 한 칸을 조립하는 데 필요한 원시 데이터 묶음.
+
+    token 은 공유 링크가 있을 때만 채워진다 — 공개 갤러리/좋아요 카드는 항상
+    있지만, "내가 만든" 카드는 한 번도 공유하지 않은 트립일 수 있어 없을 수 있다.
+    """
     trip_id: UUID
-    token: str
+    token: str | None
     title: str
     region_name: str
     place_count: int
@@ -120,20 +124,65 @@ class GuideRepository:
         ]
         return cards, total_count
 
+    def list_owned(self, *, owner_id: UUID, page: int) -> tuple[list[GuideCard], int]:
+        """내가 만든(확정한) 가이드북 목록을 최근 순으로 페이지 단위로 반환한다.
+
+        list_public 과 달리 ShareLink 존재 여부가 기준이 아니다 — 가이드북 화면
+        (GET /trips/{id}/guide) 은 공유 링크를 안 만들어도 확정된 트립이면 바로
+        조회되므로, 목록도 "내 확정 트립"을 기준으로 삼는다(공유는 선택 사항).
+        좋아요 수/여부 표시를 위해 ShareLink 는 LEFT JOIN 으로 붙이되(없으면
+        0/false), 같은 트립을 여러 번 공유했을 수 있어 트립당 가장 최근 활성
+        링크 하나만 붙인다.
+        """
+        now = datetime.now(timezone.utc)
+        active = ShareLink.revoked_at.is_(None) & (
+            (ShareLink.expires_at.is_(None)) | (ShareLink.expires_at > now)
+        )
+        latest_share_link_id = (
+            select(ShareLink.id)
+            .where(ShareLink.trip_id == Trip.id)
+            .where(active)
+            .order_by(ShareLink.created_at.desc(), ShareLink.id.desc())
+            .limit(1)
+            .correlate(Trip)
+            .scalar_subquery()
+        )
+
+        query = (
+            self.db.query(Trip, Region, ShareLink)
+            .join(Region, Region.id == Trip.region_id)
+            .outerjoin(ShareLink, ShareLink.id == latest_share_link_id)
+            .filter(Trip.user_id == owner_id)
+            .filter(Trip.status == "confirmed")
+        )
+
+        total_count = query.count()
+        rows = (
+            query.order_by(Trip.updated_at.desc(), Trip.id.desc())
+            .offset((page - 1) * PAGE_SIZE)
+            .limit(PAGE_SIZE)
+            .all()
+        )
+        cards = [
+            self._build_card(share_link, trip, region, viewer_id=owner_id)
+            for trip, region, share_link in rows
+        ]
+        return cards, total_count
+
     def _build_card(
-        self, share_link: ShareLink, trip: Trip, region: Region, *, viewer_id: UUID
+        self, share_link: ShareLink | None, trip: Trip, region: Region, *, viewer_id: UUID
     ) -> GuideCard:
         return GuideCard(
             trip_id=trip.id,
-            token=share_link.token,
+            token=share_link.token if share_link else None,
             title=trip.title,
             region_name=region.name,
             place_count=self._place_count(trip.id),
             tag_names=self._top_tag_names(trip.id),
             author_nickname=self._author_nickname(trip.user_id),
             cover_image_url=self._cover_image_url(trip.id),
-            like_count=self.count_likes(share_link.id),
-            is_liked_by_me=self.is_liked(share_link.id, viewer_id),
+            like_count=self.count_likes(share_link.id) if share_link else 0,
+            is_liked_by_me=self.is_liked(share_link.id, viewer_id) if share_link else False,
         )
 
     def _place_count(self, trip_id: UUID) -> int:

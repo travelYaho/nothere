@@ -8,20 +8,22 @@ export function useGuideLikeToggle(setGuides: Dispatch<SetStateAction<GuideCard[
   const [likeError, setLikeError] = useState<string | null>(null)
 
   async function toggleLike(guide: GuideCard) {
+    if (!guide.token) return // 공유 안 한 트립("내가 만든" 목록)엔 좋아요 자체가 없다.
+    const token = guide.token
     const wasLiked = guide.isLikedByMe
     const wasCount = guide.likeCount
     setGuides((prev) =>
       prev.map((g) =>
-        g.token === guide.token
+        g.tripId === guide.tripId
           ? { ...g, isLikedByMe: !wasLiked, likeCount: wasCount + (wasLiked ? -1 : 1) }
           : g,
       ),
     )
     try {
-      const res = wasLiked ? await unlikeGuide(guide.token) : await likeGuide(guide.token)
+      const res = wasLiked ? await unlikeGuide(token) : await likeGuide(token)
       setGuides((prev) =>
         prev.map((g) =>
-          g.token === guide.token
+          g.tripId === guide.tripId
             ? { ...g, isLikedByMe: res.isLikedByMe, likeCount: res.likeCount }
             : g,
         ),
@@ -29,7 +31,7 @@ export function useGuideLikeToggle(setGuides: Dispatch<SetStateAction<GuideCard[
     } catch (err) {
       setGuides((prev) =>
         prev.map((g) =>
-          g.token === guide.token ? { ...g, isLikedByMe: wasLiked, likeCount: wasCount } : g,
+          g.tripId === guide.tripId ? { ...g, isLikedByMe: wasLiked, likeCount: wasCount } : g,
         ),
       )
       setLikeError(err instanceof ApiError ? err.message : "좋아요 처리에 실패했습니다.")

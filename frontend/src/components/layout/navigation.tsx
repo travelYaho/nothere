@@ -37,7 +37,11 @@ export function BasicHeader({
     <header className="flex items-center justify-between bg-canvas/95 px-5 py-2.5 backdrop-blur">
       <div className="flex items-center gap-2">
         {onBack !== undefined && (
-          <button onClick={onBack} className="-ml-1 rounded-full p-1 text-ink hover:bg-ink/5">
+          <button
+            onClick={onBack}
+            aria-label="뒤로가기"
+            className="-ml-1 rounded-full p-1 text-ink hover:bg-ink/5"
+          >
             <ChevronLeft size={22} />
           </button>
         )}
