@@ -385,7 +385,10 @@ class AnalysisService:
     def get_analysis(self, user: CurrentUser, trip_id: UUID, status_filter: str | None) -> dict:
         trip = self._get_trip_or_404(trip_id, user)
         places = trip.trip_places or []
-        places_map = self.repo.get_places_map([p.place_id for p in places])
+        replacements_map = self.repo.get_active_replacements_map([p.id for p in places])
+        place_ids = [p.place_id for p in places]
+        place_ids.extend(r.from_place_id for r in replacements_map.values())
+        places_map = self.repo.get_places_map(place_ids)
         analysis_map = self.repo.get_analysis_map([p.id for p in places])
 
         items: list[dict] = []
@@ -414,6 +417,10 @@ class AnalysisService:
             if status_filter == "CROWDED" and not is_crowded:
                 continue
 
+            replacement = replacements_map.get(trip_place.id)
+            from_place = places_map.get(replacement.from_place_id) if replacement else None
+            replaced_from = from_place.name if from_place else None
+
             items.append(
                 {
                     "tripPlaceId": str(trip_place.id),
@@ -428,6 +435,8 @@ class AnalysisService:
                     "canRecommendAlternative": not trip_place.is_fixed,
                     "analyzedAt": analysis.analyzed_at.isoformat() if analysis and analysis.analyzed_at else None,
                     "visitTime": trip_place.visit_time.strftime("%H:%M") if trip_place.visit_time else None,
+                    "wasReplaced": replaced_from is not None,
+                    "replacedFrom": replaced_from,
                 }
             )
 

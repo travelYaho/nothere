@@ -502,3 +502,56 @@ def test_get_analysis_visit_time_is_null_when_not_set():
 
     result = svc.get_analysis(user, trip_id, status_filter=None)
     assert result["items"][0]["visitTime"] is None
+    assert result["items"][0]["wasReplaced"] is False
+    assert result["items"][0]["replacedFrom"] is None
+
+
+def test_get_analysis_includes_replaced_from_when_active_replacement_exists():
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    from_place_id = uuid4()
+    to_place_id = uuid4()
+    tp_id = uuid4()
+
+    trip = SimpleNamespace(
+        id=trip_id,
+        trip_places=[
+            SimpleNamespace(
+                id=tp_id,
+                place_id=to_place_id,
+                is_fixed=False,
+                resolution_status="replaced",
+                visit_time=time(10, 0),
+            )
+        ],
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_active_replacements_map = MagicMock(
+        return_value={tp_id: SimpleNamespace(from_place_id=from_place_id)}
+    )
+    svc.repo.get_places_map = MagicMock(
+        return_value={
+            to_place_id: SimpleNamespace(name="서울한방진흥센터 일대"),
+            from_place_id: SimpleNamespace(name="경복궁"),
+        }
+    )
+    svc.repo.get_analysis_map = MagicMock(
+        return_value={
+            tp_id: SimpleNamespace(
+                analysis_status="success",
+                level="low",
+                unknown_reason=None,
+                rule_version="v1",
+                analyzed_at=datetime.now(timezone.utc),
+            )
+        }
+    )
+
+    result = svc.get_analysis(user, trip_id, status_filter=None)
+    item = result["items"][0]
+    assert item["wasReplaced"] is True
+    assert item["replacedFrom"] == "경복궁"
+    assert item["placeName"] == "서울한방진흥센터 일대"
+    assert item["resolutionStatus"] == "replaced"
