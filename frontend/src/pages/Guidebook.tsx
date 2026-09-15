@@ -3,10 +3,12 @@
  */
 import { useEffect, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
-import { ChangeLogItem, ScheduleCard } from "@/components/common/cards"
+import { ChangeLogItem } from "@/components/common/cards"
+import { TimetableDateHeader } from "@/components/common/TimetableDateHeader"
 import { Button } from "@/components/common/primitives"
 import { BasicHeader } from "@/components/layout/navigation"
 import { toUiCongestion, useConfirmGuide } from "@/features/recommendation"
+import { formatVisitTime } from "@/features/trips/utils/placeOrder"
 
 export default function Guidebook() {
   const { tripId } = useParams()
@@ -42,59 +44,60 @@ export default function Guidebook() {
   }
 
   return (
-    <div className="relative flex flex-1 flex-col">
+    <div className="relative flex flex-1 flex-col overflow-hidden">
       <BasicHeader title="가이드북" onBack={handleBack} />
-      <div className="flex flex-1 flex-col gap-4 px-5 pb-10 pt-2">
+      <div className="flex flex-1 flex-col overflow-y-auto px-5 pb-10 pt-4">
         {loading && <p className="text-[13px] text-ink-muted">불러오는 중…</p>}
         {error && <p className="text-[13px] text-congestion-high">{error}</p>}
 
         {guide && (
           <>
-            <div>
-              <h2 className="text-[18px] font-extrabold text-ink">{guide.title}</h2>
-              {guide.travelDate && (
-                <p className="mt-1 text-[12px] text-ink-muted">{guide.travelDate}</p>
-              )}
-            </div>
+            <TimetableDateHeader travelDate={guide.travelDate} />
 
-            <div className="flex flex-col gap-2.5">
-              {guide.stops.map((stop) => (
-                <div key={`${stop.position}-${stop.placeName}`} className="flex flex-col gap-2">
-                  <ScheduleCard
-                    index={stop.position}
-                    title={stop.placeName}
-                    meta={[
-                      stop.visitTime ? `${stop.visitTime}` : null,
-                      stop.travelToNext
-                        ? `다음까지 ${stop.travelToNext.durationMin}분 · ${stop.travelToNext.distanceM}m`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  />
-                  {stop.wasReplaced && stop.replacedFrom && (
-                    <ChangeLogItem
-                      from={stop.replacedFrom}
-                      fromLevel={toUiCongestion("high")}
-                      to={stop.placeName}
-                      toLevel={toUiCongestion("low")}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
+            {guide.stops.length === 0 ? (
+              <p className="py-10 text-center text-[13px] text-ink-muted">등록된 장소가 없어요.</p>
+            ) : (
+              <div className="mt-8 border-t border-primary/35">
+                {guide.stops.map((stop) => (
+                  <div key={`${stop.position}-${stop.placeName}`}>
+                    <div className="flex items-center gap-2.5 border-b border-primary/35 py-1">
+                      <span className="w-[52px] shrink-0 text-[14px] font-bold tabular-nums text-ink">
+                        {formatVisitTime(stop.visitTime) || "--:--"}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-ink">
+                        {stop.placeName}
+                      </span>
+                    </div>
+                    {stop.wasReplaced && stop.replacedFrom && (
+                      <div className="py-2">
+                        <ChangeLogItem
+                          from={stop.replacedFrom}
+                          fromLevel={toUiCongestion("high")}
+                          to={stop.placeName}
+                          toLevel={toUiCongestion("low")}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
-            <Button block onClick={() => void onShare()}>
-              공유 링크 복사
-            </Button>
-            {shareMsg && <p className="text-[12px] text-ink-muted">{shareMsg}</p>}
+            <div className="mt-8 flex flex-col gap-2">
+              <Button block onClick={() => void onShare()}>
+                공유 링크 복사
+              </Button>
+              {shareMsg && <p className="text-[12px] text-ink-muted">{shareMsg}</p>}
+            </div>
           </>
         )}
 
         {!loading && (
-          <Button variant="ghost" block onClick={() => navigate("/home")}>
-            홈 화면
-          </Button>
+          <div className="mt-2">
+            <Button variant="ghost" block onClick={() => navigate("/home")}>
+              홈 화면
+            </Button>
+          </div>
         )}
       </div>
     </div>

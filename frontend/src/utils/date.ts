@@ -5,3 +5,48 @@ export function toDateOnlyString(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
 }
+
+const WEEKDAY_FULL_LABELS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+]
+
+const MONTH_FULL_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]
+
+export function formatTimetableDate(travelDate: string) {
+  const d = new Date(`${travelDate}T00:00:00`)
+  return {
+    monthLabel: MONTH_FULL_LABELS[d.getMonth()],
+    dayPadded: String(d.getDate()).padStart(2, "0"),
+    weekdayLabel: WEEKDAY_FULL_LABELS[d.getDay()],
+  }
+}
+
+const WEEKDAY_SHORT_LABELS = ["일", "월", "화", "수", "목", "금", "토"]
+
+/** Date -> "2026.08.15 (토)" */
+export function formatDottedDateWithWeekday(travelDate: string) {
+  const d = new Date(`${travelDate}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return travelDate
+  const month = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${d.getFullYear()}.${month}.${day} (${WEEKDAY_SHORT_LABELS[d.getDay()]})`
+}

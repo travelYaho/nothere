@@ -608,14 +608,6 @@ class RecommendationService:
         trip = self.repo.get_trip_owned(trip_id, user.id)
         if trip is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정을 찾을 수 없습니다.", 404)
-        remaining = self.repo.remaining_congested(trip_id)
-        if remaining:
-            raise AppError(
-                ErrorCode.UNRESOLVED_CONGESTED_PLACES,
-                "아직 해결되지 않은 혼잡 장소가 있습니다.",
-                409,
-                extra={"pendingCount": len(remaining)},
-            )
         now = datetime.now(timezone.utc)
         trip.status = "confirmed"
         trip.confirmed_at = now

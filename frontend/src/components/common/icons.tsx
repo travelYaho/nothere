@@ -103,6 +103,12 @@ export const Grip = (p: IconProps) => (
     <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" />
   </svg>
 )
+export const Doc = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M7 4.5h7l4 4V19.5a2 2 0 01-2 2H7a2 2 0 01-2-2v-13a2 2 0 012-2z" />
+    <path d="M14 4.5V9h4.5" />
+  </svg>
+)
 export const Heart = ({
   size = 20,
   filled = false,
