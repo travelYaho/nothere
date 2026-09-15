@@ -95,9 +95,13 @@ def test_unknown_experience_tag_returns_404():
 
 def test_title_is_auto_generated_from_date_and_companion_type():
     service = _service_with_mocks()
+    # 하드코딩된 과거 날짜(예: 2026-09-12)는 오늘 날짜가 그 시점을 지나면 서비스의 과거
+    # 날짜 검증(INVALID_TRAVEL_DATE)에 걸려 테스트가 깨진다 — TOMORROW 기준으로 기대
+    # 제목도 함께 계산해서 날짜와 무관하게 항상 성립하도록 한다.
+    expected_title = f"{TOMORROW.strftime('%Y.%m.%d')} 가족 여행"
     created = MagicMock(
         id=uuid4(),
-        title="2026.09.12 가족 여행",
+        title=expected_title,
         status="draft",
         current_step=3,
         created_at=datetime(2026, 8, 28, 10, 0, 0),
@@ -106,7 +110,7 @@ def test_title_is_auto_generated_from_date_and_companion_type():
 
     payload = TripCreateRequest(
         title=None,
-        travel_date=date(2026, 9, 12),
+        travel_date=TOMORROW,
         region_id=1,
         companion_type="family",
         preferred_experience_tag_ids=[1, 2],
@@ -114,9 +118,9 @@ def test_title_is_auto_generated_from_date_and_companion_type():
 
     result = service.create_trip(_current_user(), payload)
 
-    assert result.title == "2026.09.12 가족 여행"
+    assert result.title == expected_title
     kwargs = service.trips.create_trip.call_args.kwargs
-    assert kwargs["title"] == "2026.09.12 가족 여행"
+    assert kwargs["title"] == expected_title
 
 
 def test_explicit_title_is_not_overwritten():

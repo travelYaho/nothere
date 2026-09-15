@@ -57,7 +57,9 @@ def test_place_uses_geography_location_not_lat_lng():
     expected_wait_minutes/address 는 ERD 원본엔 없지만, "장소 직접 추가"(커스텀
     장소) 기능에 실제로 필요해 의도적으로 추가한 컬럼이라 허용 목록에 포함한다.
     address 는 Kakao 지오코딩이 비활성화된 동안 좌표 대신 임시로 저장하는
-    주소 원문이다.
+    주소 원문이다. area_cd/signgu_cd는 집중률 API(TatsCnctrRateService)가 요구하는
+    구 단위 코드 — region이 시/도 단위라 이 값을 못 담아서 place에 직접 둔다
+    (TourAPI 응답의 lDongRegnCd/lDongSignguCd 기준).
     """
     columns = _columns("place")
     assert columns == {
@@ -70,6 +72,8 @@ def test_place_uses_geography_location_not_lat_lng():
         "is_recommendable",
         "expected_wait_minutes",
         "address",
+        "area_cd",
+        "signgu_cd",
     }
     assert "latitude" not in columns
     assert "longitude" not in columns

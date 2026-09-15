@@ -36,3 +36,7 @@ class Place(Base):
     is_recommendable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     expected_wait_minutes: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # 집중률 API(TatsCnctrRateService)가 요구하는 구 단위 코드. TourAPI 응답의
+    # lDongRegnCd/lDongSignguCd에서 채운다(region은 시/도 단위라 이 용도로 못 씀).
+    area_cd: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    signgu_cd: Mapped[str | None] = mapped_column(String(20), nullable=True)

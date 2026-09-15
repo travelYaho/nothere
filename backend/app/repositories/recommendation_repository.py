@@ -61,6 +61,24 @@ class RecommendationRepository:
     def get_trip_place(self, trip_place_id: UUID) -> TripPlace | None:
         return self.db.query(TripPlace).filter(TripPlace.id == trip_place_id).first()
 
+    def get_trip_place_for_update(self, trip_place_id: UUID) -> TripPlace | None:
+        """교체 적용/취소 전 행을 잠그고, 잠금 시점의 값을 읽는다.
+
+        같은 trip_place가 이미 이 세션의 identity map에 로드돼 있으면(예: 호출부가 이
+        메서드보다 먼저 get_trip_place()를 불렀으면) populate_existing() 없이는
+        SELECT ... FOR UPDATE로 잠가도 캐시된 옛 속성값을 그대로 돌려준다 — 잠금 자체는
+        DB 레벨에서 걸리지만 Python 쪽 객체가 안 갱신된다. apply_replacement()/
+        revert_replacement()는 이 메서드를 그 trip_place에 대한 첫(유일한) 조회로 써서
+        이 함정을 피한다.
+        """
+        return (
+            self.db.query(TripPlace)
+            .filter(TripPlace.id == trip_place_id)
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+
     def get_place(self, place_id: UUID) -> Place | None:
         return self.db.query(Place).filter(Place.id == place_id).first()
 
@@ -127,6 +145,29 @@ class RecommendationRepository:
         return (
             self.db.query(RecommendationCandidate)
             .filter(RecommendationCandidate.id == candidate_id)
+            .first()
+        )
+
+    def get_candidate_for_trip_place(
+        self, candidate_id: UUID, trip_place_id: UUID
+    ) -> RecommendationCandidate | None:
+        """candidate가 실제로 이 trip_place의 추천 요청에서 나온 것인지까지 확인해서 조회한다.
+
+        id만으로 조회하면(get_candidate()) 다른 trip_place는 물론 다른 사용자의
+        candidate_id를 넘겨도 그대로 통과한다 — candidate.request_id ->
+        recommendation_request.trip_place_id 체인까지 같이 검증한다. 교체 적용
+        (apply_replacement)은 이 메서드로만 candidate를 조회해야 한다.
+        """
+        return (
+            self.db.query(RecommendationCandidate)
+            .join(
+                RecommendationRequest,
+                RecommendationCandidate.request_id == RecommendationRequest.id,
+            )
+            .filter(
+                RecommendationCandidate.id == candidate_id,
+                RecommendationRequest.trip_place_id == trip_place_id,
+            )
             .first()
         )
 
@@ -270,33 +311,6 @@ class RecommendationRepository:
         rows = self.db.query(Place).filter(Place.id.in_(place_ids)).all()
         return {row.id: row for row in rows}
 
-    def get_or_create_place_by_tour_content_id(
-        self, tour_content_id: str, name: str, latitude: float, longitude: float
-    ) -> Place:
-        place = (
-            self.db.query(Place).filter(Place.tour_content_id == tour_content_id).first()
-        )
-        if place is not None:
-            return place
-        place = Place(
-            source_type="tour_api",
-            tour_content_id=tour_content_id,
-            name=name,
-            is_recommendable=True,
-        )
-        self.db.add(place)
-        self.db.flush()
-        self.db.execute(
-            text(
-                "UPDATE place SET location = ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography "
-                "WHERE id = :id"
-            ),
-            {"lng": longitude, "lat": latitude, "id": str(place.id)},
-        )
-        self.db.flush()
-        self.db.refresh(place)
-        return place
-
     def list_nearby_recommendable_places(
         self,
         latitude: float,
@@ -309,7 +323,7 @@ class RecommendationRepository:
         rows = self.db.execute(
             text(
                 """
-                SELECT id, name, tour_content_id,
+                SELECT id, name, tour_content_id, area_cd, signgu_cd,
                        ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng
                 FROM place
                 WHERE is_recommendable = TRUE
@@ -407,13 +421,18 @@ class RecommendationRepository:
         return self.db.query(Replacement).filter(Replacement.id == replacement_id).first()
 
     def active_replacement(self, trip_place_id: UUID) -> Replacement | None:
+        """그 trip_place에서 아직 되돌리지 않은(reverted_at IS NULL) 가장 최근 교체.
+
+        applied_at만으로 정렬하면 동시에 같은 타임스탬프로 기록된 경우(이론상 가능) 결과가
+        비결정적일 수 있어, id를 보조 정렬 키로 둬서 항상 같은 행을 돌려주게 한다.
+        """
         return (
             self.db.query(Replacement)
             .filter(
                 Replacement.trip_place_id == trip_place_id,
                 Replacement.reverted_at.is_(None),
             )
-            .order_by(desc(Replacement.applied_at))
+            .order_by(desc(Replacement.applied_at), desc(Replacement.id))
             .first()
         )
 

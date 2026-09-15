@@ -242,8 +242,15 @@ export function GuidebookCard({
   onToggleLike?: () => void
 }) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return
+        e.preventDefault()
+        onClick?.()
+      }}
       className="w-full overflow-hidden rounded-[var(--radius-field)] bg-surface text-left shadow-[var(--shadow-card)] transition-transform active:scale-[0.99]"
     >
       <div className="relative h-[140px] w-full bg-surface-chip">
@@ -280,7 +287,7 @@ export function GuidebookCard({
           </span>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
