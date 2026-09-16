@@ -72,6 +72,7 @@ export function TripPlacesForm() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [removing, setRemoving] = useState(false)
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [keyword, setKeyword] = useState("")
@@ -166,11 +167,14 @@ export function TripPlacesForm() {
 
   async function handleRemove(tripPlaceId: string) {
     setActionError(null)
+    setRemoving(true)
     try {
       await removeTripPlace(tripPlaceId)
       await refreshTrip()
     } catch (err) {
       setActionError(toErrorMessage(err))
+    } finally {
+      setRemoving(false)
     }
   }
 
@@ -298,7 +302,12 @@ export function TripPlacesForm() {
           총 <span className="font-bold text-ink">{trip.places.length}곳</span>
         </p>
         <div className="flex gap-2.5">
-          <Button variant="ghost" className="shrink-0" onClick={() => navigate("/bookmarks")}>
+          <Button
+            variant="ghost"
+            className="shrink-0"
+            disabled={removing}
+            onClick={() => navigate("/bookmarks")}
+          >
             저장하고 나가기
           </Button>
           <Button

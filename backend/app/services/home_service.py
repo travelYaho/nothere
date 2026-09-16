@@ -25,6 +25,8 @@ class HomeService:
                 current_user.id,
                 exclude_id=draft.id if draft else None,
             )
+            draft_schedule = build_schedule_summary(draft, self.trip_places) if draft else None
+            recent_schedules = [build_schedule_summary(trip, self.trip_places) for trip in recent]
         except SQLAlchemyError as exc:
             raise AppError(
                 ErrorCode.DB_ERROR,
@@ -38,6 +40,6 @@ class HomeService:
                 nickname=current_user.nickname,
                 profile_image_url=current_user.profile_image_url,
             ),
-            draft_schedule=build_schedule_summary(draft, self.trip_places) if draft else None,
-            recent_schedules=[build_schedule_summary(trip, self.trip_places) for trip in recent],
+            draft_schedule=draft_schedule,
+            recent_schedules=recent_schedules,
         )

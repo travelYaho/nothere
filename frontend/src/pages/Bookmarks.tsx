@@ -9,7 +9,7 @@
  * "가이드북" 탭은 "좋아요한 가이드북"(GuideLiked 화면이 이미 따로 있음)이
  * 아니라 내가 공유해서 만든 가이드북 목록이다 — GET /guides/mine.
  */
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { GuidebookCard, ScheduleCard } from "@/components/common/cards"
 import { Button } from "@/components/common/primitives"
@@ -45,46 +45,49 @@ export default function Bookmarks() {
   const [tripsLoadingMore, setTripsLoadingMore] = useState(false)
   const [tripsError, setTripsError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const tripsRequestIdRef = useRef(0)
 
   useEffect(() => {
     if (innerTab !== "trips") return
-    let cancelled = false
+    const requestId = ++tripsRequestIdRef.current
     setTripsLoading(true)
     setTripsError(null)
     listTrips({ status: statusFilter === "all" ? undefined : statusFilter, page: 1 })
       .then((res) => {
-        if (cancelled) return
+        if (tripsRequestIdRef.current !== requestId) return
         setTrips(res.trips)
         setTripsPage(1)
         setTripsHasNext(res.hasNext)
       })
       .catch((err) => {
-        if (cancelled) return
+        if (tripsRequestIdRef.current !== requestId) return
         setTripsError(toErrorMessage(err))
       })
       .finally(() => {
-        if (cancelled) return
+        if (tripsRequestIdRef.current !== requestId) return
         setTripsLoading(false)
       })
-    return () => {
-      cancelled = true
-    }
   }, [innerTab, statusFilter])
 
   async function loadMoreTrips() {
+    const requestId = tripsRequestIdRef.current
     setTripsLoadingMore(true)
     try {
       const res = await listTrips({
         status: statusFilter === "all" ? undefined : statusFilter,
         page: tripsPage + 1,
       })
+      if (tripsRequestIdRef.current !== requestId) return
       setTrips((prev) => [...prev, ...res.trips])
       setTripsHasNext(res.hasNext)
       setTripsPage((p) => p + 1)
     } catch (err) {
+      if (tripsRequestIdRef.current !== requestId) return
       setTripsError(toErrorMessage(err))
     } finally {
-      setTripsLoadingMore(false)
+      if (tripsRequestIdRef.current === requestId) {
+        setTripsLoadingMore(false)
+      }
     }
   }
 

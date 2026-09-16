@@ -132,7 +132,7 @@ export default function Home() {
           </button>
         </div>
         <div className="mt-2.5 flex flex-col gap-2.5">
-          {!loading && recentSchedules.length === 0 && (
+          {!loading && !error && recentSchedules.length === 0 && (
             <p className="py-6 text-center text-[13px] text-ink-muted">
               아직 등록된 일정이 없어요.
             </p>
