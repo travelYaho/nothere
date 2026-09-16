@@ -109,7 +109,13 @@ class RecommendationService:
                 ),
             )
             enriched = candidate_pipeline.enrich_candidates(
-                generated, trip.travel_date, purpose_tag_codes, self.analysis_repo, self.places
+                generated,
+                trip.travel_date,
+                purpose_tag_codes,
+                self.analysis_repo,
+                self.places,
+                self.repo,
+                code_by_id,
             )
             survivors, excluded_count = candidate_pipeline.filter_candidates(
                 enriched, duplicate_names, experience_threshold
@@ -164,7 +170,9 @@ class RecommendationService:
                 if code in tag_code_map
             }
             if weights:
-                self.repo.upsert_place_experience_tags(place_id, weights, source="tour_category")
+                self.repo.upsert_place_experience_tags(
+                    place_id, weights, source=candidate_pipeline.AUTO_CATEGORY_SOURCE
+                )
         else:
             place_id = UUID(source.id)
 

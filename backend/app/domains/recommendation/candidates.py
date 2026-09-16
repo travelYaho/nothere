@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import date
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from app.clients.tour_api import TourPlaceItem, fetch_nearby_places
@@ -21,6 +22,9 @@ from app.domains.analysis.service import (
 )
 from app.repositories.analysis_repository import AnalysisRepository
 from app.repositories.place_repository import PlaceRepository
+
+if TYPE_CHECKING:
+    from app.repositories.recommendation_repository import RecommendationRepository
 
 # 자동으로 확대되는 반경 단계(km). relaxed_experience는 사용자가 직접 선택했을 때만 쓴다.
 RADIUS_KM_BY_MODE = {
@@ -101,15 +105,38 @@ def category_label(category_code: str | None) -> str | None:
     return CATEGORY_LABELS.get(category_code)
 
 
-def derive_tag_code_weights(candidate_name: str, category_code: str | None) -> dict[str, float]:
-    """카테고리 코드(있으면) + 이름 키워드로 후보의 experience_tag.code별 가중치를 추정한다."""
+AUTO_CATEGORY_SOURCE = "tour_category"  # place_experience_tag.source — 자동(카테고리 근거) 저장값
+
+
+def _keyword_tag_weights(candidate_name: str) -> dict[str, float]:
+    """이름 키워드만으로 추정한 가중치 — 카테고리 근거와 분리해서 별도로 둔다.
+
+    카테고리 근거(저장된 값이든 이번 응답의 category_code로 라이브 계산한 값이든)
+    위에 항상 똑같이 얹을 수 있어야, 저장 전(첫 요청)과 저장 후(재요청)의 점수가
+    카테고리 값이 안 바뀌는 한 같아진다(2026-09-16, 코드 리뷰로 발견 — 카테고리만 저장하고
+    키워드는 저장하지 않는 설계라, 저장된 값을 무조건 우선하면 첫 요청에서만 있던 키워드
+    보완이 재요청부터 사라져 같은 입력에도 점수가 달라졌었다).
+    """
     weights: dict[str, float] = {}
-    if category_code and category_code in CATEGORY_TAG_WEIGHTS:
-        weights.update(CATEGORY_TAG_WEIGHTS[category_code])
     for code, keywords in EXPERIENCE_TAG_KEYWORDS.items():
         if any(keyword in candidate_name for keyword in keywords):
-            weights[code] = max(weights.get(code, 0.0), 0.7)
+            weights[code] = 0.7
     return weights
+
+
+def _merge_category_and_keyword(
+    category_weights: dict[str, float], candidate_name: str
+) -> dict[str, float]:
+    """카테고리 근거 가중치 위에 이름 키워드 보완을 얹는다(둘 다 없으면 빈 dict)."""
+    weights = dict(category_weights)
+    for code, weight in _keyword_tag_weights(candidate_name).items():
+        weights[code] = max(weights.get(code, 0.0), weight)
+    return weights
+
+
+def derive_tag_code_weights(candidate_name: str, category_code: str | None) -> dict[str, float]:
+    """카테고리 코드(있으면) + 이름 키워드로 후보의 experience_tag.code별 가중치를 추정한다."""
+    return _merge_category_and_keyword(category_only_tag_weights(category_code), candidate_name)
 
 
 def category_only_tag_weights(category_code: str | None) -> dict[str, float]:
@@ -128,12 +155,60 @@ SCORE_NO_EVIDENCE = 0.2  # 카테고리/키워드 근거가 전혀 없음("정�
 SCORE_NO_OVERLAP = 0.05  # 근거는 있으나 선택한 목적과 전혀 안 겹침("명확한 불일치")
 
 
-def mock_experience_score(
-    candidate_name: str, category_code: str | None, purpose_tag_codes: list[str]
-) -> float:
-    """선택한 방문 목적 태그와 후보의 추정 태그 가중치를 비교해 experience_score를 매긴다.
+def _is_valid_stored_weight(weight: float) -> bool:
+    """저장된 가중치가 점수 계산에 그대로 쓸 수 있는 유효한 값인지 확인한다.
 
-    "정보 부족"(카테고리/키워드 근거가 없음)과 "불일치"(근거는 있지만 선택한 목적과 안 겹침)를
+    0.0은 "그 경험과 무관함"을 뜻하는 정상적인 저장값이라 유효하지만, NaN/inf나
+    범위를 벗어난 값은 데이터 오류로 보고 버린다(해당 태그는 추정값으로 대체됨).
+    """
+    return math.isfinite(weight) and 0.0 <= weight <= 1.0
+
+
+def _combine_tag_weights(
+    stored_weights: dict[str, float], estimated_weights: dict[str, float]
+) -> dict[str, float]:
+    """저장된 place_experience_tag 값을 우선하고, 저장되지 않은 태그만 카테고리·키워드
+    추정으로 보완한다 — 순수 함수. 같은 태그 코드를 중복 합산하지 않는다(저장값이 있으면
+    추정값은 그 코드에서 완전히 무시됨).
+    """
+    combined = dict(stored_weights)
+    for code, weight in estimated_weights.items():
+        combined.setdefault(code, weight)
+    return combined
+
+
+def resolve_experience_score(
+    candidate_name: str,
+    category_code: str | None,
+    purpose_tag_codes: list[str],
+    stored_weights: dict[str, float] | None = None,
+    stored_category_weights: dict[str, float] | None = None,
+) -> float:
+    """선택한 방문 목적 태그와 후보의 태그 가중치를 비교해 experience_score를 매긴다.
+
+    가중치 우선순위(순수 함수 합성, _combine_tag_weights/_merge_category_and_keyword):
+    1. `stored_weights` — source가 "tour_category"(자동 카테고리 저장)가 아닌 저장값. 있으면
+       그 태그는 이 값을 그대로 쓰고 절대 안 덮인다. ("사람이 직접 확정"을 실제로 검증하는
+       건 아니고, "자동 카테고리 출처가 아닌 저장값은 보수적으로 우선한다"는 정책이다.)
+    2. 카테고리 근거 — `stored_category_weights`(source="tour_category"로 저장된 값, 태그별)를
+       우선하고, 없는 태그 코드만 이번 candidate.category_code로 라이브 계산한 값으로 채운다
+       (`_combine_tag_weights`). 저장이 일부 태그만 이뤄진 상태(예: 카테고리 코드가
+       {architecture_space, photo_view} 둘 다 나오는데 DB엔 photo_view만 들어있는 경우)에서
+       "저장값이 하나라도 있으면 라이브 계산 전체를 버리는" 방식은 안 된다 — 그러면 DO
+       NOTHING으로 나머지 태그(architecture_space)가 나중에 채워지는 순간 그 태그가 이번
+       요청부터 갑자기 점수에 반영되어, 같은 입력인데도 저장 시점에 따라 결과가 달라진다
+       (2026-09-17, 코드 리뷰로 발견·수정). 그래서 태그 코드 단위로 "저장값 우선, 없는
+       코드만 라이브 계산으로 보완"해야 한다.
+    3. 위 카테고리 근거 위에 이름 키워드 보완을 항상 얹는다(_merge_category_and_keyword).
+
+    카테고리 값만 DB에 저장하고 키워드는 저장하지 않기 때문에(`category_only_tag_weights`
+    문서 참고), 저장된 카테고리 값을 "그대로 최종값"처럼 덮어쓰기 우선순위에 넣으면 안
+    된다 — 그러면 처음 요청(키워드 보완 포함)과 재요청(카테고리만, 키워드 없음)의 점수가
+    같은 입력인데도 달라진다(2026-09-16, 코드 리뷰로 발견·수정). 그래서 카테고리 저장값은
+    "덮어쓰기 우선순위"가 아니라 "카테고리 근거의 출처"로만 쓰고, 키워드는 저장 여부와
+    무관하게 매번 같은 규칙으로 다시 얹는다.
+
+    "정보 부족"(근거가 전혀 없음)과 "불일치"(근거는 있지만 선택한 목적과 안 겹침)를
     점수로 구분해야 hard filter(<DEFAULT_EXPERIENCE_THRESHOLD)와 relaxed_experience 모드가
     실제로 다른 후보 집합을 걸러낸다. 이전 버전은 두 경우 모두 threshold(0.3) 이상으로
     바닥값을 줘서 필터가 사실상 아무것도 걸러내지 못했다(후보 무관 candidate_id 기반 변주만 있었음).
@@ -141,7 +216,11 @@ def mock_experience_score(
     if not purpose_tag_codes:
         return SCORE_NO_PURPOSE_SELECTED
 
-    weights = derive_tag_code_weights(candidate_name, category_code)
+    category_basis = _combine_tag_weights(
+        stored_category_weights or {}, category_only_tag_weights(category_code)
+    )
+    estimated = _merge_category_and_keyword(category_basis, candidate_name)
+    weights = _combine_tag_weights(stored_weights or {}, estimated)
     if not weights:
         return SCORE_NO_EVIDENCE
 
@@ -256,6 +335,8 @@ def enrich_candidates(
     purpose_tag_codes: list[str],
     analysis_repo: AnalysisRepository,
     place_repo: PlaceRepository,
+    recommendation_repo: "RecommendationRepository",
+    tag_code_by_id: dict[int, str],
 ) -> list[EnrichedCandidate]:
     """집중률 매핑/판정을 후보에도 재사용해서 congestion_level을 채운다.
 
@@ -280,15 +361,46 @@ def enrich_candidates(
     existing_by_source = place_repo.get_by_sources(
         [("tour_api", c.id) for c in candidates if c.from_tour_api]
     )
+    # 후보별 existing place를 먼저 전부 확정해야 place_experience_tag도 한 번에 조회할 수
+    # 있다 — 아래 본 루프에서 다시 조회하지 않고 이 결과를 그대로 쓴다.
+    existing_places: list = [
+        existing_by_source.get(("tour_api", c.id))
+        if c.from_tour_api
+        else place_repo.get_by_id(UUID(c.id))
+        for c in candidates
+    ]
+    tags_by_place = recommendation_repo.list_experience_tags_for_places(
+        [p.id for p in existing_places if p is not None]
+    )
 
     enriched: list[EnrichedCandidate] = []
     region_cache: dict[tuple[str, str], tuple] = {}
-    for candidate in candidates:
-        if candidate.from_tour_api:
-            existing_place = existing_by_source.get(("tour_api", candidate.id))
-        else:
-            existing_place = place_repo.get_by_id(UUID(candidate.id))
+    for candidate, existing_place in zip(candidates, existing_places):
         mapping = analysis_repo.get_mapping(existing_place.id) if existing_place else None
+        if existing_place is None:
+            stored_weights: dict[str, float] = {}
+            stored_category_weights: dict[str, float] = {}
+        else:
+            valid_rows = [
+                row
+                for row in tags_by_place.get(existing_place.id, [])
+                if row.experience_tag_id in tag_code_by_id
+                and _is_valid_stored_weight(float(row.weight))
+            ]
+            # source="tour_category"(자동 저장)는 덮어쓰기 우선순위가 아니라 카테고리 근거로만
+            # 쓴다 — 그래야 매번 같은 규칙으로 키워드 보완을 다시 얹을 수 있다(resolve_experience_score
+            # 문서 참고). 그 외 source는 "사람이 직접 확정했다"고 검증하는 건 아니고, "자동
+            # 카테고리 출처가 아니면 보수적으로 우선한다"는 정책으로 덮어쓰기 우선순위로 쓴다.
+            stored_category_weights = {
+                tag_code_by_id[row.experience_tag_id]: float(row.weight)
+                for row in valid_rows
+                if row.source == AUTO_CATEGORY_SOURCE
+            }
+            stored_weights = {
+                tag_code_by_id[row.experience_tag_id]: float(row.weight)
+                for row in valid_rows
+                if row.source != AUTO_CATEGORY_SOURCE
+            }
 
         area_cd, signgu_cd, district_conflict = _resolve_effective_district(
             candidate.area_cd,
@@ -345,8 +457,12 @@ def enrich_candidates(
             EnrichedCandidate(
                 source=candidate,
                 congestion_level=level,
-                experience_score=mock_experience_score(
-                    candidate.name, candidate.category_code, purpose_tag_codes
+                experience_score=resolve_experience_score(
+                    candidate.name,
+                    candidate.category_code,
+                    purpose_tag_codes,
+                    stored_weights,
+                    stored_category_weights,
                 ),
                 category_weights=category_only_tag_weights(candidate.category_code),
             )

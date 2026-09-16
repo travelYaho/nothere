@@ -362,10 +362,18 @@ class RecommendationRepository:
     ) -> None:
         """카테고리 기반으로 추정한 place-경험태그 가중치를 저장한다.
 
-        source="manual"인 기존 행은 덮어쓰지 않는다 — 수동 검수 UI가 아직 없어 지금 당장
-        만들어지는 값은 아니지만, 나중에 사람이 직접 확정한 태그가 다음 추천 요청 때 카테고리
-        규칙으로 조용히 되돌려지는 것을 미리 막아둔다(place_concentration_mapping의
-        _HUMAN_REVIEWED_STATUSES 보존 규칙과 같은 목적).
+        이미 그 (place, tag) 조합에 값이 있으면(source가 무엇이든) 절대 덮어쓰지 않고,
+        없는 조합만 새로 채운다.
+
+        예전엔 `source IS DISTINCT FROM 'manual'`일 때만 덮어써서 "manual"이 아닌 기존
+        값은 매번 새로 추정한 값으로 갈아치웠다 — 그런데 STEP6 점수 계산
+        (resolve_experience_score)은 "저장값이 있으면 그 값을 그대로 믿는다"는 정책이라,
+        이 둘이 서로 달라서 "이번 점수는 저장된 낮은 값으로 계산했는데, 후보 선택과
+        동시에 그 값이 훨씬 높은 새 추정치로 조용히 바뀌는" 불일치가 있었다(코드 리뷰로
+        발견, 2026-09-16). 게다가 실제 공유 DB를 조회해보니 `source='user_manual'`인
+        진짜 수동 태그가 11건 있었는데, 이건 "manual"과 다른 문자열이라 저 가드로는 전혀
+        보호되지 않고 있었다 — 이번 방식(있으면 절대 안 건드림)으로 바꾸면 그 문자열이
+        뭐든 상관없이 안전하게 보호된다.
         """
         for tag_id, weight in weights.items():
             insert_stmt = pg_insert(PlaceExperienceTag).values(
@@ -374,16 +382,31 @@ class RecommendationRepository:
                 weight=Decimal(str(round(weight, 4))),
                 source=source,
             )
-            stmt = insert_stmt.on_conflict_do_update(
-                index_elements=["place_id", "experience_tag_id"],
-                set_={
-                    "weight": insert_stmt.excluded.weight,
-                    "source": insert_stmt.excluded.source,
-                },
-                where=PlaceExperienceTag.source.is_distinct_from("manual"),
+            stmt = insert_stmt.on_conflict_do_nothing(
+                index_elements=["place_id", "experience_tag_id"]
             )
             self.db.execute(stmt)
         self.db.flush()
+
+    def list_experience_tags_for_places(
+        self, place_ids: list[UUID]
+    ) -> dict[UUID, list[PlaceExperienceTag]]:
+        """여러 place의 place_experience_tag를 한 번에 조회한다(place_id -> 행 목록).
+
+        STEP6(enrich_candidates)이 후보마다 개별 조회하면 후보 수만큼 쿼리가 나가므로
+        일괄 조회로 묶는다 — get_by_sources()와 같은 이유.
+        """
+        if not place_ids:
+            return {}
+        rows = (
+            self.db.query(PlaceExperienceTag)
+            .filter(PlaceExperienceTag.place_id.in_(place_ids))
+            .all()
+        )
+        result: dict[UUID, list[PlaceExperienceTag]] = {}
+        for row in rows:
+            result.setdefault(row.place_id, []).append(row)
+        return result
 
     def create_request_with_candidates(
         self,
