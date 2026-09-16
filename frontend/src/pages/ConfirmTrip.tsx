@@ -122,9 +122,19 @@ export default function ConfirmTrip() {
         .join(" · ")
     : ""
 
-  const onSave = () => {
+  const onSave = async () => {
+    if (!tripId) return
+    setBusy(true)
     setError(null)
-    setFooterMsg("저장했습니다.")
+    setFooterMsg(null)
+    try {
+      if (trip?.status !== "confirmed") await doConfirm()
+      navigate(`/trips/${tripId}/saved`)
+    } catch (err) {
+      setError(toErrorMessage(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
   const onShare = async () => {
@@ -277,7 +287,7 @@ export default function ConfirmTrip() {
               <Button
                 variant="ghost"
                 disabled={busy}
-                onClick={onSave}
+                onClick={() => void onSave()}
                 className="h-[54px] w-[76px] shrink-0 px-4 text-[15px] font-bold"
               >
                 저장

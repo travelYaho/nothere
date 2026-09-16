@@ -90,7 +90,7 @@ export function CongestionCard({
         "rounded-[var(--radius-field)] bg-surface px-4 py-3.5",
         warn
           ? "border-[0.667px] border-[#eeaaaa]"
-          : "border-[0.667px] border-transparent shadow-[var(--shadow-card)]",
+          : "border-[0.667px] border-transparent shadow-[0px_1px_1px_rgba(0,0,0,0.05)]",
       ].join(" ")}
     >
       <div className="flex items-center justify-between gap-2">
@@ -118,7 +118,7 @@ export function CongestionCard({
       )}
       {warn && showActions && (
         <div className="flex gap-2 pt-3">
-          <Button block onClick={onAlternative}>
+          <Button variant="accent" onClick={onAlternative} className="min-w-0 flex-1">
             대안 보기
           </Button>
           <Button variant="ghost" onClick={onKeep} className="w-[68px] shrink-0 text-[15px] font-bold">

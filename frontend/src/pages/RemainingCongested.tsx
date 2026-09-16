@@ -1,7 +1,6 @@
 /**
  * 일정 점검 결과 — STEP4 분석 결과를 전체 장소 목록으로 보여주고,
  * 혼잡한 장소는 카드에서 바로 대안보기/유지를 할 수 있게 한다.
- * 장소를 한 곳이라도 교체한 뒤에는 Figma 점검 결과(교체 후) 레이아웃을 쓴다.
  */
 import { useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
@@ -131,7 +130,6 @@ export default function RemainingCongested() {
   }
 
   const crowdedCount = (items ?? []).filter(isCrowdedPending).length
-  const hasReplaced = (items ?? []).some((item) => Boolean(item.wasReplaced && item.replacedFrom))
   const firstCrowdedId = (items ?? []).find(isCrowdedPending)?.tripPlaceId
 
   const goConfirm = () => navigate(`/trips/${tripId}/confirm`)
@@ -173,7 +171,8 @@ export default function RemainingCongested() {
         onBack={() => navigate(-1)}
         right={
           <button
-            className="text-[13px] font-bold text-primary"
+            type="button"
+            className="text-[13px] font-bold leading-5 text-[#1864F5]"
             onClick={() => navigate(`/trips/${tripId}/places`)}
           >
             일정 수정
@@ -184,7 +183,7 @@ export default function RemainingCongested() {
       {loading && <p className="px-5 pt-2 text-[13px] text-ink-muted">확인 중…</p>}
       {error && <p className="px-5 pt-2 text-[13px] text-congestion-high">{error}</p>}
 
-      {!loading && !error && items && hasReplaced && (
+      {!loading && !error && items && (
         <>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2">
             <div className="rounded-2xl bg-[#E8F6EE] px-4 py-[14px]">
@@ -207,49 +206,25 @@ export default function RemainingCongested() {
 
           <div className="border-t-[0.667px] border-line-soft bg-white/95 px-4 pb-6 pt-3">
             <div className="flex gap-2.5">
+              {crowdedCount > 0 && (
+                <Button
+                  variant="ghost"
+                  onClick={scrollToRemaining}
+                  className="h-[54px] min-w-0 flex-1 px-4 text-[15px] font-bold"
+                >
+                  계속 점검하기
+                </Button>
+              )}
               <Button
-                variant="ghost"
-                onClick={scrollToRemaining}
-                className="h-[54px] min-w-0 flex-1 px-4 text-[15px] font-bold"
-              >
-                계속 점검하기
-              </Button>
-              <Button
+                variant="accent"
                 onClick={goConfirm}
-                className="h-[54px] min-w-0 flex-1 text-[16px] font-extrabold"
+                className="h-[54px] min-w-0 flex-1"
               >
                 현재 일정으로 확정
               </Button>
             </div>
           </div>
         </>
-      )}
-
-      {!loading && !error && items && !hasReplaced && (
-        <div className="flex flex-1 flex-col gap-4 px-5 pb-10 pt-2">
-          <div>
-            <p className="text-[14px] font-bold text-ink">
-              {crowdedCount > 0
-                ? `혼잡이 예상되는 장소 ${crowdedCount}곳`
-                : "모든 혼잡 장소를 확인했어요"}
-            </p>
-            {crowdedCount > 0 && (
-              <p className="mt-1 text-[13px] text-ink-muted">
-                한 곳씩 가까운 대안으로 바꿀 수 있어요
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3">{placeList}</div>
-
-          <p className="text-[12px] text-ink-faint">
-            일정표는 실시간 정보가 아니며 실제 상황과 다를 수 있어요.
-          </p>
-
-          <Button block onClick={goConfirm}>
-            현재 일정으로 확정
-          </Button>
-        </div>
       )}
     </div>
   )
