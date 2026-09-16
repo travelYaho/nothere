@@ -72,25 +72,29 @@ export function MyPageView() {
   const handleTabChange = useBottomTabNav()
 
   const [user, setUser] = useState<UserResponse | null>(null)
-  const [stats, setStats] = useState<UserStatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  const [stats, setStats] = useState<UserStatsResponse | null>(null)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState<string | null>(null)
 
   const [editOpen, setEditOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  const [logoutError, setLogoutError] = useState<string | null>(null)
+
   const geo = useLocationPermission()
 
   useEffect(() => {
     let cancelled = false
+
     setLoading(true)
     setLoadError(null)
-    Promise.all([getMe(), getMyStats()])
-      .then(([me, myStats]) => {
-        if (cancelled) return
-        setUser(me)
-        setStats(myStats)
+    getMe()
+      .then((me) => {
+        if (!cancelled) setUser(me)
       })
       .catch((err) => {
         if (!cancelled) setLoadError(toErrorMessage(err))
@@ -98,6 +102,20 @@ export function MyPageView() {
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
+
+    setStatsLoading(true)
+    setStatsError(null)
+    getMyStats()
+      .then((myStats) => {
+        if (!cancelled) setStats(myStats)
+      })
+      .catch((err) => {
+        if (!cancelled) setStatsError(toErrorMessage(err))
+      })
+      .finally(() => {
+        if (!cancelled) setStatsLoading(false)
+      })
+
     return () => {
       cancelled = true
     }
@@ -118,8 +136,13 @@ export function MyPageView() {
   }
 
   async function handleLogout() {
-    await signOut()
-    navigate("/")
+    setLogoutError(null)
+    try {
+      await signOut()
+      navigate("/")
+    } catch (err) {
+      setLogoutError(toErrorMessage(err))
+    }
   }
 
   return (
@@ -142,7 +165,7 @@ export function MyPageView() {
           </p>
         )}
 
-        {!loading && !loadError && user && stats && (
+        {!loading && !loadError && user && (
           <>
             <div className="flex items-center gap-3.5 rounded-[var(--radius-field)] bg-surface p-4 shadow-[var(--shadow-card)]">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--radius-field)] bg-primary/10">
@@ -167,24 +190,36 @@ export function MyPageView() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 pt-2.5">
-              <div className="flex flex-col items-center rounded-[var(--radius-field)] bg-surface p-4 shadow-[var(--shadow-card)]">
-                <span className="text-[20px] font-extrabold text-ink">
-                  {stats.totalTripCount}
-                </span>
-                <span className="pt-1 text-[11px] font-medium text-ink-faint">
-                  점검한 일정
-                </span>
+            {statsLoading && (
+              <p className="py-4 text-center text-[12px] text-ink-muted">
+                통계를 불러오는 중...
+              </p>
+            )}
+            {!statsLoading && statsError && (
+              <p className="py-4 text-center text-[12px] font-medium text-congestion-high">
+                {statsError}
+              </p>
+            )}
+            {!statsLoading && !statsError && stats && (
+              <div className="grid grid-cols-2 gap-2.5 pt-2.5">
+                <div className="flex flex-col items-center rounded-[var(--radius-field)] bg-surface p-4 shadow-[var(--shadow-card)]">
+                  <span className="text-[20px] font-extrabold text-ink">
+                    {stats.totalTripCount}
+                  </span>
+                  <span className="pt-1 text-[11px] font-medium text-ink-faint">
+                    점검한 일정
+                  </span>
+                </div>
+                <div className="flex flex-col items-center rounded-[var(--radius-field)] bg-surface p-4 shadow-[var(--shadow-card)]">
+                  <span className="text-[20px] font-extrabold text-ink">
+                    {stats.confirmedTripCount}
+                  </span>
+                  <span className="pt-1 text-[11px] font-medium text-ink-faint">
+                    확정 일정
+                  </span>
+                </div>
               </div>
-              <div className="flex flex-col items-center rounded-[var(--radius-field)] bg-surface p-4 shadow-[var(--shadow-card)]">
-                <span className="text-[20px] font-extrabold text-ink">
-                  {stats.confirmedTripCount}
-                </span>
-                <span className="pt-1 text-[11px] font-medium text-ink-faint">
-                  확정 일정
-                </span>
-              </div>
-            </div>
+            )}
 
             <SectionLabel>활동</SectionLabel>
             <div className="rounded-[var(--radius-field)] bg-surface px-2 shadow-[var(--shadow-card)]">
@@ -254,6 +289,11 @@ export function MyPageView() {
                 로그아웃
               </span>
             </button>
+            {logoutError && (
+              <p className="pt-2 text-center text-[12px] font-medium text-congestion-high">
+                {logoutError}
+              </p>
+            )}
           </>
         )}
       </div>
