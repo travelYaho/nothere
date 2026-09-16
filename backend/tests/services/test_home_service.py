@@ -16,6 +16,7 @@ def _fake_trip(**overrides):
     trip.title = overrides.get("title", "제주도 여행")
     trip.travel_date = overrides.get("travel_date", date(2026, 9, 12))
     trip.status = overrides.get("status", "draft")
+    trip.region.name = overrides.get("region_name", "제주")
     return trip
 
 
@@ -32,6 +33,8 @@ def test_get_home_maps_trip_fields_into_legacy_schedule_summary_shape():
     service.trips = MagicMock()
     service.trips.get_in_progress.return_value = draft
     service.trips.get_recent.return_value = recent
+    service.trip_places = MagicMock()
+    service.trip_places.count_by_trip.return_value = 4
 
     current_user = CurrentUser(id=uuid4(), email="tester@example.com", nickname="테스터")
     response = service.get_home(current_user)
@@ -41,9 +44,13 @@ def test_get_home_maps_trip_fields_into_legacy_schedule_summary_shape():
     assert response.draft_schedule.title == draft.title
     assert response.draft_schedule.travel_date == draft.travel_date
     assert response.draft_schedule.status == "draft"
+    assert response.draft_schedule.region_name == "제주"
+    assert response.draft_schedule.place_count == 4
+    assert response.draft_schedule.resume_url == f"/trips/{draft.id}/places"
 
     assert len(response.recent_schedules) == 2
     assert response.recent_schedules[0].schedule_id == recent[0].id
+    assert response.recent_schedules[0].resume_url == f"/trips/{recent[0].id}/guide"
 
     service.trips.get_recent.assert_called_once_with(current_user.id, exclude_id=draft.id)
 

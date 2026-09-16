@@ -3,38 +3,23 @@
  * 한 곳에 모아본다.
  * Figma: 여기말GO / node 132:2396 "보관함"
  *
- * 일정 목록은 "내 일정 전체 조회" API 가 아직 없어(홈 화면의 CONTINUE_SCHEDULE/
- * MY_SCHEDULES 도 같은 이유로 목업이다) 목업 데이터를 쓴다. X(삭제) 버튼도
- * 그래서 로컬 상태에서만 지운다 — 실제 여행 삭제(DELETE /trips/{id})는 하드
- * 삭제라 목업 id로 잘못 호출하면 안 되고, 목록 API가 생기면 그때 실 데이터 +
- * 실제 삭제로 교체하면 된다.
+ * "일정" 탭은 GET /trips(상태 필터+페이지네이션)를, X(삭제) 버튼은 실제
+ * DELETE /trips/{id}를 쓴다 — 하드 삭제라 실패하면 목록을 원래대로 되돌린다.
  *
  * "가이드북" 탭은 "좋아요한 가이드북"(GuideLiked 화면이 이미 따로 있음)이
  * 아니라 내가 공유해서 만든 가이드북 목록이다 — GET /guides/mine.
  */
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { GuidebookCard, ScheduleCard } from "@/components/common/cards"
 import { Button } from "@/components/common/primitives"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 import { listMyGuides } from "@/features/guides/api/guidesApi"
 import type { GuideCard } from "@/features/guides/types"
+import { deleteTrip, listTrips } from "@/features/trips/api/tripsApi"
+import { formatScheduleMeta } from "@/features/trips/utils/scheduleMeta"
+import type { TripSummary } from "@/features/trips/types"
 import { ApiError } from "@/types/api"
-
-type TripStatus = "confirmed" | "draft"
-
-interface SavedTrip {
-  id: string
-  title: string
-  meta: string
-  status: TripStatus
-}
-
-const INITIAL_TRIPS: SavedTrip[] = [
-  { id: "1", title: "서울 서촌 당일치기", meta: "2026년 8월 14일 · 4곳 등록", status: "draft" },
-  { id: "2", title: "전주 당일치기", meta: "2026년 8월 12일 · 4곳 등록 · 확정됨", status: "confirmed" },
-  { id: "3", title: "경주 당일치기", meta: "2026년 8월 10일 · 4곳 등록 · 확정됨", status: "confirmed" },
-]
 
 const STATUS_FILTERS = [
   { key: "all", label: "전체" },
@@ -45,7 +30,7 @@ type StatusFilter = (typeof STATUS_FILTERS)[number]["key"]
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message
-  return "가이드북을 불러오지 못했습니다."
+  return "불러오지 못했습니다."
 }
 
 export default function Bookmarks() {
@@ -53,8 +38,69 @@ export default function Bookmarks() {
   const handleTabChange = useBottomTabNav()
   const [innerTab, setInnerTab] = useState<"trips" | "guidebooks">("trips")
 
-  const [trips, setTrips] = useState(INITIAL_TRIPS)
+  const [trips, setTrips] = useState<TripSummary[]>([])
+  const [tripsPage, setTripsPage] = useState(1)
+  const [tripsHasNext, setTripsHasNext] = useState(false)
+  const [tripsLoading, setTripsLoading] = useState(false)
+  const [tripsLoadingMore, setTripsLoadingMore] = useState(false)
+  const [tripsError, setTripsError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const tripsRequestIdRef = useRef(0)
+
+  useEffect(() => {
+    if (innerTab !== "trips") return
+    const requestId = ++tripsRequestIdRef.current
+    setTripsLoading(true)
+    setTripsError(null)
+    listTrips({ status: statusFilter === "all" ? undefined : statusFilter, page: 1 })
+      .then((res) => {
+        if (tripsRequestIdRef.current !== requestId) return
+        setTrips(res.trips)
+        setTripsPage(1)
+        setTripsHasNext(res.hasNext)
+      })
+      .catch((err) => {
+        if (tripsRequestIdRef.current !== requestId) return
+        setTripsError(toErrorMessage(err))
+      })
+      .finally(() => {
+        if (tripsRequestIdRef.current !== requestId) return
+        setTripsLoading(false)
+      })
+  }, [innerTab, statusFilter])
+
+  async function loadMoreTrips() {
+    const requestId = tripsRequestIdRef.current
+    setTripsLoadingMore(true)
+    try {
+      const res = await listTrips({
+        status: statusFilter === "all" ? undefined : statusFilter,
+        page: tripsPage + 1,
+      })
+      if (tripsRequestIdRef.current !== requestId) return
+      setTrips((prev) => [...prev, ...res.trips])
+      setTripsHasNext(res.hasNext)
+      setTripsPage((p) => p + 1)
+    } catch (err) {
+      if (tripsRequestIdRef.current !== requestId) return
+      setTripsError(toErrorMessage(err))
+    } finally {
+      if (tripsRequestIdRef.current === requestId) {
+        setTripsLoadingMore(false)
+      }
+    }
+  }
+
+  async function handleRemoveTrip(tripId: string) {
+    const previous = trips
+    setTrips((prev) => prev.filter((t) => t.tripId !== tripId))
+    try {
+      await deleteTrip(tripId)
+    } catch (err) {
+      setTrips(previous)
+      setTripsError(toErrorMessage(err))
+    }
+  }
 
   const [guides, setGuides] = useState<GuideCard[]>([])
   const [guidesPage, setGuidesPage] = useState(1)
@@ -92,8 +138,6 @@ export default function Bookmarks() {
       setGuidesLoadingMore(false)
     }
   }
-
-  const filteredTrips = trips.filter((t) => statusFilter === "all" || t.status === statusFilter)
 
   return (
     <div className="flex flex-1 flex-col">
@@ -146,20 +190,41 @@ export default function Bookmarks() {
           </div>
 
           <div className="flex flex-col gap-2.5 pb-4 pt-1">
-            {filteredTrips.length === 0 && (
+            {tripsLoading && (
+              <p className="py-8 text-center text-[13px] text-ink-muted">불러오는 중...</p>
+            )}
+            {!tripsLoading && tripsError && (
+              <p className="py-8 text-center text-[13px] font-medium text-congestion-high">
+                {tripsError}
+              </p>
+            )}
+            {!tripsLoading && !tripsError && trips.length === 0 && (
               <p className="py-8 text-center text-[13px] text-ink-muted">
                 해당하는 일정이 없어요.
               </p>
             )}
-            {filteredTrips.map((trip, i) => (
-              <ScheduleCard
-                key={trip.id}
-                index={i + 1}
-                title={trip.title}
-                meta={trip.meta}
-                onRemove={() => setTrips((prev) => prev.filter((t) => t.id !== trip.id))}
-              />
-            ))}
+            {!tripsLoading &&
+              !tripsError &&
+              trips.map((trip, i) => (
+                <ScheduleCard
+                  key={trip.tripId}
+                  index={i + 1}
+                  title={trip.title}
+                  meta={formatScheduleMeta(trip)}
+                  onClick={() => navigate(trip.resumeUrl)}
+                  onRemove={() => void handleRemoveTrip(trip.tripId)}
+                />
+              ))}
+            {!tripsLoading && !tripsError && tripsHasNext && (
+              <Button
+                variant="ghost"
+                block
+                loading={tripsLoadingMore}
+                onClick={() => void loadMoreTrips()}
+              >
+                더보기
+              </Button>
+            )}
           </div>
         </div>
       )}
