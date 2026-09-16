@@ -33,16 +33,18 @@ function formatVisitInfo(place: TripPlaceDetail): string {
   return place.visitTime ? `${place.visitTime.slice(0, 5)} 방문 예정` : "방문 시간 미설정"
 }
 
-// 목적 입력을 마친(건너뛰기 포함) tripPlaceId를 세션 동안 기억해 둔다.
+// 목적 입력을 마친(건너뛰기 포함) tripPlaceId를 기억해 둔다.
 // GET 응답의 purposeTags 는 "건너뛰기(빈 배열)"와 "아직 안 물어봄"을 구분하지
 // 못하므로, 화면을 다시 열었을 때 이미 답한 장소를 건너뛰려면 이 기록이 필요하다.
+// localStorage 를 쓴다 — sessionStorage(탭 단위)면 홈/보관함의 "이어서 하기"로
+// 새 탭에서 들어왔을 때 진행 기록이 사라져서 처음 장소부터 다시 물어보게 된다.
 function answeredStorageKey(tripId: string): string {
   return `trip-purpose-answered:${tripId}`
 }
 
 function loadAnsweredIds(tripId: string): Set<string> {
   try {
-    const raw = sessionStorage.getItem(answeredStorageKey(tripId))
+    const raw = localStorage.getItem(answeredStorageKey(tripId))
     return new Set(raw ? (JSON.parse(raw) as string[]) : [])
   } catch {
     return new Set()
@@ -53,9 +55,9 @@ function markAnswered(tripId: string, tripPlaceId: string) {
   try {
     const ids = loadAnsweredIds(tripId)
     ids.add(tripPlaceId)
-    sessionStorage.setItem(answeredStorageKey(tripId), JSON.stringify([...ids]))
+    localStorage.setItem(answeredStorageKey(tripId), JSON.stringify([...ids]))
   } catch {
-    // 세션 저장소를 못 쓰면(프라이빗 모드 등) 그냥 이번 화면에서만 순서대로 진행한다.
+    // 로컬 저장소를 못 쓰면(프라이빗 모드 등) 그냥 이번 화면에서만 순서대로 진행한다.
   }
 }
 

@@ -118,3 +118,44 @@ export interface TripConditionsUpdateRequest {
   extraTimeLimitMinutes?: number | null
   preferredExperienceTagIds?: number[]
 }
+
+/** 카드를 누르면 resumeUrl 로 이동한다 — 확정된 일정이면 가이드북, 아니면 STEP3 장소 목록. */
+export interface TripSummary {
+  tripId: string
+  title: string
+  travelDate: string | null
+  regionName: string
+  placeCount: number
+  status: string
+  resumeUrl: string
+}
+
+export interface TripListResponse {
+  trips: TripSummary[]
+  page: number
+  hasNext: boolean
+  totalCount: number
+}
+
+/** backend/app/schemas/home.py 와 짝을 이루는 타입들. */
+export interface ScheduleSummary {
+  scheduleId: string
+  title: string
+  travelDate: string | null
+  regionName: string
+  placeCount: number
+  status: string
+  resumeUrl: string
+}
+
+export interface HomeUser {
+  id: string
+  nickname: string
+  profileImageUrl: string | null
+}
+
+export interface HomeResponse {
+  user: HomeUser
+  draftSchedule: ScheduleSummary | null
+  recentSchedules: ScheduleSummary[]
+}

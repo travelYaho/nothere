@@ -298,8 +298,8 @@ export function TripPlacesForm() {
           총 <span className="font-bold text-ink">{trip.places.length}곳</span>
         </p>
         <div className="flex gap-2.5">
-          <Button variant="ghost" className="w-[92px] shrink-0">
-            임시 저장
+          <Button variant="ghost" className="shrink-0" onClick={() => navigate("/bookmarks")}>
+            저장하고 나가기
           </Button>
           <Button
             block

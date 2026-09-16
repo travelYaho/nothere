@@ -1,9 +1,10 @@
 """STEP2 조건입력·수정·삭제(여행 생성/수정/삭제) + Trip 액션(경로/확정/가이드/공유)
 엔드포인트를 정의한다.
 """
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
@@ -19,6 +20,7 @@ from app.schemas.trip import (
     TripCreateRequest,
     TripCreateResponse,
     TripDetailResponse,
+    TripListResponse,
 )
 from app.schemas.user import CurrentUser
 from app.services.trip_service import TripService
@@ -34,6 +36,19 @@ def create_trip(
 ) -> ApiResponse[TripCreateResponse]:
     """STEP2 폼 제출 시 여행 일정을 생성하고 STEP3 진입 정보를 반환한다."""
     return ApiResponse(data=TripService(db).create_trip(current_user, payload))
+
+
+@router.get("", response_model=ApiResponse[TripListResponse])
+def list_trips(
+    status_filter: Literal["draft", "confirmed"] | None = Query(default=None, alias="status"),
+    page: int = Query(default=1, ge=1),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[TripListResponse]:
+    """내 일정 목록 — 보관함 "일정" 탭이 쓴다. status 미지정 시 전체."""
+    return ApiResponse(
+        data=TripService(db).list_trips(current_user, status_filter=status_filter, page=page)
+    )
 
 
 @router.get("/{trip_id}", response_model=ApiResponse[TripDetailResponse])

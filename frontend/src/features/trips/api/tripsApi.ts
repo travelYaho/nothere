@@ -2,11 +2,13 @@
 import { apiClient } from "@/api/apiClient"
 import type {
   ExperienceTag,
+  HomeResponse,
   Region,
   TripConditionsUpdateRequest,
   TripCreateRequest,
   TripCreateResponse,
   TripDetailResponse,
+  TripListResponse,
 } from "@/features/trips/types"
 
 export function listRegions() {
@@ -32,4 +34,19 @@ export function updateTripConditions(tripId: string, payload: TripConditionsUpda
     `/trips/${tripId}/conditions`,
     payload,
   )
+}
+
+export function deleteTrip(tripId: string) {
+  return apiClient.delete(`/trips/${tripId}`)
+}
+
+export function listTrips(params: { status?: "draft" | "confirmed"; page?: number } = {}) {
+  return apiClient.get<TripListResponse>("/trips", {
+    status: params.status,
+    page: params.page ?? 1,
+  })
+}
+
+export function getHomeSummary() {
+  return apiClient.get<HomeResponse>("/home")
 }

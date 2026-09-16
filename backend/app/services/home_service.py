@@ -3,28 +3,20 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
-from app.db.models.trip import Trip
+from app.repositories.trip_place_repository import TripPlaceRepository
 from app.repositories.trip_repository import TripRepository
-from app.schemas.home import HomeResponse, HomeUserResponse, ScheduleSummary
+from app.schemas.home import HomeResponse, HomeUserResponse
 from app.schemas.user import CurrentUser
+from app.services.trip_summary import build_schedule_summary
 
 
 # HomeResponse 필드명(schedule_id/draft_schedule/recent_schedules)은 이미 프론트에
 # 배포된 홈 화면 계약이라 도메인이 Trip으로 바뀌어도 의도적으로 그대로 유지한다.
-def _to_summary(trip: Trip) -> ScheduleSummary:
-    """Trip ORM 객체를 홈 응답용 요약 스키마로 변환한다."""
-    return ScheduleSummary(
-        schedule_id=trip.id,
-        title=trip.title,
-        travel_date=trip.travel_date,
-        status=trip.status,
-    )
-
-
 class HomeService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.trips = TripRepository(db)
+        self.trip_places = TripPlaceRepository(db)
 
     def get_home(self, current_user: CurrentUser) -> HomeResponse:
         try:
@@ -46,6 +38,6 @@ class HomeService:
                 nickname=current_user.nickname,
                 profile_image_url=current_user.profile_image_url,
             ),
-            draft_schedule=_to_summary(draft) if draft else None,
-            recent_schedules=[_to_summary(trip) for trip in recent],
+            draft_schedule=build_schedule_summary(draft, self.trip_places) if draft else None,
+            recent_schedules=[build_schedule_summary(trip, self.trip_places) for trip in recent],
         )
