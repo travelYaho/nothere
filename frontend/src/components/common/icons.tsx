@@ -109,6 +109,11 @@ export const Doc = (p: IconProps) => (
     <path d="M14 4.5V9h4.5" />
   </svg>
 )
+export const Share = (p: IconProps) => (
+  <svg {...base({ size: 16, ...p })} viewBox="0 0 16 16" strokeWidth={1.5}>
+    <path d="M8 2V10M11 5L8 2L5 5M3 9V12.5A1.5 1.5 0 004.5 14h7a1.5 1.5 0 001.5-1.5V9" />
+  </svg>
+)
 export const Heart = ({
   size = 20,
   filled = false,
@@ -136,6 +141,17 @@ export const Sliders = (p: IconProps) => (
     <circle cx="13" cy="6" r="2" />
     <circle cx="6" cy="12" r="2" />
     <circle cx="16" cy="18" r="2" />
+  </svg>
+)
+export const Check = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M5 13l4 4L19 7" />
+  </svg>
+)
+export const LogOut = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+    <path d="M16 17l5-5-5-5M21 12H9" />
   </svg>
 )
 export const Dot = ({ size = 8, className }: { size?: number; className?: string }) => (

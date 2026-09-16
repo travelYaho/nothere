@@ -179,3 +179,15 @@ class TripRepository:
             .all()
         )
         return rows, total_count
+
+    # 마이페이지 통계: (일정 생성을 시작한 전체 Trip 수, 확정까지 간 적 있는 Trip 수)
+    def count_stats(self, user_id: UUID) -> tuple[int, int]:
+        total = (
+            self.db.query(func.count(Trip.id)).filter(Trip.user_id == user_id).scalar()
+        )
+        confirmed = (
+            self.db.query(func.count(Trip.id))
+            .filter(Trip.user_id == user_id, Trip.confirmed_at.isnot(None))
+            .scalar()
+        )
+        return total or 0, confirmed or 0

@@ -61,3 +61,20 @@ erDiagram
     recommendation_ranking ||--o{ replacement : selected
     recommendation_ranking ||--o{ recommendation_interaction : logged
 ```
+
+## 확정 일정 불러오기 계약
+
+새 테이블 없음. 최종 일정은 기존 `trip` + `trip_place` + `replacement` 로 저장한다.
+
+| 역할 | 계약 |
+| --- | --- |
+| FE 화면 | `/trips/:tripId/saved` (`SavedTrip` / `SavedItineraryView`) |
+| 저장 | `POST /api/trips/{tripId}/confirm` — `status=confirmed`, `confirmed_at` 설정. 이미 confirmed면 skip |
+| 조회 | `GET /api/trips/{tripId}/guide` — Bearer, 소유자. 공개 공유는 `GET /api/guide/{token}` (동일 payload) |
+
+`GET /trips/{id}/guide` 확장 필드(기존 필드 유지, camelCase):
+
+- 일정: `regionName`, `coverImageUrl`
+- stop: `stayMinutes`, `extraMinutes`, `beforeLevel`, `afterLevel` (`replacement` 의 extra_minutes / before_level / after_level)
+
+목록 API(`GET /trips`)는 이 계약에 포함하지 않는다. 보관함/홈에서 확정 일정을 열 때 `/trips/{tripId}/saved` 로 이동하면 된다.

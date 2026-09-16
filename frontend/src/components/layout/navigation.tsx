@@ -98,11 +98,12 @@ const TABS = [
   { key: "my", label: "마이", Icon: User },
 ] as const
 
-/** BottomTab 키 → 라우트. "마이"는 아직 화면이 없어 제외했다. */
+/** BottomTab 키 → 라우트. */
 const TAB_ROUTES: Record<string, string> = {
   home: "/home",
   create: "/trips/new",
   saved: "/bookmarks",
+  my: "/mypage",
 }
 
 /** BottomTab 클릭을 실제 라우팅으로 연결하는 공용 훅. */
