@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.schemas.common import ApiResponse
-from app.schemas.user import CurrentUser, UserResponse, UserUpdateRequest
+from app.schemas.user import CurrentUser, UserResponse, UserStatsResponse, UserUpdateRequest
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -21,6 +21,15 @@ def get_me(
 ) -> ApiResponse[UserResponse]:
     """현재 로그인 사용자의 기본 프로필 정보를 반환한다."""
     return ApiResponse(data=UserService(db).get_me(current_user))
+
+
+@router.get("/me/stats", response_model=ApiResponse[UserStatsResponse])
+def get_me_stats(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[UserStatsResponse]:
+    """마이페이지 통계 카드(점검한 일정/확정 일정)를 반환한다."""
+    return ApiResponse(data=UserService(db).get_stats(current_user))
 
 
 @router.patch("/me", response_model=ApiResponse[UserResponse])
