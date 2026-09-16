@@ -9,6 +9,29 @@ from uuid import uuid4
 from app.repositories.place_repository import PlaceRepository, _classify_district_code_backfill
 
 
+def test_get_by_sources_returns_empty_dict_without_query_when_no_valid_pairs():
+    db = MagicMock()
+    repo = PlaceRepository(db)
+
+    result = repo.get_by_sources([("tour_api", None), ("tour_api", "")])
+
+    assert result == {}
+    db.query.assert_not_called()
+
+
+def test_get_by_sources_builds_dict_keyed_by_source_type_and_content_id():
+    db = MagicMock()
+    place1 = MagicMock(source_type="tour_api", tour_content_id="1")
+    place2 = MagicMock(source_type="tour_api", tour_content_id="2")
+    db.query.return_value.filter.return_value.all.return_value = [place1, place2]
+    repo = PlaceRepository(db)
+
+    result = repo.get_by_sources([("tour_api", "1"), ("tour_api", "2"), ("tour_api", "3")])
+
+    assert result == {("tour_api", "1"): place1, ("tour_api", "2"): place2}
+    assert ("tour_api", "3") not in result  # DB에 없는 건 그냥 빠짐(에러 아님)
+
+
 def test_get_or_create_returns_new_place_on_successful_insert():
     """INSERT ... ON CONFLICT DO NOTHING이 실제로 새 행을 반환하면(충돌 없음) 그걸 쓴다."""
     db = MagicMock()

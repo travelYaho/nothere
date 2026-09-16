@@ -2,7 +2,7 @@
 from uuid import UUID, uuid4
 
 from geoalchemy2.elements import WKTElement
-from sqlalchemy import select, update
+from sqlalchemy import select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -53,6 +53,25 @@ class PlaceRepository:
             .filter(Place.source_type == source_type, Place.tour_content_id == tour_content_id)
             .first()
         )
+
+    def get_by_sources(
+        self, pairs: list[tuple[str, str | None]]
+    ) -> dict[tuple[str, str], Place]:
+        """(source_type, tour_content_id) 여러 쌍을 한 번에 조회한다.
+
+        get_by_source()를 후보 수만큼 반복 호출하면 STEP6처럼 후보가 여러 개일 때 그
+        개수만큼 쿼리가 나간다 — (source_type, tour_content_id) UNIQUE 제약을 이용해
+        IN 절 하나로 일괄 조회한다.
+        """
+        valid_pairs = [(source_type, cid) for source_type, cid in pairs if cid]
+        if not valid_pairs:
+            return {}
+        rows = (
+            self.db.query(Place)
+            .filter(tuple_(Place.source_type, Place.tour_content_id).in_(valid_pairs))
+            .all()
+        )
+        return {(row.source_type, row.tour_content_id): row for row in rows}
 
     def create(
         self,
