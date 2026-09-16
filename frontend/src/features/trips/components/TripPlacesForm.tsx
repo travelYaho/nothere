@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Close, Grip, Search } from "@/components/common/icons"
+import { Close, Grip, Pencil, Search } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { StepHeader } from "@/features/trips/components/StepHeader"
 import { SearchBottomSheet } from "@/features/trips/components/SearchBottomSheet"
@@ -19,6 +19,7 @@ import {
   removeTripPlace,
   reorderTripPlaces,
   searchPlaces,
+  updateTripPlaceVisit,
 } from "@/features/trips/api/placesApi"
 import { COMPANION_LABELS } from "@/features/trips/constants"
 import { useLongPressReorder } from "@/features/trips/hooks/useLongPressReorder"
@@ -80,6 +81,10 @@ export function TripPlacesForm() {
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [pendingPlaceId, setPendingPlaceId] = useState<string | null>(null)
+
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingTime, setEditingTime] = useState("")
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const refreshTrip = useCallback(async () => {
     if (!tripId) return
@@ -178,6 +183,33 @@ export function TripPlacesForm() {
     }
   }
 
+  function startEdit(place: TripPlaceDetail) {
+    setActionError(null)
+    setEditingId(place.tripPlaceId)
+    setEditingTime(place.visitTime ?? "")
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditingTime("")
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId) return
+    setSavingEdit(true)
+    setActionError(null)
+    try {
+      await updateTripPlaceVisit(editingId, { visitTime: editingTime || null })
+      await refreshTrip()
+      setEditingId(null)
+      setEditingTime("")
+    } catch (err) {
+      setActionError(toErrorMessage(err))
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   function handleGoToPurpose() {
     if (!tripId) return
     setSubmitting(true)
@@ -254,6 +286,7 @@ export function TripPlacesForm() {
             const canDrag = !place.visitTime
             const dragging = isDragging(index)
             const dropTarget = isDropTarget(index)
+            const isEditing = editingId === place.tripPlaceId
             return (
               <div
                 key={place.tripPlaceId}
@@ -264,18 +297,59 @@ export function TripPlacesForm() {
                   dropTarget ? "ring-2 ring-primary/40" : "",
                 ].join(" ")}
               >
-                <Grip
-                  size={16}
-                  {...(canDrag ? gripProps(index) : {})}
-                  className={`shrink-0 ${canDrag ? "cursor-grab text-ink-ghost" : "cursor-default text-ink-ghost/30"}`}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[14px] font-bold text-ink">{place.name}</p>
-                  <p className="text-[11px] font-medium text-ink-faint">{formatVisitInfo(place)}</p>
-                </div>
-                <button onClick={() => handleRemove(place.tripPlaceId)} className="shrink-0 text-ink-ghost">
-                  <Close size={16} />
-                </button>
+                {isEditing ? (
+                  <>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] font-bold text-ink">{place.name}</p>
+                      <input
+                        type="time"
+                        value={editingTime}
+                        onChange={(e) => setEditingTime(e.target.value)}
+                        className="mt-1 h-9 w-full rounded-[10px] border-[0.667px] border-line bg-surface px-2.5 text-[13px] text-ink outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={cancelEdit}
+                      disabled={savingEdit}
+                      className="shrink-0 text-[12px] font-semibold text-ink-faint disabled:opacity-50"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={() => void handleSaveEdit()}
+                      disabled={savingEdit}
+                      className="shrink-0 text-[12px] font-bold text-primary disabled:opacity-50"
+                    >
+                      {savingEdit ? "저장 중..." : "저장"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Grip
+                      size={16}
+                      {...(canDrag ? gripProps(index) : {})}
+                      className={`shrink-0 ${canDrag ? "cursor-grab text-ink-ghost" : "cursor-default text-ink-ghost/30"}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] font-bold text-ink">{place.name}</p>
+                      <p className="text-[11px] font-medium text-ink-faint">{formatVisitInfo(place)}</p>
+                    </div>
+                    <button
+                      onClick={() => startEdit(place)}
+                      aria-label="방문 시간 수정"
+                      className="shrink-0 text-ink-ghost hover:text-ink-soft"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleRemove(place.tripPlaceId)}
+                      aria-label="장소 삭제"
+                      className="shrink-0 text-ink-ghost hover:text-congestion-high"
+                    >
+                      <Close size={16} />
+                    </button>
+                  </>
+                )}
               </div>
             )
           })}
@@ -302,13 +376,14 @@ export function TripPlacesForm() {
           총 <span className="font-bold text-ink">{trip.places.length}곳</span>
         </p>
         <div className="flex gap-2.5">
+          {/* 추가/삭제/순서변경이 모두 즉시 서버에 저장되므로 "저장" 동작은 따로 없다 — 나가기만 한다. */}
           <Button
             variant="ghost"
             className="shrink-0"
             disabled={removing}
             onClick={() => navigate("/bookmarks")}
           >
-            저장하고 나가기
+            나가기
           </Button>
           <Button
             block
