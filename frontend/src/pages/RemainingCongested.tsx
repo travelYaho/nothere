@@ -173,7 +173,9 @@ export default function RemainingCongested() {
           <button
             type="button"
             className="text-[13px] font-bold leading-5 text-[#1864F5]"
-            onClick={() => navigate(`/trips/${tripId}/places`)}
+            // replace: 장소를 고쳐서 다시 점검하면 이 결과는 낡은 값이 되므로,
+            // 뒤로가기가 이 결과 화면으로 다시 돌아오지 않게 히스토리에서 대체한다.
+            onClick={() => navigate(`/trips/${tripId}/places`, { replace: true })}
           >
             일정 수정
           </button>

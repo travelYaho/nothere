@@ -73,6 +73,7 @@ export function TripPurposeForm() {
   const [placeIndex, setPlaceIndex] = useState(0)
   const [selectedByPlace, setSelectedByPlace] = useState<Record<string, number[]>>({})
   const [submitting, setSubmitting] = useState(false)
+  const [skippingAll, setSkippingAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -96,13 +97,14 @@ export function TripPurposeForm() {
         if (cancelled) return
         setSelectedByPlace(Object.fromEntries(entries))
 
+        // 진행하다 만 경우(일부만 답함)에는 이어서 답할 위치부터 시작한다. 전부 답한
+        // 상태로 다시 들어온 경우(뒤로가기·"일정 수정"으로 재진입)에는 자동으로
+        // 분석으로 넘겨버리지 않고 처음 장소부터 다시 보여준다 — 장소를 고쳤을 수도
+        // 있으니 목적도 다시 확인/변경할 기회를 준다. 이전 선택은 위 selectedByPlace에
+        // 이미 채워져 있어 그대로 유지된 채로 보인다.
         const answeredIds = loadAnsweredIds(tripId!)
         const startIndex = tripDetail.places.findIndex((p) => !answeredIds.has(p.tripPlaceId))
-        if (startIndex === -1 && tripDetail.places.length > 0) {
-          navigate(`/trips/${tripId}/analysis`)
-          return
-        }
-        setPlaceIndex(Math.max(startIndex, 0))
+        setPlaceIndex(startIndex === -1 ? 0 : startIndex)
       } catch (err) {
         if (!cancelled) setLoadError(toErrorMessage(err))
       } finally {
@@ -137,7 +139,9 @@ export function TripPurposeForm() {
       await putTripPlacePurpose(currentPlace.tripPlaceId, tagIds)
       markAnswered(tripId, currentPlace.tripPlaceId)
       if (isLastPlace) {
-        navigate(`/trips/${tripId}/analysis`)
+        // 목적 입력은 끝난 단계라 뒤로가기로 다시 들어올 일이 없어야 한다 — 로딩
+        // 화면으로 넘어갈 때 이 화면을 히스토리에서 대체한다.
+        navigate(`/trips/${tripId}/analysis`, { replace: true })
       } else {
         setPlaceIndex((i) => i + 1)
       }
@@ -145,6 +149,24 @@ export function TripPurposeForm() {
       setError(toErrorMessage(err))
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // 남은 장소를 모두 "건너뛰기(빈 배열)"로 저장한 뒤 바로 분석으로 넘어간다.
+  async function handleSkipAll() {
+    if (!trip || !tripId || skippingAll) return
+    setSkippingAll(true)
+    setError(null)
+    try {
+      const remaining = trip.places.slice(placeIndex)
+      for (const place of remaining) {
+        await putTripPlacePurpose(place.tripPlaceId, [])
+        markAnswered(tripId, place.tripPlaceId)
+      }
+      navigate(`/trips/${tripId}/analysis`, { replace: true })
+    } catch (err) {
+      setError(toErrorMessage(err))
+      setSkippingAll(false)
     }
   }
 
@@ -195,9 +217,21 @@ export function TripPurposeForm() {
               <p className="text-[11px] font-medium text-ink-faint">{formatVisitInfo(currentPlace)}</p>
             </div>
           </div>
-          <span className="pl-3 text-[12px] font-semibold text-ink-faint">
-            {placeIndex + 1} / {trip.places.length}
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-1 pl-3">
+            <span className="text-[12px] font-semibold text-ink-faint">
+              {placeIndex + 1} / {trip.places.length}
+            </span>
+            {trip.places.length > 1 && (
+              <button
+                type="button"
+                onClick={handleSkipAll}
+                disabled={submitting || skippingAll}
+                className="text-[11px] font-semibold text-ink-faint underline underline-offset-2 disabled:opacity-50"
+              >
+                {skippingAll ? "건너뛰는 중..." : "전체 건너뛰기"}
+              </button>
+            )}
+          </div>
         </div>
 
         <h2 className="pt-5 text-[18px] font-extrabold leading-[24.75px] text-ink">
@@ -229,12 +263,17 @@ export function TripPurposeForm() {
           <Button
             variant="ghost"
             className="w-[92px] shrink-0"
-            disabled={submitting}
+            disabled={submitting || skippingAll}
             onClick={() => handleAdvance([])}
           >
             건너뛰기
           </Button>
-          <Button block loading={submitting} onClick={() => handleAdvance(currentSelected)}>
+          <Button
+            block
+            loading={submitting}
+            disabled={skippingAll}
+            onClick={() => handleAdvance(currentSelected)}
+          >
             {isLastPlace ? "완료" : "다음"}
           </Button>
         </div>
