@@ -1,4 +1,3 @@
-import shareIcon from "@/assets/icons/share.svg"
 import savedHero from "@/assets/images/saved-hero.jpg"
 import { ChevronLeft } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
@@ -29,20 +28,14 @@ function changeLogDetail(stop: GuideStop): string | null {
 
 export function SavedItineraryView({
   guide,
-  busy = false,
-  shareMsg,
-  error,
   onBack,
-  onShare,
-  onPrint,
+  onEdit,
+  onHome,
 }: {
   guide: GuideResponse
-  busy?: boolean
-  shareMsg?: string | null
-  error?: string | null
   onBack?: () => void
-  onShare: () => void
-  onPrint: () => void
+  onEdit: () => void
+  onHome: () => void
 }) {
   const coverSrc = guide.coverImageUrl || savedHero
   const metaLine = [
@@ -160,33 +153,21 @@ export function SavedItineraryView({
             )}
           </div>
 
-          {(error || shareMsg) && (
-            <p className={`pt-3 text-[12px] ${error ? "text-ink-soft" : "text-ink-muted"}`}>
-              {error ?? shareMsg}
-            </p>
-          )}
           <div className="h-3" />
         </div>
       </div>
 
-      <div className="print:hidden border-t-[0.667px] border-line-soft bg-white/95 px-4 pb-6 pt-3">
+      <div className="border-t-[0.667px] border-line-soft bg-white/95 px-4 pb-6 pt-3">
         <div className="flex gap-2.5">
-          <Button
-            variant="primary"
-            disabled={busy}
-            onClick={onShare}
-            className="h-[54px] min-w-0 flex-1"
-          >
-            <img src={shareIcon} alt="" width={16} height={16} className="size-4 shrink-0" />
-            링크 복사 · 공유
+          <Button variant="primary" onClick={onEdit} className="h-[54px] min-w-0 flex-1">
+            수정하기
           </Button>
           <Button
             variant="ghost"
-            disabled={busy}
-            onClick={onPrint}
-            className="h-[54px] w-[100px] shrink-0 px-4 text-[15px] font-bold text-ink-ghost"
+            onClick={onHome}
+            className="h-[54px] w-[100px] shrink-0 px-4 text-[15px] font-bold"
           >
-            인쇄 / PDF
+            홈으로
           </Button>
         </div>
       </div>
