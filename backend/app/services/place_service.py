@@ -32,6 +32,15 @@ _TOUR_API_AREA_CODES: dict[int, str] = {
     2: "6",  # 부산광역시
 }
 
+# 직접 등록 주소가 여행 지역 범위 안에 있는지 판별할 때 쓰는 시/도 접두어.
+# TourAPI 지역코드와 달리 이건 사용자가 입력한 실제 주소 문자열과 비교해야 해서,
+# regions 테이블의 정식 명칭("서울특별시")이 아니라 주소에 실제로 쓰이는
+# 축약형으로 매칭한다.
+_REGION_ADDRESS_PREFIXES: dict[int, tuple[str, ...]] = {
+    1: ("서울",),  # 서울특별시
+    2: ("부산",),  # 부산광역시
+}
+
 # 명세서에 정확한 숫자가 없어 "최소 1개는 있어야 한다"는 가장 보수적인 기준으로
 # 잠정 구현했다 — 팀 확정 시 이 값만 바꾸면 된다.
 _MIN_TRIP_PLACES = 1
@@ -82,7 +91,6 @@ class PlaceService:
         return PlaceSearchItem(
             place_id=place.id,
             name=result.name,
-            category=result.category,
             address=result.address,
             latitude=result.latitude,
             longitude=result.longitude,
@@ -157,6 +165,14 @@ class PlaceService:
                 ErrorCode.RESOURCE_NOT_FOUND,
                 "여행 일정을 찾을 수 없습니다.",
                 status_code=404,
+            )
+
+        prefixes = _REGION_ADDRESS_PREFIXES.get(trip.region_id)
+        if prefixes and not payload.address.strip().startswith(prefixes):
+            raise AppError(
+                ErrorCode.ADDRESS_NOT_FOUND,
+                f"{trip.region.name} 지역 내 주소만 등록할 수 있어요.",
+                status_code=400,
             )
 
         place = self.places.create(

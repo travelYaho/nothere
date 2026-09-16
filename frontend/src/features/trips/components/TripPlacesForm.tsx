@@ -103,17 +103,28 @@ export function TripPlacesForm() {
       setSearchError(null)
       return
     }
+    let cancelled = false
     setSearching(true)
     const handle = setTimeout(() => {
       searchPlaces(keyword.trim(), trip?.regionId)
         .then((items) => {
+          if (cancelled) return
           setResults(items)
           setSearchError(null)
         })
-        .catch((err) => setSearchError(toErrorMessage(err)))
-        .finally(() => setSearching(false))
+        .catch((err) => {
+          if (cancelled) return
+          setSearchError(toErrorMessage(err))
+        })
+        .finally(() => {
+          if (cancelled) return
+          setSearching(false)
+        })
     }, SEARCH_DEBOUNCE_MS)
-    return () => clearTimeout(handle)
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
   }, [keyword, searchOpen, trip?.regionId])
 
   const handleDrop = useCallback(

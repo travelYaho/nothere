@@ -85,9 +85,7 @@ export function SearchBottomSheet({
                     <div className="size-12 shrink-0 rounded-[12px] bg-surface-chip" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[14px] font-bold text-ink">{place.name}</p>
-                      <p className="truncate text-[11px] font-medium text-ink-faint">
-                        {[place.category, place.address].filter(Boolean).join(" · ")}
-                      </p>
+                      <p className="truncate text-[11px] font-medium text-ink-faint">{place.address}</p>
                     </div>
                     <button
                       disabled={isAdded || isPending}

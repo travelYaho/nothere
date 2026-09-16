@@ -43,6 +43,16 @@ def explore_guides(
     )
 
 
+@router.get("/mine", response_model=ApiResponse[ExploreDataResponse])
+def my_guides(
+    page: int = Query(default=1, ge=1),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[ExploreDataResponse]:
+    """내가 만든(공유한) 가이드북 목록을 반환한다 — 보관함의 '가이드북' 탭이 쓴다."""
+    return ApiResponse(data=GuideService(db).list_mine(current_user, page=page))
+
+
 @router.get("/filters", response_model=ApiResponse[FiltersDataResponse])
 def guide_filters(
     current_user: CurrentUser = Depends(get_current_user),

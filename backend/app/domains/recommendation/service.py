@@ -453,7 +453,11 @@ class RecommendationService:
     def apply_replacement(
         self, trip_place_id: UUID, candidate_id: UUID, user: CurrentUser
     ) -> dict:
-        tp = self.repo.get_trip_place(trip_place_id)
+        # 같은 trip_place에 대한 교체 적용/취소가 동시에 겹치지 않도록 첫 조회에서부터
+        # 잠근다 — 아래 모든 검증·변경은 이 잠금 이후 값 기준이다. get_trip_place()로 먼저
+        # 읽은 뒤 이 메서드를 또 부르면 identity map 때문에 잠금이 무의미해지므로, 이
+        # trip_place에 대한 유일한 조회로 쓴다.
+        tp = self.repo.get_trip_place_for_update(trip_place_id)
         if tp is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정 장소를 찾을 수 없습니다.", 404)
         trip = self.repo.get_trip_owned(tp.trip_id, user.id)
@@ -462,7 +466,10 @@ class RecommendationService:
         if tp.is_fixed:
             raise AppError(ErrorCode.CONFLICT, "고정된 장소는 교체할 수 없습니다.", 409)
 
-        cand = self.repo.get_candidate(candidate_id)
+        # candidate_id가 실제로 이 trip_place의 추천 요청에서 나온 것인지까지 확인한다 —
+        # id만으로 조회하면 다른 trip_place(다른 사용자 포함)의 candidate_id도 그대로
+        # 통과해서 적용될 수 있었다.
+        cand = self.repo.get_candidate_for_trip_place(candidate_id, tp.id)
         if cand is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "후보를 찾을 수 없습니다.", 404)
         ranking = self.repo.get_ranking_by_candidate(candidate_id)
@@ -523,20 +530,46 @@ class RecommendationService:
         replacement = self.repo.get_replacement(replacement_id)
         if replacement is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "교체 이력을 찾을 수 없습니다.", 404)
-        if replacement.reverted_at is not None:
-            raise AppError(ErrorCode.CONFLICT, "이미 되돌린 교체입니다.", 409)
 
-        tp = self.repo.get_trip_place(replacement.trip_place_id)
+        # apply_replacement()와 동일하게, 이 trip_place에 대한 유일한 조회로 잠근다.
+        tp = self.repo.get_trip_place_for_update(replacement.trip_place_id)
         if tp is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정 장소를 찾을 수 없습니다.", 404)
         trip = self.repo.get_trip_owned(tp.trip_id, user.id)
         if trip is None:
             raise AppError(ErrorCode.FORBIDDEN, "접근 권한이 없습니다.", 403)
 
+        if replacement.reverted_at is not None:
+            raise AppError(ErrorCode.CONFLICT, "이미 되돌린 교체입니다.", 409)
+
+        # place_id 비교만으로는 "최신 교체"를 판별할 수 없다 — A→B→C→B처럼 같은 장소로
+        # 되돌아오는 이력이면 오래된 교체(A→B)도 현재 place_id와 같아서 통과해버린다.
+        # 이 trip_place에서 아직 안 되돌린 가장 최근 교체인지 직접 조회해서만 취소를
+        # 허용한다. 위에서 이미 trip_place를 잠근 뒤라 이 조회도 잠금 이후 상태를 본다.
+        active = self.repo.active_replacement(tp.id)
+        if active is None or active.id != replacement.id:
+            raise AppError(
+                ErrorCode.CONFLICT,
+                "이후에 다른 교체가 적용되어 이 교체를 되돌릴 수 없습니다.",
+                409,
+            )
+
         now = datetime.now(timezone.utc)
         replacement.reverted_at = now
         tp.place_id = replacement.from_place_id
-        tp.resolution_status = "pending"
+        # 아래 active_replacement() 재조회가 방금 바꾼 reverted_at을 보게 flush한다
+        # (세션이 autoflush=False라 명시적으로 안 하면 옛 값을 기준으로 조회될 수 있음).
+        self.db.flush()
+
+        # 되돌린 뒤에도 이 trip_place에 아직 안 되돌린 더 오래된 교체가 남아있으면(예:
+        # A→B→C에서 C→B만 되돌린 경우) "replaced" 상태를 유지한다 — 무조건 "pending"으로
+        # 초기화하면 아직 유효한 이전 교체 이력과 화면 상태가 어긋난다.
+        remaining = self.repo.active_replacement(tp.id)
+        tp.resolution_status = "replaced" if remaining is not None else "pending"
+
+        # apply_replacement()와 같은 이유로, 되돌린 장소 기준 분석 결과가 없으면 이전(옛)
+        # 장소의 분석값이 그대로 남아 잘못 보일 수 있다.
+        self.analysis_repo.clear_analysis_for_trip_place(tp.id)
 
         self.repo.log_interaction(
             user_id=user.id,
@@ -550,7 +583,7 @@ class RecommendationService:
         return {
             "replacementId": str(replacement.id),
             "tripPlaceId": str(tp.id),
-            "resolutionStatus": "pending",
+            "resolutionStatus": tp.resolution_status,
             "revertedAt": now.isoformat(),
         }
 
