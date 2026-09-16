@@ -16,6 +16,7 @@ import RecommendationPurpose from "@/pages/RecommendationPurpose"
 import ReplacementPreviewPage from "@/pages/ReplacementPreview"
 import RemainingCongested from "@/pages/RemainingCongested"
 import ConfirmTrip from "@/pages/ConfirmTrip"
+import SavedTrip from "@/pages/SavedTrip"
 import Guidebook from "@/pages/Guidebook"
 import SharedGuide from "@/pages/SharedGuide"
 
@@ -49,6 +50,7 @@ export const router = createBrowserRouter([
       },
       { path: "/trips/:tripId/remaining", element: <RemainingCongested /> },
       { path: "/trips/:tripId/confirm", element: <ConfirmTrip /> },
+      { path: "/trips/:tripId/saved", element: <SavedTrip /> },
       { path: "/trips/:tripId/guide", element: <Guidebook /> },
       { path: "/guide/:token", element: <SharedGuide /> },
     ],

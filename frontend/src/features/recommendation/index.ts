@@ -1,6 +1,7 @@
 export * from "./types/part3"
 export * from "./api/part3Api"
 export * from "./hooks/usePart3"
+export * from "./components/SavedItineraryView"
 export * from "./types/step4step6"
 export * from "./api/step4step6Api"
 export * from "./hooks/useStep4Step6"

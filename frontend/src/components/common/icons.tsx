@@ -109,6 +109,11 @@ export const Doc = (p: IconProps) => (
     <path d="M14 4.5V9h4.5" />
   </svg>
 )
+export const Share = (p: IconProps) => (
+  <svg {...base({ size: 16, ...p })} viewBox="0 0 16 16" strokeWidth={1.5}>
+    <path d="M8 2V10M11 5L8 2L5 5M3 9V12.5A1.5 1.5 0 004.5 14h7a1.5 1.5 0 001.5-1.5V9" />
+  </svg>
+)
 export const Heart = ({
   size = 20,
   filled = false,

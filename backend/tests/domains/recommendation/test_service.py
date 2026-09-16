@@ -1,6 +1,7 @@
 """RecommendationService 동작 검증 (DB/Kakao mock)."""
 from __future__ import annotations
 
+from datetime import date, time
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -265,3 +266,67 @@ def test_apply_replacement_clears_old_analysis_in_same_commit():
     svc.analysis_repo.clear_analysis_for_trip_place.assert_called_once_with(trip_place_id)
     assert call_order == ["clear", "commit"]  # commit 전에 clear가 끝나 있어야 같은 트랜잭션
     assert result["resolutionStatus"] == "replaced"
+
+
+def test_build_guide_includes_saved_itinerary_fields():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    from_place_id = uuid4()
+    to_place_id = uuid4()
+    tp = SimpleNamespace(
+        id=uuid4(),
+        place_id=to_place_id,
+        initial_place_id=from_place_id,
+        position=1,
+        visit_time=time(10, 0),
+        stay_minutes=90,
+    )
+    trip = SimpleNamespace(
+        id=uuid4(),
+        title="서울 서촌 당일치기",
+        travel_date=date(2026, 8, 15),
+        status="confirmed",
+        transport_mode="walk",
+        region=SimpleNamespace(name="서울 종로구"),
+        trip_places=[tp],
+    )
+    replacement = SimpleNamespace(
+        from_place_id=from_place_id,
+        reason_snapshot="혼잡 개선",
+        extra_minutes=12,
+        before_level="high",
+        after_level="low",
+    )
+
+    def get_place(place_id):
+        if place_id == from_place_id:
+            return SimpleNamespace(name="경복궁")
+        return SimpleNamespace(name="서울한방진흥센터 일대")
+
+    svc.repo.get_place = MagicMock(side_effect=get_place)
+    svc.repo.active_replacement = MagicMock(return_value=replacement)
+    svc.repo.guide_entries = MagicMock(
+        return_value=[
+            SimpleNamespace(
+                content=None,
+                image_url="https://example.com/cover.png",
+                display_order=0,
+            )
+        ]
+    )
+    svc.routes.get_leg = MagicMock(return_value=None)
+
+    result = svc.build_guide(trip)
+
+    assert result["regionName"] == "서울 종로구"
+    assert result["coverImageUrl"] == "https://example.com/cover.png"
+    assert result["title"] == "서울 서촌 당일치기"
+    stop = result["stops"][0]
+    assert stop["stayMinutes"] == 90
+    assert stop["visitTime"] == "10:00"
+    assert stop["extraMinutes"] == 12
+    assert stop["beforeLevel"] == "high"
+    assert stop["afterLevel"] == "low"
+    assert stop["wasReplaced"] is True
+    assert stop["replacedFrom"] == "경복궁"
+    assert stop["placeName"] == "서울한방진흥센터 일대"
