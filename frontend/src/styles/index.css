@@ -173,4 +173,18 @@
   .animate-pop-in {
     animation: ymg-pop-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   }
+
+  @keyframes ymg-progress-shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+
+    100% {
+      transform: translateX(350%);
+    }
+  }
+
+  .animate-progress-shimmer {
+    animation: ymg-progress-shimmer 1.1s ease-in-out infinite;
+  }
 }
