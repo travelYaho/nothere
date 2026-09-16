@@ -18,6 +18,7 @@ import RemainingCongested from "@/pages/RemainingCongested"
 import ConfirmTrip from "@/pages/ConfirmTrip"
 import Guidebook from "@/pages/Guidebook"
 import SharedGuide from "@/pages/SharedGuide"
+import MyPage from "@/pages/MyPage"
 
 export const router = createBrowserRouter([
   {
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
       { path: "/trips/:tripId/confirm", element: <ConfirmTrip /> },
       { path: "/trips/:tripId/guide", element: <Guidebook /> },
       { path: "/guide/:token", element: <SharedGuide /> },
+      { path: "/mypage", element: <MyPage /> },
     ],
   },
 ])

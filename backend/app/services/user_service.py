@@ -3,8 +3,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
+from app.repositories.trip_repository import TripRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.user import CurrentUser, UserResponse, UserUpdateRequest
+from app.schemas.user import CurrentUser, UserResponse, UserStatsResponse, UserUpdateRequest
 
 
 class UserService:
@@ -12,6 +13,7 @@ class UserService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.users = UserRepository(db)
+        self.trips = TripRepository(db)
 
     def get_me(self, current_user: CurrentUser) -> UserResponse:
         """인증 의존성에서 만든 CurrentUser 를 API 응답 스키마로 옮긴다."""
@@ -53,3 +55,8 @@ class UserService:
             nickname=profile.nickname,
             profile_image_url=profile.profile_image_url,
         )
+
+    def get_stats(self, current_user: CurrentUser) -> UserStatsResponse:
+        """마이페이지 통계 카드: 일정 생성 시작 수 / 확정까지 간 수."""
+        total, confirmed = self.trips.count_stats(current_user.id)
+        return UserStatsResponse(total_trip_count=total, confirmed_trip_count=confirmed)

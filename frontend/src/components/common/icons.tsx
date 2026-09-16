@@ -138,6 +138,17 @@ export const Sliders = (p: IconProps) => (
     <circle cx="16" cy="18" r="2" />
   </svg>
 )
+export const Check = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M5 13l4 4L19 7" />
+  </svg>
+)
+export const LogOut = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+    <path d="M16 17l5-5-5-5M21 12H9" />
+  </svg>
+)
 export const Dot = ({ size = 8, className }: { size?: number; className?: string }) => (
   <span
     className={className}

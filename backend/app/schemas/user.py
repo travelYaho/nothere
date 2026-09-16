@@ -26,3 +26,9 @@ class CurrentUser(APIModel):
     email: str
     nickname: str
     profile_image_url: str | None = None
+
+
+class UserStatsResponse(APIModel):
+    """마이페이지 통계 카드 응답 — 일정 생성 시작 수 / 확정까지 간 수."""
+    total_trip_count: int
+    confirmed_trip_count: int
