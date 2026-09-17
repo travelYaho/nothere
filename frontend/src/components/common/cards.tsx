@@ -68,6 +68,7 @@ export function CongestionCard({
   place,
   level,
   showActions = true,
+  replacedFrom,
   onAlternative,
   onKeep,
 }: {
@@ -76,29 +77,48 @@ export function CongestionCard({
   level: CongestionLevel
   /** false면 혼잡도가 high여도 대안보기/유지 버튼을 숨긴다(예: 이미 "유지" 처리된 장소). */
   showActions?: boolean
+  /** 있으면 변경됨 뱃지와 "변경 전:" 서브라인을 보여 주고, 빨간 테두리는 쓰지 않는다. */
+  replacedFrom?: string | null
   onAlternative?: () => void
   onKeep?: () => void
 }) {
-  const warn = level === "high"
+  const wasReplaced = Boolean(replacedFrom)
+  const warn = level === "high" && !wasReplaced
   return (
     <div
       className={[
         "rounded-[var(--radius-field)] bg-surface px-4 py-3.5",
         warn
-          ? "border-[0.667px] border-[#eeaaaa] /* shadow-[0_2px_5px_rgba(221,64,64,0.22)] */"
-          : "border-[0.667px] border-transparent shadow-[var(--shadow-card)]",
+          ? "border-[0.667px] border-[#eeaaaa]"
+          : "border-[0.667px] border-transparent shadow-[0px_1px_1px_rgba(0,0,0,0.05)]",
       ].join(" ")}
     >
-      <div className="flex items-center justify-between">
-        <p className="text-[14px] font-bold text-ink">
-          <span className="mr-2 text-[11px] font-semibold text-ink-faint">{time}</span>
-          {place}
-        </p>
-        <CongestionBadge level={level} />
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center">
+          <p className="min-w-0 truncate text-[14px] font-bold leading-[21px] text-ink">
+            <span className="mr-2 text-[11px] font-semibold leading-[16.5px] text-ink-faint">
+              {time}
+            </span>
+            {place}
+          </p>
+          {wasReplaced && (
+            <span className="ml-1.5 shrink-0 rounded-md bg-[#E5EDFF] px-1.5 py-0.5 text-[10px] font-bold leading-[15px] text-[#1864F5]">
+              변경됨
+            </span>
+          )}
+        </div>
+        <span className="shrink-0">
+          <CongestionBadge level={level} />
+        </span>
       </div>
+      {wasReplaced && (
+        <p className="pt-1 pl-[42px] text-[11px] font-normal leading-[16.5px] text-ink-faint">
+          변경 전: {replacedFrom}
+        </p>
+      )}
       {warn && showActions && (
         <div className="flex gap-2 pt-3">
-          <Button block onClick={onAlternative}>
+          <Button variant="accent" onClick={onAlternative} className="min-w-0 flex-1">
             대안 보기
           </Button>
           <Button variant="ghost" onClick={onKeep} className="w-[68px] shrink-0 text-[15px] font-bold">
@@ -242,8 +262,15 @@ export function GuidebookCard({
   onToggleLike?: () => void
 }) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return
+        e.preventDefault()
+        onClick?.()
+      }}
       className="w-full overflow-hidden rounded-[var(--radius-field)] bg-surface text-left shadow-[var(--shadow-card)] transition-transform active:scale-[0.99]"
     >
       <div className="relative h-[140px] w-full bg-surface-chip">
@@ -280,7 +307,7 @@ export function GuidebookCard({
           </span>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 

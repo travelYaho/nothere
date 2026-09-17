@@ -37,7 +37,11 @@ export function BasicHeader({
     <header className="flex items-center justify-between bg-canvas/95 px-5 py-2.5 backdrop-blur">
       <div className="flex items-center gap-2">
         {onBack !== undefined && (
-          <button onClick={onBack} className="-ml-1 rounded-full p-1 text-ink hover:bg-ink/5">
+          <button
+            onClick={onBack}
+            aria-label="뒤로가기"
+            className="-ml-1 rounded-full p-1 text-ink hover:bg-ink/5"
+          >
             <ChevronLeft size={22} />
           </button>
         )}
@@ -57,8 +61,8 @@ export function FlowHeader({
   subline,
 }: {
   title: string
-  step: number
-  totalSteps: number
+  step?: number
+  totalSteps?: number
   progress: number // 0..1
   onBack?: () => void
   subline?: React.ReactNode
@@ -72,9 +76,11 @@ export function FlowHeader({
           </button>
           <h1 className="text-[16px] font-extrabold tracking-[-0.32px] text-ink">{title}</h1>
         </div>
-        <span className="text-[13px] font-semibold text-ink-faint">
-          {step} / {totalSteps}
-        </span>
+        {step !== undefined && totalSteps !== undefined && (
+          <span className="text-[13px] font-semibold text-ink-faint">
+            {step} / {totalSteps}
+          </span>
+        )}
       </div>
       <div className="mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-[#dbe3f0]">
         <div
@@ -94,11 +100,12 @@ const TABS = [
   { key: "my", label: "마이", Icon: User },
 ] as const
 
-/** BottomTab 키 → 라우트. "마이"는 아직 화면이 없어 제외했다. */
+/** BottomTab 키 → 라우트. */
 const TAB_ROUTES: Record<string, string> = {
   home: "/home",
   create: "/trips/new",
   saved: "/bookmarks",
+  my: "/mypage",
 }
 
 /** BottomTab 클릭을 실제 라우팅으로 연결하는 공용 훅. */
@@ -118,7 +125,7 @@ export function BottomTab({
   onChange?: (key: string) => void
 }) {
   return (
-    <nav className="flex items-start border-t-[0.667px] border-line-soft bg-surface pb-5 pt-2">
+    <nav className="sticky bottom-0 z-10 flex items-start border-t-[0.667px] border-line-soft bg-surface pb-5 pt-2">
       {TABS.map(({ key, label, Icon }) => {
         const on = key === active
         return (

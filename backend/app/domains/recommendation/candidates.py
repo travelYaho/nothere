@@ -241,6 +241,7 @@ class CandidateSource:
     area_cd: str | None = None
     signgu_cd: str | None = None
     category_code: str | None = None
+    address: str | None = None
     from_tour_api: bool = False
 
 
@@ -274,6 +275,7 @@ def generate_candidates(
                 area_cd=item.area_cd,
                 signgu_cd=item.signgu_cd,
                 category_code=item.category_code,
+                address=item.address,
                 from_tour_api=True,
             )
             for item in tour_items

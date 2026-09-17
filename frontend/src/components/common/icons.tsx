@@ -50,6 +50,12 @@ export const Close = (p: IconProps) => (
     <path d="M6 6l12 12M18 6L6 18" />
   </svg>
 )
+export const Pencil = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+)
 export const Search = (p: IconProps) => (
   <svg {...base(p)}>
     <circle cx="11" cy="11" r="7" />
@@ -103,6 +109,17 @@ export const Grip = (p: IconProps) => (
     <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" />
   </svg>
 )
+export const Doc = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M7 4.5h7l4 4V19.5a2 2 0 01-2 2H7a2 2 0 01-2-2v-13a2 2 0 012-2z" />
+    <path d="M14 4.5V9h4.5" />
+  </svg>
+)
+export const Share = (p: IconProps) => (
+  <svg {...base({ size: 16, ...p })} viewBox="0 0 16 16" strokeWidth={1.5}>
+    <path d="M8 2V10M11 5L8 2L5 5M3 9V12.5A1.5 1.5 0 004.5 14h7a1.5 1.5 0 001.5-1.5V9" />
+  </svg>
+)
 export const Heart = ({
   size = 20,
   filled = false,
@@ -130,6 +147,17 @@ export const Sliders = (p: IconProps) => (
     <circle cx="13" cy="6" r="2" />
     <circle cx="6" cy="12" r="2" />
     <circle cx="16" cy="18" r="2" />
+  </svg>
+)
+export const Check = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M5 13l4 4L19 7" />
+  </svg>
+)
+export const LogOut = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+    <path d="M16 17l5-5-5-5M21 12H9" />
   </svg>
 )
 export const Dot = ({ size = 8, className }: { size?: number; className?: string }) => (

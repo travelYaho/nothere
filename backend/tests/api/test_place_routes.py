@@ -35,7 +35,7 @@ def test_search_places_returns_data_envelope(client):
         "app.services.place_service.PlaceRepository"
     ) as MockPlaceRepo:
         mock_search.return_value = [
-            TourApiPlace(content_id="126508", name="경복궁", category="역사·문화",
+            TourApiPlace(content_id="126508", name="경복궁",
                          address="서울 종로구", latitude=37.579617, longitude=126.977041)
         ]
         MockPlaceRepo.return_value.get_or_create.return_value = MagicMock(

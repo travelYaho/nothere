@@ -119,6 +119,7 @@ class PlaceRepository:
         latitude: float | None,
         region_id: int | None = None,
         is_recommendable: bool = True,
+        address: str | None = None,
         area_cd: str | None = None,
         signgu_cd: str | None = None,
     ) -> Place:
@@ -145,6 +146,7 @@ class PlaceRepository:
                 longitude=longitude,
                 latitude=latitude,
                 is_recommendable=is_recommendable,
+                address=address,
                 area_cd=area_cd,
                 signgu_cd=signgu_cd,
             )
@@ -161,6 +163,7 @@ class PlaceRepository:
             name=name,
             location=location,
             is_recommendable=is_recommendable,
+            address=address,
             area_cd=area_cd,
             signgu_cd=signgu_cd,
         )

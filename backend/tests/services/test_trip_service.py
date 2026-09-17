@@ -159,3 +159,45 @@ def test_weights_follow_click_order_1_0_7_0_5():
     kwargs = service.trips.create_trip.call_args.kwargs
     assert kwargs["preferred_experience_tag_ids"] == [6, 1, 3]
     assert kwargs["preferred_experience_weights"] == (1.0, 0.7, 0.5)
+
+
+def _fake_trip_row(status="draft"):
+    trip = MagicMock()
+    trip.id = uuid4()
+    trip.title = "제주도 여행"
+    trip.travel_date = TOMORROW
+    trip.status = status
+    trip.region.name = "제주"
+    return trip
+
+
+def test_list_trips_maps_rows_and_forwards_filter():
+    service = _service_with_mocks()
+    service.trip_places = MagicMock()
+    service.trip_places.count_by_trip.return_value = 2
+    trip = _fake_trip_row("confirmed")
+    service.trips.list_by_user.return_value = ([trip], 1)
+    current_user = _current_user()
+
+    result = service.list_trips(current_user, status_filter="confirmed", page=1)
+
+    service.trips.list_by_user.assert_called_once_with(
+        current_user.id, status_filter="confirmed", page=1
+    )
+    assert result.page == 1
+    assert result.total_count == 1
+    assert len(result.trips) == 1
+    assert result.trips[0].trip_id == trip.id
+    assert result.trips[0].place_count == 2
+    assert result.trips[0].resume_url == f"/trips/{trip.id}/guide"
+
+
+def test_list_trips_has_next_true_when_more_remain():
+    service = _service_with_mocks()
+    service.trip_places = MagicMock()
+    service.trip_places.count_by_trip.return_value = 0
+    service.trips.list_by_user.return_value = ([_fake_trip_row()], 15)
+
+    result = service.list_trips(_current_user(), status_filter=None, page=1)
+
+    assert result.has_next is True  # page(1) * PAGE_SIZE(10) = 10 < 15

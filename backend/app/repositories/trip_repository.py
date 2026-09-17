@@ -2,11 +2,12 @@
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import desc, nulls_last
+from sqlalchemy import desc, func, nulls_last, select
 from sqlalchemy.orm import Session
 
 from app.db.models.preference import TripPreferredExperience
 from app.db.models.trip import IN_PROGRESS_STATUSES, Trip
+from app.db.models.trip_place import TripPlace
 
 _CONDITION_FIELDS = (
     "title",
@@ -16,6 +17,23 @@ _CONDITION_FIELDS = (
     "transport_mode",
     "extra_time_limit_minutes",
 )
+
+PAGE_SIZE = 10
+
+
+def _recency_expr():
+    """"최근 작업 순" 정렬 기준. Trip.updated_at 은 장소 추가/삭제/방문시간
+    수정처럼 TripPlace 만 바뀌는 액션에서는 안 갱신되므로(그 액션들은 trip
+    행 자체를 건드리지 않는다), 등록된 장소 중 가장 최근에 손댄 시각과
+    비교해 더 늦은 쪽을 쓴다.
+    """
+    latest_place_update = (
+        select(func.max(TripPlace.updated_at))
+        .where(TripPlace.trip_id == Trip.id)
+        .correlate(Trip)
+        .scalar_subquery()
+    )
+    return func.greatest(Trip.updated_at, func.coalesce(latest_place_update, Trip.updated_at))
 
 
 class TripRepository:
@@ -107,16 +125,16 @@ class TripRepository:
         self.db.delete(trip)
         self.db.commit()
 
-    # 진행 중 여행 1건: DRAFT/ANALYZED/EDITING 중 updated_at 최신 (홈 draftSchedule용)
+    # 진행 중 여행 1건: DRAFT/ANALYZED/EDITING 중 최근 작업순 (홈 draftSchedule용)
     def get_in_progress(self, user_id: UUID) -> Trip | None:
         return (
             self.db.query(Trip)
             .filter(Trip.user_id == user_id, Trip.status.in_(IN_PROGRESS_STATUSES))
-            .order_by(desc(Trip.updated_at))
+            .order_by(desc(_recency_expr()))
             .first()
         )
 
-    # 최근 여행 목록: 진행 중 제외, travel_date/updated_at 내림차순 (홈 recentSchedules용)
+    # 최근 여행 목록: 진행 중 제외, travel_date 내림차순(동률이면 최근 작업순) (홈 recentSchedules용)
     def get_recent(
         self,
         user_id: UUID,
@@ -133,7 +151,43 @@ class TripRepository:
         if exclude_id is not None:
             query = query.filter(Trip.id != exclude_id)
         return (
-            query.order_by(nulls_last(desc(Trip.travel_date)), desc(Trip.updated_at))
+            query.order_by(nulls_last(desc(Trip.travel_date)), desc(_recency_expr()))
             .limit(limit)
             .all()
         )
+
+    # 보관함 "일정" 탭용 목록 조회. status_filter 는 "draft"(작성 중, IN_PROGRESS_STATUSES)
+    # 또는 "confirmed"(그 외) 중 하나이거나, None 이면 전체.
+    def list_by_user(
+        self,
+        user_id: UUID,
+        *,
+        status_filter: str | None,
+        page: int,
+    ) -> tuple[list[Trip], int]:
+        query = self.db.query(Trip).filter(Trip.user_id == user_id)
+        if status_filter == "draft":
+            query = query.filter(Trip.status.in_(IN_PROGRESS_STATUSES))
+        elif status_filter == "confirmed":
+            query = query.filter(~Trip.status.in_(IN_PROGRESS_STATUSES))
+
+        total_count = query.count()
+        rows = (
+            query.order_by(desc(_recency_expr()))
+            .offset((page - 1) * PAGE_SIZE)
+            .limit(PAGE_SIZE)
+            .all()
+        )
+        return rows, total_count
+
+    # 마이페이지 통계: (일정 생성을 시작한 전체 Trip 수, 확정까지 간 적 있는 Trip 수)
+    def count_stats(self, user_id: UUID) -> tuple[int, int]:
+        total = (
+            self.db.query(func.count(Trip.id)).filter(Trip.user_id == user_id).scalar()
+        )
+        confirmed = (
+            self.db.query(func.count(Trip.id))
+            .filter(Trip.user_id == user_id, Trip.confirmed_at.isnot(None))
+            .scalar()
+        )
+        return total or 0, confirmed or 0

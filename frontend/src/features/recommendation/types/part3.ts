@@ -22,26 +22,35 @@ export type RouteScoresResponse = {
   candidates: RouteScoredCandidate[]
 }
 
+export type CompareCandidateTag = {
+  id: number
+  name: string
+}
+
+export type CompareCandidate = {
+  candidateId: string
+  placeName: string
+  experienceScore: number
+  routeScore: number
+  congestionLevel: CongestionLevelApi
+  congestionImprovement: string
+  extraMinutes: number | null
+  distancePrevM: number | null
+  distanceNextM: number | null
+  reasonText: string | null
+  isEligible: boolean
+  exclusionReason: string | null
+  tags?: CompareCandidateTag[]
+  address?: string | null
+}
+
 export type CompareCandidatesResponse = {
   originalPlace: {
     placeId: string
     name: string
     congestionLevel: CongestionLevelApi
   }
-  candidates: {
-    candidateId: string
-    placeName: string
-    experienceScore: number
-    routeScore: number
-    congestionLevel: CongestionLevelApi
-    congestionImprovement: string
-    extraMinutes: number | null
-    distancePrevM: number | null
-    distanceNextM: number | null
-    reasonText: string | null
-    isEligible: boolean
-    exclusionReason: string | null
-  }[]
+  candidates: CompareCandidate[]
   requestId: string
   tripPlaceId: string
 }
@@ -78,20 +87,28 @@ export type ConfirmResponse = {
   confirmedAt: string
 }
 
+export type GuideStop = {
+  position: number
+  placeName: string
+  visitTime: string | null
+  stayMinutes?: number | null
+  wasReplaced: boolean
+  replacedFrom: string | null
+  replaceReason: string | null
+  extraMinutes?: number | null
+  beforeLevel?: string | null
+  afterLevel?: string | null
+  travelToNext: { distanceM: number; durationMin: number } | null
+}
+
 export type GuideResponse = {
   tripId: string
   title: string
   travelDate: string | null
+  regionName?: string | null
   status: string
-  stops: {
-    position: number
-    placeName: string
-    visitTime: string | null
-    wasReplaced: boolean
-    replacedFrom: string | null
-    replaceReason: string | null
-    travelToNext: { distanceM: number; durationMin: number } | null
-  }[]
+  coverImageUrl?: string | null
+  stops: GuideStop[]
   entries: { content: string | null; imageUrl: string | null; displayOrder: number | null }[]
 }
 

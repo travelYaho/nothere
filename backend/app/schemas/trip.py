@@ -85,3 +85,26 @@ class TripDetailResponse(APIModel):
     needs_reanalysis: bool
     preferred_experience_tag_ids: list[int]
     places: list[TripPlaceDetail]
+
+
+class TripSummaryResponse(APIModel):
+    """GET /trips 목록 카드 한 건 — 보관함 "일정" 탭이 쓴다.
+
+    schemas/home.py 의 ScheduleSummary 와 필드 구성이 같다(id 필드명만 다름) —
+    app/services/trip_summary.py 에서 계산 로직을 공유한다.
+    """
+    trip_id: UUID
+    title: str
+    travel_date: date | None
+    region_name: str
+    place_count: int
+    status: str
+    resume_url: str
+
+
+class TripListResponse(APIModel):
+    """GET /trips 200 응답."""
+    trips: list[TripSummaryResponse]
+    page: int
+    has_next: bool
+    total_count: int

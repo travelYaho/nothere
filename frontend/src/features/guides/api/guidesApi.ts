@@ -25,6 +25,10 @@ export function exploreGuides(params: ExploreGuidesParams = {}) {
   })
 }
 
+export function listMyGuides(page = 1) {
+  return apiClient.get<ExploreResponse>("/guides/mine", { page })
+}
+
 export function getGuideFilters() {
   return apiClient.get<FiltersResponse>("/guides/filters")
 }

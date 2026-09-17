@@ -53,8 +53,10 @@ export function GuideLikedView() {
 
   async function handleUnlike(guide: GuideCard) {
     // 이 화면은 "좋아요한 것만" 모아보는 목록이라, 취소하면 카드 자체가 빠진다.
+    // (공개 갤러리에서 좋아요한 것만 오는 목록이라 token 은 항상 있다.)
+    if (!guide.token) return
     const previous = guides
-    setGuides((prev) => prev.filter((g) => g.token !== guide.token))
+    setGuides((prev) => prev.filter((g) => g.tripId !== guide.tripId))
     setTotalCount((c) => Math.max(0, c - 1))
     try {
       await unlikeGuide(guide.token)
@@ -109,7 +111,7 @@ export function GuideLikedView() {
           <div className="flex flex-col gap-2.5">
             {guides.map((guide) => (
               <GuidebookCard
-                key={guide.token}
+                key={guide.tripId}
                 title={guide.title}
                 regionName={guide.regionName}
                 placeCount={guide.placeCount}

@@ -160,6 +160,7 @@ class RecommendationService:
                 name=source.name,
                 longitude=source.longitude,
                 latitude=source.latitude,
+                address=source.address,
                 area_cd=source.area_cd,
                 signgu_cd=source.signgu_cd,
             )
@@ -356,6 +357,9 @@ class RecommendationService:
                 400,
             )
 
+        tags_map = self.repo.list_place_tags_map(
+            [cand.candidate_place_id for cand, *_ in scored]
+        )
         candidates = []
         for cand, ranking, route, reason in scored:
             place = self.repo.get_place(cand.candidate_place_id)
@@ -378,6 +382,8 @@ class RecommendationService:
                     "reasonText": reason_text,
                     "isEligible": reason.is_eligible if reason else False,
                     "exclusionReason": reason.exclusion_reason if reason else None,
+                    "tags": tags_map.get(cand.candidate_place_id, []),
+                    "address": place.address if place else None,
                 }
             )
 
@@ -616,14 +622,6 @@ class RecommendationService:
         trip = self.repo.get_trip_owned(trip_id, user.id)
         if trip is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정을 찾을 수 없습니다.", 404)
-        remaining = self.repo.remaining_congested(trip_id)
-        if remaining:
-            raise AppError(
-                ErrorCode.UNRESOLVED_CONGESTED_PLACES,
-                "아직 해결되지 않은 혼잡 장소가 있습니다.",
-                409,
-                extra={"pendingCount": len(remaining)},
-            )
         now = datetime.now(timezone.utc)
         trip.status = "confirmed"
         trip.confirmed_at = now
@@ -659,10 +657,16 @@ class RecommendationService:
                     }
             replaced_from = None
             replace_reason = None
+            extra_minutes = None
+            before_level = None
+            after_level = None
             if active:
                 from_place = self.repo.get_place(active.from_place_id)
                 replaced_from = from_place.name if from_place else None
                 replace_reason = active.reason_snapshot
+                extra_minutes = active.extra_minutes
+                before_level = active.before_level
+                after_level = active.after_level
             elif tp.initial_place_id and tp.initial_place_id != tp.place_id:
                 from_place = self.repo.get_place(tp.initial_place_id)
                 replaced_from = from_place.name if from_place else None
@@ -674,28 +678,38 @@ class RecommendationService:
                     "position": tp.position,
                     "placeName": place.name if place else "",
                     "visitTime": visit,
+                    "stayMinutes": tp.stay_minutes,
                     "wasReplaced": replaced_from is not None,
                     "replacedFrom": replaced_from,
                     "replaceReason": replace_reason,
+                    "extraMinutes": extra_minutes,
+                    "beforeLevel": before_level,
+                    "afterLevel": after_level,
                     "travelToNext": travel_to_next,
                 }
             )
 
+        entries = self.repo.guide_entries(trip.id)
         ugc = [
             {
                 "content": e.content,
                 "imageUrl": e.image_url,
                 "displayOrder": e.display_order,
             }
-            for e in self.repo.guide_entries(trip.id)
+            for e in entries
             if e.content or e.image_url
         ]
+        cover_image_url = next((e.image_url for e in entries if e.image_url), None)
+        region = getattr(trip, "region", None)
+        region_name = region.name if region is not None else None
 
         return {
             "tripId": str(trip.id),
             "title": trip.title,
             "travelDate": trip.travel_date.isoformat() if trip.travel_date else None,
+            "regionName": region_name,
             "status": trip.status,
+            "coverImageUrl": cover_image_url,
             "stops": stops,
             "entries": ugc,
         }

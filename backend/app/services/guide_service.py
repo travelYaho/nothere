@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
 from app.db.models.share_link import ShareLinkVisibility
-from app.repositories.guide_repository import PAGE_SIZE, GuideRepository
+from app.repositories.guide_repository import PAGE_SIZE, GuideCard, GuideRepository
 from app.schemas.guide import (
     ExploreDataResponse,
     FilterOption,
@@ -39,9 +39,19 @@ class GuideService:
             page=page,
             liked_only=liked_only,
         )
+        return self._to_explore_response(cards, page=page, total_count=total_count)
+
+    def list_mine(self, current_user: CurrentUser, *, page: int) -> ExploreDataResponse:
+        cards, total_count = self.guides.list_owned(owner_id=current_user.id, page=page)
+        return self._to_explore_response(cards, page=page, total_count=total_count)
+
+    def _to_explore_response(
+        self, cards: list[GuideCard], *, page: int, total_count: int
+    ) -> ExploreDataResponse:
         return ExploreDataResponse(
             guides=[
                 GuideCardResponse(
+                    trip_id=card.trip_id,
                     token=card.token,
                     title=card.title,
                     region_name=card.region_name,

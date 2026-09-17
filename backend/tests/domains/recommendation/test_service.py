@@ -1,6 +1,7 @@
 """RecommendationService 동작 검증 (DB/Kakao mock)."""
 from __future__ import annotations
 
+from datetime import date, time
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -9,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from app.clients.kakao_mobility import RouteResult
-from app.core.exceptions import AppError, ErrorCode
+from app.core.exceptions import AppError
 from app.domains.recommendation.service import RecommendationService
 from app.schemas.user import CurrentUser
 
@@ -18,24 +19,32 @@ def _user() -> CurrentUser:
     return CurrentUser(id=uuid4(), email="t@example.com", nickname="테스터", profile_image_url=None)
 
 
-def test_confirm_raises_when_pending_congested():
+def test_confirm_succeeds_when_pending_congested():
     db = MagicMock()
     svc = RecommendationService(db)
     trip_id = uuid4()
     user = _user()
-    trip = SimpleNamespace(id=trip_id, user_id=user.id, places=[])
+    trip = SimpleNamespace(
+        id=trip_id,
+        user_id=user.id,
+        trip_places=[SimpleNamespace(id=uuid4())],
+        status="draft",
+        confirmed_at=None,
+    )
 
     svc.repo.get_trip_owned = MagicMock(return_value=trip)
     svc.repo.remaining_congested = MagicMock(
         return_value=[(SimpleNamespace(id=uuid4()), SimpleNamespace(level="high"))]
     )
+    svc.repo.log_interaction = MagicMock()
 
-    with pytest.raises(AppError) as exc:
-        svc.confirm(trip_id, user)
+    result = svc.confirm(trip_id, user)
 
-    assert exc.value.status_code == 409
-    assert exc.value.code == ErrorCode.UNRESOLVED_CONGESTED_PLACES
-    assert exc.value.extra.get("pendingCount") == 1
+    assert result["status"] == "confirmed"
+    assert trip.status == "confirmed"
+    assert trip.confirmed_at is not None
+    db.commit.assert_called_once()
+    svc.repo.log_interaction.assert_called_once()
 
 
 def test_get_candidates_requires_prior_scoring():
@@ -62,6 +71,60 @@ def test_get_candidates_requires_prior_scoring():
 
     assert exc.value.status_code == 400
     assert "경로 점수" in exc.value.message
+
+
+def test_get_candidates_includes_tags_and_address():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    request_id = uuid4()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    cand_place_id = uuid4()
+    candidate_id = uuid4()
+
+    req = SimpleNamespace(id=request_id, trip_place_id=trip_place_id, status="success")
+    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4())
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+    cand = SimpleNamespace(
+        id=candidate_id,
+        candidate_place_id=cand_place_id,
+        experience_score=Decimal("0.8000"),
+        congestion_level="low",
+    )
+    ranking = SimpleNamespace(route_score=Decimal("0.7000"))
+    route = SimpleNamespace(extra_minutes=12, distance_prev_m=2400, distance_next_m=3100)
+    reason = SimpleNamespace(
+        recommend_reason="기존 방문 목적과 유사해요",
+        not_recommend_reason=None,
+        is_eligible=True,
+        exclusion_reason=None,
+    )
+
+    svc.repo.get_request = MagicMock(return_value=req)
+    svc.repo.get_trip_place = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_place = MagicMock(
+        side_effect=lambda pid: SimpleNamespace(
+            name="서울한방진흥센터" if pid == cand_place_id else "경복궁",
+            address="서울 동대문구 약령시로 21" if pid == cand_place_id else None,
+        )
+    )
+    svc.repo.latest_analysis = MagicMock(return_value=SimpleNamespace(level="high"))
+    svc.repo.list_scored_for_request = MagicMock(return_value=[(cand, ranking, route, reason)])
+    svc.repo.list_place_tags_map = MagicMock(
+        return_value={cand_place_id: [{"id": 2, "name": "역사·문화"}, {"id": 4, "name": "사진·전망"}]}
+    )
+
+    result = svc.get_candidates(request_id, user)
+
+    assert result["originalPlace"]["name"] == "경복궁"
+    assert result["candidates"][0]["address"] == "서울 동대문구 약령시로 21"
+    assert result["candidates"][0]["tags"] == [
+        {"id": 2, "name": "역사·문화"},
+        {"id": 4, "name": "사진·전망"},
+    ]
+    svc.repo.list_place_tags_map.assert_called_once()
 
 
 def test_score_routes_returns_route_score_without_rank_or_total():
@@ -365,3 +428,67 @@ def test_revert_replacement_rejects_when_already_reverted():
         svc.revert_replacement(replacement_id, user)
 
     assert exc.value.status_code == 409
+
+
+def test_build_guide_includes_saved_itinerary_fields():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    from_place_id = uuid4()
+    to_place_id = uuid4()
+    tp = SimpleNamespace(
+        id=uuid4(),
+        place_id=to_place_id,
+        initial_place_id=from_place_id,
+        position=1,
+        visit_time=time(10, 0),
+        stay_minutes=90,
+    )
+    trip = SimpleNamespace(
+        id=uuid4(),
+        title="서울 서촌 당일치기",
+        travel_date=date(2026, 8, 15),
+        status="confirmed",
+        transport_mode="walk",
+        region=SimpleNamespace(name="서울 종로구"),
+        trip_places=[tp],
+    )
+    replacement = SimpleNamespace(
+        from_place_id=from_place_id,
+        reason_snapshot="혼잡 개선",
+        extra_minutes=12,
+        before_level="high",
+        after_level="low",
+    )
+
+    def get_place(place_id):
+        if place_id == from_place_id:
+            return SimpleNamespace(name="경복궁")
+        return SimpleNamespace(name="서울한방진흥센터 일대")
+
+    svc.repo.get_place = MagicMock(side_effect=get_place)
+    svc.repo.active_replacement = MagicMock(return_value=replacement)
+    svc.repo.guide_entries = MagicMock(
+        return_value=[
+            SimpleNamespace(
+                content=None,
+                image_url="https://example.com/cover.png",
+                display_order=0,
+            )
+        ]
+    )
+    svc.routes.get_leg = MagicMock(return_value=None)
+
+    result = svc.build_guide(trip)
+
+    assert result["regionName"] == "서울 종로구"
+    assert result["coverImageUrl"] == "https://example.com/cover.png"
+    assert result["title"] == "서울 서촌 당일치기"
+    stop = result["stops"][0]
+    assert stop["stayMinutes"] == 90
+    assert stop["visitTime"] == "10:00"
+    assert stop["extraMinutes"] == 12
+    assert stop["beforeLevel"] == "high"
+    assert stop["afterLevel"] == "low"
+    assert stop["wasReplaced"] is True
+    assert stop["replacedFrom"] == "경복궁"
+    assert stop["placeName"] == "서울한방진흥센터 일대"

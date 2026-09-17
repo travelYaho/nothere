@@ -2,21 +2,49 @@
  * Home — 홈(로그인) 화면.
  * Figma: 여기말GO / node 48:1966 "홈 (로그인)"
  */
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowRight, Bell, Heart, MapPin, Plus } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
+import { getHomeSummary } from "@/features/trips/api/tripsApi"
+import { formatScheduleMeta } from "@/features/trips/utils/scheduleMeta"
+import type { ScheduleSummary } from "@/features/trips/types"
+import { ApiError } from "@/types/api"
 
-const CONTINUE_SCHEDULE = { title: "서울 서촌 당일치기", meta: "2026년 8월 14일 | 4곳 등록" }
-const MY_SCHEDULES = [
-  { title: "전주 당일치기", meta: "2026년 8월 12일 | 4곳 등록" },
-  { title: "경주 당일치기", meta: "2026년 8월 10일 | 4곳 등록" },
-]
+function toErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  return "일정을 불러오지 못했습니다."
+}
 
 export default function Home() {
   const navigate = useNavigate()
   const handleTabChange = useBottomTabNav()
+
+  const [draftSchedule, setDraftSchedule] = useState<ScheduleSummary | null>(null)
+  const [recentSchedules, setRecentSchedules] = useState<ScheduleSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getHomeSummary()
+      .then((res) => {
+        if (cancelled) return
+        setDraftSchedule(res.draftSchedule)
+        setRecentSchedules(res.recentSchedules)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(toErrorMessage(err))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <div className="flex flex-1 flex-col">
@@ -74,21 +102,49 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="px-4 pb-2">
-        <h2 className="text-[15px] font-extrabold tracking-[-0.3px] text-ink">이어서 점검하기</h2>
-        <div className="mt-2.5">
-          <ScheduleCard index={1} active {...CONTINUE_SCHEDULE} />
+      {error && (
+        <p className="px-4 pb-2 text-[12px] font-medium text-congestion-high">{error}</p>
+      )}
+
+      {!loading && draftSchedule && (
+        <div className="px-4 pb-2">
+          <h2 className="text-[15px] font-extrabold tracking-[-0.3px] text-ink">이어서 점검하기</h2>
+          <div className="mt-2.5">
+            <ScheduleCard
+              index={1}
+              active
+              title={draftSchedule.title}
+              meta={formatScheduleMeta(draftSchedule)}
+              onClick={() => navigate(draftSchedule.resumeUrl)}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex-1 px-4 pb-4">
         <div className="flex items-center justify-between">
           <h2 className="text-[15px] font-extrabold tracking-[-0.3px] text-ink">내 일정</h2>
-          <button className="text-[11px] font-bold text-primary">더보기</button>
+          <button
+            className="text-[11px] font-bold text-primary"
+            onClick={() => navigate("/bookmarks")}
+          >
+            더보기
+          </button>
         </div>
         <div className="mt-2.5 flex flex-col gap-2.5">
-          {MY_SCHEDULES.map((s, i) => (
-            <ScheduleCard key={s.title} index={i + 2} {...s} />
+          {!loading && !error && recentSchedules.length === 0 && (
+            <p className="py-6 text-center text-[13px] text-ink-muted">
+              아직 등록된 일정이 없어요.
+            </p>
+          )}
+          {recentSchedules.map((s, i) => (
+            <ScheduleCard
+              key={s.scheduleId}
+              index={i + 2}
+              title={s.title}
+              meta={formatScheduleMeta(s)}
+              onClick={() => navigate(s.resumeUrl)}
+            />
           ))}
         </div>
       </div>

@@ -6,6 +6,8 @@
 from unittest.mock import MagicMock
 from uuid import uuid4
 
+from sqlalchemy.dialects import postgresql
+
 from app.repositories.place_repository import PlaceRepository, _classify_district_code_backfill
 
 
@@ -51,6 +53,51 @@ def test_get_or_create_returns_new_place_on_successful_insert():
 
     assert result is new_place
     db.flush.assert_called_once()
+
+
+def test_get_or_create_includes_address_in_insert_values():
+    """CandidateSource.address가 실제 INSERT 값에 들어가는지 확인 — STEP6에서 새로 만드는
+    place에 주소가 저장되지 않던 누락을 발견해 고쳤다(#87 병합 중 코드 리뷰, 2026-09-17)."""
+    db = MagicMock()
+    new_place = MagicMock(id=uuid4())
+    db.execute.return_value.scalars.return_value.first.return_value = new_place
+    repo = PlaceRepository(db)
+
+    repo.get_or_create(
+        source_type="tour_api",
+        tour_content_id="126508",
+        name="경복궁",
+        longitude=126.977041,
+        latitude=37.579617,
+        address="서울 종로구 사직로 161",
+        area_cd="11",
+        signgu_cd="11110",
+    )
+
+    # location(geography)에는 literal_binds 렌더러가 없어 SQL 문자열로는 비교할 수 없다 —
+    # 바인딩된 파라미터 값으로 확인한다.
+    stmt = db.execute.call_args[0][0]
+    params = stmt.compile(dialect=postgresql.dialect()).params
+    assert params.get("address") == "서울 종로구 사직로 161"
+
+
+def test_get_or_create_forwards_address_for_custom_place_without_content_id():
+    """tour_content_id가 없는(custom) 경로도 address를 create()로 그대로 넘겨야 한다."""
+    db = MagicMock()
+    repo = PlaceRepository(db)
+    repo.create = MagicMock(return_value=MagicMock(id=uuid4()))
+
+    repo.get_or_create(
+        source_type="custom",
+        tour_content_id=None,
+        name="내가 만든 장소",
+        longitude=None,
+        latitude=None,
+        address="서울 강남구 어딘가 1",
+    )
+
+    _, kwargs = repo.create.call_args
+    assert kwargs["address"] == "서울 강남구 어딘가 1"
 
 
 def test_get_or_create_falls_back_to_get_by_source_on_conflict():
@@ -114,6 +161,7 @@ def test_get_or_create_normalizes_empty_string_content_id_to_none():
         longitude=None,
         latitude=None,
         is_recommendable=True,
+        address=None,
         area_cd=None,
         signgu_cd=None,
     )

@@ -7,16 +7,19 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import AppError, ErrorCode
 from app.repositories.experience_tag_repository import ExperienceTagRepository
 from app.repositories.region_repository import RegionRepository
-from app.repositories.trip_repository import TripRepository
+from app.repositories.trip_place_repository import TripPlaceRepository
+from app.repositories.trip_repository import PAGE_SIZE, TripRepository
 from app.schemas.trip import (
     TripConditionsUpdateRequest,
     TripConditionsUpdateResponse,
     TripCreateRequest,
     TripCreateResponse,
     TripDetailResponse,
+    TripListResponse,
     TripPlaceDetail,
 )
 from app.schemas.user import CurrentUser
+from app.services.trip_summary import build_trip_summary
 
 _MIN_PREFERRED_TAGS = 2
 _MAX_PREFERRED_TAGS = 3
@@ -54,6 +57,7 @@ class TripService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.trips = TripRepository(db)
+        self.trip_places = TripPlaceRepository(db)
         self.regions = RegionRepository(db)
         self.experience_tags = ExperienceTagRepository(db)
 
@@ -219,4 +223,18 @@ class TripService:
             needs_reanalysis=trip.needs_reanalysis,
             preferred_experience_tag_ids=preferred_tag_ids,
             places=places,
+        )
+
+    def list_trips(
+        self, current_user: CurrentUser, *, status_filter: str | None, page: int
+    ) -> TripListResponse:
+        """GET /trips — 보관함 "일정" 탭용 내 일정 목록."""
+        trips, total_count = self.trips.list_by_user(
+            current_user.id, status_filter=status_filter, page=page
+        )
+        return TripListResponse(
+            trips=[build_trip_summary(trip, self.trip_places) for trip in trips],
+            page=page,
+            has_next=page * PAGE_SIZE < total_count,
+            total_count=total_count,
         )

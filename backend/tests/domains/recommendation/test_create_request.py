@@ -83,6 +83,7 @@ def test_create_request_creates_candidates_from_tour_api(monkeypatch):
         area_cd="11",
         signgu_cd="11110",
         category_code="A0201",
+        address="서울 종로구 율곡로 99",
     )
     monkeypatch.setattr(candidate_pipeline, "fetch_nearby_places", lambda *a, **k: [tour_item])
     monkeypatch.setattr(
@@ -102,21 +103,22 @@ def test_create_request_creates_candidates_from_tour_api(monkeypatch):
 
     assert result["status"] == "success"
     assert result["candidateCount"] == 1
-    svc.repo.create_request_with_candidates.assert_called_once()
-    args, _ = svc.repo.create_request_with_candidates.call_args
-    row_dicts = args[3]
-    assert row_dicts[0]["candidate_place_id"] == created_place.id
-    assert row_dicts[0]["feasibility_status"] == "UNKNOWN"
-    assert isinstance(row_dicts[0]["experience_score"], Decimal)
     svc.places.get_or_create.assert_called_once_with(
         source_type="tour_api",
         tour_content_id="tour-1",
         name="창덕궁",
         longitude=127.0,
         latitude=37.58,
+        address="서울 종로구 율곡로 99",
         area_cd="11",
         signgu_cd="11110",
     )
+    svc.repo.create_request_with_candidates.assert_called_once()
+    args, _ = svc.repo.create_request_with_candidates.call_args
+    row_dicts = args[3]
+    assert row_dicts[0]["candidate_place_id"] == created_place.id
+    assert row_dicts[0]["feasibility_status"] == "UNKNOWN"
+    assert isinstance(row_dicts[0]["experience_score"], Decimal)
 
 
 def test_create_request_no_candidate_status_when_all_filtered(monkeypatch):

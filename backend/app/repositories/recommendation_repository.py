@@ -45,7 +45,7 @@ class RecommendationRepository:
     def get_trip_owned(self, trip_id: UUID, user_id: UUID) -> Trip | None:
         return (
             self.db.query(Trip)
-            .options(joinedload(Trip.trip_places))
+            .options(joinedload(Trip.trip_places), joinedload(Trip.region))
             .filter(Trip.id == trip_id, Trip.user_id == user_id)
             .first()
         )
@@ -53,7 +53,7 @@ class RecommendationRepository:
     def get_trip(self, trip_id: UUID) -> Trip | None:
         return (
             self.db.query(Trip)
-            .options(joinedload(Trip.trip_places))
+            .options(joinedload(Trip.trip_places), joinedload(Trip.region))
             .filter(Trip.id == trip_id)
             .first()
         )
@@ -406,6 +406,27 @@ class RecommendationRepository:
         result: dict[UUID, list[PlaceExperienceTag]] = {}
         for row in rows:
             result.setdefault(row.place_id, []).append(row)
+        return result
+
+    def list_place_tags_map(self, place_ids: list[UUID]) -> dict[UUID, list[dict]]:
+        """place_id → [{id, name}] 경험 태그. 가중치 높은 순."""
+        if not place_ids:
+            return {}
+        rows = (
+            self.db.query(PlaceExperienceTag, ExperienceTag)
+            .join(ExperienceTag, ExperienceTag.id == PlaceExperienceTag.experience_tag_id)
+            .filter(PlaceExperienceTag.place_id.in_(place_ids))
+            .order_by(PlaceExperienceTag.weight.desc(), ExperienceTag.display_order.asc())
+            .all()
+        )
+        result: dict[UUID, list[dict]] = {}
+        seen: dict[UUID, set[int]] = {}
+        for pet, tag in rows:
+            already = seen.setdefault(pet.place_id, set())
+            if tag.id in already:
+                continue
+            already.add(tag.id)
+            result.setdefault(pet.place_id, []).append({"id": tag.id, "name": tag.name})
         return result
 
     def create_request_with_candidates(
