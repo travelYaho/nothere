@@ -463,6 +463,17 @@ class RecommendationRepository:
         self.db.flush()
         return link
 
+    def get_active_share_link(self, trip_id: UUID) -> ShareLink | None:
+        now = datetime.now(timezone.utc)
+        return (
+            self.db.query(ShareLink)
+            .filter(ShareLink.trip_id == trip_id)
+            .filter(ShareLink.revoked_at.is_(None))
+            .filter((ShareLink.expires_at.is_(None)) | (ShareLink.expires_at > now))
+            .order_by(ShareLink.created_at.desc(), ShareLink.id.desc())
+            .first()
+        )
+
     def get_share_by_token(self, token: str) -> ShareLink | None:
         return self.db.query(ShareLink).filter(ShareLink.token == token).first()
 

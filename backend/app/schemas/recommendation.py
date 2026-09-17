@@ -20,7 +20,7 @@ class ReplacementCreateRequest(APIModel):
 
 
 class ShareLinkRequest(APIModel):
-    visibility: str = "link"
+    visibility: str | None = None
 
 
 class RecommendationRequestCreate(APIModel):

@@ -467,6 +467,7 @@ def test_build_guide_includes_saved_itinerary_fields():
 
     svc.repo.get_place = MagicMock(side_effect=get_place)
     svc.repo.active_replacement = MagicMock(return_value=replacement)
+    svc.repo.get_active_share_link = MagicMock(return_value=None)
     svc.repo.guide_entries = MagicMock(
         return_value=[
             SimpleNamespace(
@@ -483,6 +484,7 @@ def test_build_guide_includes_saved_itinerary_fields():
     assert result["regionName"] == "서울 종로구"
     assert result["coverImageUrl"] == "https://example.com/cover.png"
     assert result["title"] == "서울 서촌 당일치기"
+    assert result["visibility"] == "link"
     stop = result["stops"][0]
     assert stop["stayMinutes"] == 90
     assert stop["visitTime"] == "10:00"
@@ -492,3 +494,104 @@ def test_build_guide_includes_saved_itinerary_fields():
     assert stop["wasReplaced"] is True
     assert stop["replacedFrom"] == "경복궁"
     assert stop["placeName"] == "서울한방진흥센터 일대"
+
+
+def test_build_guide_includes_public_visibility():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    trip = SimpleNamespace(
+        id=uuid4(),
+        title="공개 가이드",
+        travel_date=None,
+        status="confirmed",
+        transport_mode="walk",
+        region=None,
+        trip_places=[],
+    )
+    svc.repo.guide_entries = MagicMock(return_value=[])
+    svc.repo.get_active_share_link = MagicMock(
+        return_value=SimpleNamespace(visibility="public")
+    )
+
+    result = svc.build_guide(trip)
+
+    assert result["visibility"] == "public"
+
+
+def test_create_share_link_creates_when_missing():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_id = uuid4()
+    trip = SimpleNamespace(id=trip_id, user_id=user.id, status="confirmed")
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_active_share_link = MagicMock(return_value=None)
+    svc.repo.create_share_link = MagicMock()
+
+    result = svc.create_share_link(trip_id, user, None)
+
+    svc.repo.create_share_link.assert_called_once()
+    created = svc.repo.create_share_link.call_args[0][0]
+    assert created.visibility == "link"
+    assert result["token"] == created.token
+    db.commit.assert_called_once()
+
+
+def test_create_share_link_upserts_visibility_and_keeps_token():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_id = uuid4()
+    trip = SimpleNamespace(id=trip_id, user_id=user.id, status="confirmed")
+    existing = SimpleNamespace(
+        token="existing-token",
+        visibility="link",
+        expires_at=None,
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_active_share_link = MagicMock(return_value=existing)
+    svc.repo.create_share_link = MagicMock()
+
+    result = svc.create_share_link(trip_id, user, "public")
+
+    assert existing.visibility == "public"
+    assert result["token"] == "existing-token"
+    svc.repo.create_share_link.assert_not_called()
+    db.commit.assert_called_once()
+
+
+def test_create_share_link_without_visibility_keeps_public():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_id = uuid4()
+    trip = SimpleNamespace(id=trip_id, user_id=user.id, status="confirmed")
+    existing = SimpleNamespace(
+        token="existing-token",
+        visibility="public",
+        expires_at=None,
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_active_share_link = MagicMock(return_value=existing)
+    svc.repo.create_share_link = MagicMock()
+
+    result = svc.create_share_link(trip_id, user, None)
+
+    assert existing.visibility == "public"
+    assert result["token"] == "existing-token"
+    svc.repo.create_share_link.assert_not_called()
+
+
+def test_create_share_link_rejects_invalid_visibility():
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_id = uuid4()
+    svc.repo.get_trip_owned = MagicMock(
+        return_value=SimpleNamespace(id=trip_id, user_id=user.id, status="confirmed")
+    )
+
+    with pytest.raises(AppError) as exc:
+        svc.create_share_link(trip_id, user, "everyone")
+
+    assert exc.value.status_code == 400
