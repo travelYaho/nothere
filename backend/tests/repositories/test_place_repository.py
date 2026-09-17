@@ -190,6 +190,32 @@ def test_get_or_create_backfills_existing_place_on_conflict():
     repo.apply_district_code_backfill.assert_called_once_with(existing_place, "11", "11110")
 
 
+def test_get_or_create_backfills_address_on_conflict():
+    """지역코드와 마찬가지로, 충돌 시 기존 place의 빈 주소도 보충을 시도해야 한다."""
+    db = MagicMock()
+    db.execute.return_value.scalars.return_value.first.return_value = None
+    existing_place = MagicMock(id=uuid4())
+    repo = PlaceRepository(db)
+    repo.get_by_source = MagicMock(return_value=existing_place)
+    repo.apply_district_code_backfill = MagicMock(return_value="updated")
+    repo.backfill_address_if_missing = MagicMock(return_value="updated")
+
+    repo.get_or_create(
+        source_type="tour_api",
+        tour_content_id="126508",
+        name="경복궁",
+        longitude=126.977041,
+        latitude=37.579617,
+        address="서울 종로구 사직로 161",
+        area_cd="11",
+        signgu_cd="11110",
+    )
+
+    repo.backfill_address_if_missing.assert_called_once_with(
+        existing_place, "서울 종로구 사직로 161"
+    )
+
+
 # --- _classify_district_code_backfill (순수 함수) ---
 
 def test_classify_backfill_missing_input_when_new_values_incomplete():
@@ -267,3 +293,92 @@ def test_preview_district_code_backfill_never_writes():
     assert status == "updated"
     assert db.execute.call_count == 1  # 조회 한 번뿐, UPDATE 없음
     db.flush.assert_not_called()
+
+
+# --- backfill_address_if_missing ---
+
+def test_backfill_address_if_missing_skips_db_when_input_blank():
+    """입력값이 없거나 공백뿐이면 DB에 전혀 접근하지 않는다."""
+    db = MagicMock()
+    repo = PlaceRepository(db)
+    place = MagicMock(id=uuid4())
+
+    assert repo.backfill_address_if_missing(place, None) == "no_input"
+    assert repo.backfill_address_if_missing(place, "   ") == "no_input"
+    db.execute.assert_not_called()
+
+
+def test_backfill_address_if_missing_updates_when_row_matched():
+    """UPDATE ... WHERE(비어 있음)가 실제로 행을 반영하면(RETURNING 값 있음) 그 값으로
+    메모리 객체를 갱신한다."""
+    db = MagicMock()
+    db.execute.return_value.first.return_value = ("서울 종로구 사직로 161",)
+    repo = PlaceRepository(db)
+    place = MagicMock(id=uuid4(), address=None)
+
+    status = repo.backfill_address_if_missing(place, "  서울 종로구 사직로 161  ")
+
+    assert status == "updated"
+    assert place.address == "서울 종로구 사직로 161"
+    db.flush.assert_called_once()
+    stmt = db.execute.call_args[0][0]
+    sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert "서울 종로구 사직로 161" in sql  # strip() 적용된 값으로 써야 함
+    assert "RETURNING" in sql.upper()
+
+
+def test_backfill_address_if_missing_does_not_overwrite_when_update_matches_no_row():
+    """다른 요청이 먼저 채워서 UPDATE가 0행을 바꾸면(RETURNING 없음), 내 입력값을 절대
+    메모리 객체에 대입하지 않는다 — 그 값을 대입하면 이후 flush 때 방금 다른 요청이 커밋한
+    진짜 주소를 덮어쓸 위험이 있다(2026-09-17, CodeRabbit 리뷰로 발견한 위험 시나리오)."""
+    db = MagicMock()
+    db.execute.return_value.first.return_value = None
+    repo = PlaceRepository(db)
+    place = MagicMock(id=uuid4(), address="이미 채워진 실제 주소")
+
+    status = repo.backfill_address_if_missing(place, "내가 보내려던 다른 값")
+
+    assert status == "not_empty"
+    assert place.address == "이미 채워진 실제 주소"  # 그대로 보존, 내 입력값으로 안 바뀜
+    db.flush.assert_not_called()
+    db.refresh.assert_called_once_with(place, attribute_names=["address"])
+
+
+def test_backfill_address_if_missing_refreshes_stale_object_when_another_session_won():
+    """호출 전 place.address가 이미 비어 있던(오래된) 스냅샷이고, 그 사이 다른 세션이
+    먼저 실제로 주소를 채웠다면(UPDATE 0행) — 덮어쓰기를 막는 것과 별개로, 반환하는
+    객체는 그 실제 값으로 갱신돼 있어야 한다(2026-09-17, 코드 리뷰로 발견). 덮어쓰기
+    방지 테스트(위)는 처음부터 정상 주소가 든 객체를 썼기 때문에 이 경로를 검증하지
+    못했다."""
+    db = MagicMock()
+    db.execute.return_value.first.return_value = None  # UPDATE 0행 — 다른 세션이 이미 채움
+    place = MagicMock(id=uuid4(), address=None)  # 호출 시점엔 아직 "주소 없음"인 스냅샷
+
+    def _simulate_refresh(obj, attribute_names=None):
+        # 실제 DB에는 다른 세션이 커밋한 주소가 이미 들어있다고 가정.
+        obj.address = "다른 세션이 저장한 실제 주소"
+
+    db.refresh.side_effect = _simulate_refresh
+    repo = PlaceRepository(db)
+
+    status = repo.backfill_address_if_missing(place, "내가 보내려던 다른 값")
+
+    assert status == "not_empty"
+    db.refresh.assert_called_once_with(place, attribute_names=["address"])
+    assert place.address == "다른 세션이 저장한 실제 주소"  # 더 이상 None이 아님
+
+
+def test_backfill_address_if_missing_where_clause_covers_null_and_whitespace_only():
+    """WHERE 조건이 NULL뿐 아니라 공백문자(탭·개행 포함)만 있는 기존 값도 '비어 있음'으로
+    잡아야 한다 — Postgres 기본 TRIM()은 스페이스만 지워 탭/개행을 못 잡는다."""
+    db = MagicMock()
+    db.execute.return_value.first.return_value = ("새 주소",)
+    repo = PlaceRepository(db)
+    place = MagicMock(id=uuid4())
+
+    repo.backfill_address_if_missing(place, "새 주소")
+
+    stmt = db.execute.call_args[0][0]
+    sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert "IS NULL" in sql.upper()
+    assert "~" in sql  # 정규식 매치(공백만 있는 값도 포함)

@@ -2,7 +2,7 @@
 from uuid import UUID, uuid4
 
 from geoalchemy2.elements import WKTElement
-from sqlalchemy import select, tuple_, update
+from sqlalchemy import or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -174,12 +174,61 @@ class PlaceRepository:
             stmt, execution_options={"populate_existing": True}
         ).scalars().first()
         if place is None:
-            # 충돌 — 다른 요청이 먼저 만든 기존 place. 이번 응답의 지역코드로 보충을 시도한다
-            # (이 자리에서 처음 만든 place라면 이미 우리가 지정한 값 그대로라 보충이 필요 없다).
+            # 충돌 — 다른 요청이 먼저 만든 기존 place. 이번 응답의 지역코드·주소로 보충을
+            # 시도한다(이 자리에서 처음 만든 place라면 이미 우리가 지정한 값 그대로라
+            # 보충이 필요 없다).
             place = self.get_by_source(source_type, tour_content_id)
             self.apply_district_code_backfill(place, area_cd, signgu_cd)
+            self.backfill_address_if_missing(place, address)
         self.db.flush()
         return place
+
+    def backfill_address_if_missing(self, place: Place, address: str | None) -> str:
+        """기존 place의 주소가 비어 있을 때만, 조건부 UPDATE로 안전하게 보충한다.
+
+        지역코드 백필(``apply_district_code_backfill``)과 달리 주소는 "충돌 판정"이
+        필요 없다 — 조건이 "비어 있으면 채움" 하나뿐이라 사전에 ``SELECT ... FOR UPDATE``로
+        잠그고 판정할 필요가 없다. 다만 이 말이 "잠금이 전혀 없다"는 뜻은 아니다 —
+        ``UPDATE ... WHERE`` 문장 자체가 대상 행을 잠그고 실행되므로, 동시에 두 요청이
+        이 메서드를 불러도 그중 하나만 실제로 반영된다.
+
+        그래서 UPDATE가 실제로 몇 행을 바꿨는지를 ``RETURNING``으로 반드시 확인한 뒤에만
+        메모리의 ``place`` 객체를 갱신해야 한다 — 다른 요청이 먼저 채웠다면 이 UPDATE는
+        0행을 바꾸고, 그 경우 내가 보낸 입력값을 그냥 ``place.address``에 대입하면 메모리와
+        DB가 어긋나 이후 flush 때 방금 다른 요청이 커밋한 진짜 주소를 내 입력값으로 도로
+        덮어쓸 위험이 있다(2026-09-17, CodeRabbit 리뷰로 발견).
+
+        0행이어도 ``place.address``를 그대로 방치하면 안 된다 — 호출 전에 이미 메모리에
+        올라온 ``place`` 객체의 ``address``는 그 시점의 스냅샷(예: 비어 있던 상태)일 수
+        있고, 그 사이 다른 세션이 실제로 채웠을 수 있다. 그러면 이 메서드가 끝난 뒤에도
+        호출자는 여전히 "주소 없음"이라는 오래된 값을 들고 있게 된다 — 덮어쓰기를 막는 것과
+        반환 객체를 최신 상태로 맞추는 것은 별개 문제라, 0행이면 ``refresh``로 실제 DB
+        값을 다시 읽어와야 한다(2026-09-17, 코드 리뷰로 추가 발견).
+
+        "비어 있음" 판정은 NULL뿐 아니라 공백 문자(스페이스·탭·개행 등)만 있는 값도
+        포함한다 — Postgres 기본 ``TRIM()``은 스페이스만 제거해 탭/개행만 있는 값을 못
+        잡으므로 정규식(``~ '^\\s*$'``)으로 판정한다. 이 정규화(``strip()``)는 **이
+        보충 경로에만** 적용된다 — 신규 생성 경로(``create()``/이 메서드 위의 INSERT)는
+        전달받은 주소를 그대로 저장하므로, "쓰기·읽기 전체가 통일됐다"는 뜻은 아니다.
+        """
+        normalized = address.strip() if address else None
+        if not normalized:
+            return "no_input"
+        row = self.db.execute(
+            update(Place)
+            .where(
+                Place.id == place.id,
+                or_(Place.address.is_(None), Place.address.op("~")(r"^\s*$")),
+            )
+            .values(address=normalized)
+            .returning(Place.address)
+        ).first()
+        if row is None:
+            self.db.refresh(place, attribute_names=["address"])
+            return "not_empty"
+        place.address = row[0]
+        self.db.flush()
+        return "updated"
 
     def apply_district_code_backfill(
         self, place: Place, area_cd: str | None, signgu_cd: str | None
