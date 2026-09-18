@@ -10,7 +10,6 @@ export {
 export { getTripPlacePurpose, putTripPlacePurpose } from "@/features/trips/api/purposeApi"
 export { StepHeader } from "@/features/trips/components/StepHeader"
 export { TripConditionsForm } from "@/features/trips/components/TripConditionsForm"
-export { TripPurposeForm } from "@/features/trips/components/TripPurposeForm"
 export type {
   CompanionType,
   CustomPlaceAddRequest,

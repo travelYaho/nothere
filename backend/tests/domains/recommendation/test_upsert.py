@@ -196,8 +196,8 @@ def test_upsert_route_refreshes_existing_identity_map_entity():
     assert returned.is_route_estimated is False
 
 
-def test_upsert_place_experience_tags_sql_guards_manual_source():
-    """자동 규칙이 source='manual'인 기존 행을 덮어쓰지 않도록 WHERE 가드가 SQL에 있어야 한다."""
+def test_upsert_place_experience_tags_sql_never_overwrites_existing_row():
+    """(place, tag) 조합에 이미 값이 있으면 source가 무엇이든 절대 덮어쓰지 않아야 한다."""
     db = MagicMock()
     captured: list = []
     db.execute.side_effect = lambda stmt, **kwargs: captured.append(stmt)
@@ -210,5 +210,30 @@ def test_upsert_place_experience_tags_sql_guards_manual_source():
         captured[0].compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
     )
     assert "ON CONFLICT" in sql.upper()
-    assert "manual" in sql
-    assert "IS DISTINCT FROM" in sql.upper()
+    assert "DO NOTHING" in sql.upper()
+    assert "DO UPDATE" not in sql.upper()
+
+
+def test_list_experience_tags_for_places_returns_empty_dict_without_query_when_no_ids():
+    db = MagicMock()
+    repo = RecommendationRepository(db)
+
+    result = repo.list_experience_tags_for_places([])
+
+    assert result == {}
+    db.query.assert_not_called()
+
+
+def test_list_experience_tags_for_places_groups_rows_by_place_id():
+    place_a, place_b = uuid4(), uuid4()
+    db = MagicMock()
+    row1 = MagicMock(place_id=place_a, experience_tag_id=1)
+    row2 = MagicMock(place_id=place_a, experience_tag_id=2)
+    row3 = MagicMock(place_id=place_b, experience_tag_id=1)
+    db.query.return_value.filter.return_value.all.return_value = [row1, row2, row3]
+    repo = RecommendationRepository(db)
+
+    result = repo.list_experience_tags_for_places([place_a, place_b])
+
+    assert result[place_a] == [row1, row2]
+    assert result[place_b] == [row3]

@@ -61,8 +61,8 @@ export function FlowHeader({
   subline,
 }: {
   title: string
-  step: number
-  totalSteps: number
+  step?: number
+  totalSteps?: number
   progress: number // 0..1
   onBack?: () => void
   subline?: React.ReactNode
@@ -76,9 +76,11 @@ export function FlowHeader({
           </button>
           <h1 className="text-[16px] font-extrabold tracking-[-0.32px] text-ink">{title}</h1>
         </div>
-        <span className="text-[13px] font-semibold text-ink-faint">
-          {step} / {totalSteps}
-        </span>
+        {step !== undefined && totalSteps !== undefined && (
+          <span className="text-[13px] font-semibold text-ink-faint">
+            {step} / {totalSteps}
+          </span>
+        )}
       </div>
       <div className="mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-[#dbe3f0]">
         <div
@@ -123,7 +125,7 @@ export function BottomTab({
   onChange?: (key: string) => void
 }) {
   return (
-    <nav className="flex items-start border-t-[0.667px] border-line-soft bg-surface pb-5 pt-2">
+    <nav className="sticky bottom-0 z-10 flex items-start border-t-[0.667px] border-line-soft bg-surface pb-5 pt-2">
       {TABS.map(({ key, label, Icon }) => {
         const on = key === active
         return (
