@@ -82,16 +82,22 @@ interface SpinnerProps {
 }
 
 /** 데이터 로딩 중임을 보여주는 회전 인디케이터. Button 내부 로딩 표시와 같은
- * 방식(테두리 일부만 색 채우고 animate-spin)을 밝은 배경용 색상으로 재사용한다. */
+ * 방식(테두리 일부만 색 채우고 animate-spin)을 밝은 배경용 색상으로 재사용한다.
+ * Bookmarks.tsx의 "불러오는 중..." 텍스트를 대체했으므로, 스크린 리더에도 로딩
+ * 상태가 전달되도록 role="status" + sr-only 텍스트를 같이 둔다. */
 export function Spinner({ size = 24, className = "" }: SpinnerProps) {
   return (
-    <span
-      className={[
-        "inline-block animate-spin rounded-full border-2 border-line-chip border-t-primary",
-        className,
-      ].join(" ")}
-      style={{ width: size, height: size }}
-    />
+    <span role="status">
+      <span
+        aria-hidden="true"
+        className={[
+          "inline-block animate-spin rounded-full border-2 border-line-chip border-t-primary",
+          className,
+        ].join(" ")}
+        style={{ width: size, height: size }}
+      />
+      <span className="sr-only">불러오는 중...</span>
+    </span>
   )
 }
 

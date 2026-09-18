@@ -81,6 +81,7 @@ class PlaceService:
                     "name": result.name,
                     "longitude": result.longitude,
                     "latitude": result.latitude,
+                    "address": result.address,
                     "area_cd": result.area_cd,
                     "signgu_cd": result.signgu_cd,
                 }
@@ -101,6 +102,7 @@ class PlaceService:
                     name=result.name,
                     longitude=result.longitude,
                     latitude=result.latitude,
+                    address=result.address,
                     area_cd=result.area_cd,
                     signgu_cd=result.signgu_cd,
                 )

@@ -308,7 +308,8 @@ def test_get_or_create_many_reuses_existing_place_without_inserting():
     repo = PlaceRepository(db)
     existing_place = MagicMock(id=uuid4())
     repo.get_by_sources = MagicMock(return_value={("tour_api", "126508"): existing_place})
-    repo.apply_district_code_backfill = MagicMock()
+    repo.apply_district_code_backfill_many = MagicMock()
+    repo.backfill_address_if_missing = MagicMock()
 
     result = repo.get_or_create_many(
         source_type="tour_api",
@@ -319,6 +320,7 @@ def test_get_or_create_many_reuses_existing_place_without_inserting():
                 "name": "경복궁",
                 "longitude": 126.977041,
                 "latitude": 37.579617,
+                "address": "서울 종로구 사직로 161",
                 "area_cd": "11",
                 "signgu_cd": "11110",
             }
@@ -327,7 +329,36 @@ def test_get_or_create_many_reuses_existing_place_without_inserting():
 
     assert result == {"126508": existing_place}
     db.execute.assert_not_called()  # INSERT 자체가 안 나감
-    repo.apply_district_code_backfill.assert_called_once_with(existing_place, "11", "11110")
+    repo.apply_district_code_backfill_many.assert_called_once_with([(existing_place, "11", "11110")])
+    repo.backfill_address_if_missing.assert_called_once_with(existing_place, "서울 종로구 사직로 161")
+
+
+def test_get_or_create_many_includes_address_in_insert_values():
+    """새로 삽입되는 place에도 검색 결과의 주소가 저장돼야 한다(단건 get_or_create()와 동일)."""
+    db = MagicMock()
+    repo = PlaceRepository(db)
+    repo.get_by_sources = MagicMock(return_value={})
+    new_place = MagicMock(id=uuid4(), tour_content_id="126508")
+    db.execute.return_value.scalars.return_value.all.return_value = [new_place]
+
+    repo.get_or_create_many(
+        source_type="tour_api",
+        region_id=1,
+        items=[
+            {
+                "tour_content_id": "126508",
+                "name": "경복궁",
+                "longitude": 126.977041,
+                "latitude": 37.579617,
+                "address": "서울 종로구 사직로 161",
+                "area_cd": "11",
+                "signgu_cd": "11110",
+            }
+        ],
+    )
+
+    stmt = db.execute.call_args_list[0][0][0]
+    assert stmt.compile().params["address_m0"] == "서울 종로구 사직로 161"
 
 
 def test_get_or_create_many_reselects_only_items_lost_to_a_race():
@@ -341,7 +372,8 @@ def test_get_or_create_many_reselects_only_items_lost_to_a_race():
     ]
     inserted_place = MagicMock(id=uuid4(), tour_content_id="1")
     db.execute.return_value.scalars.return_value.all.return_value = [inserted_place]  # "2"는 raced로 빠짐
-    repo.apply_district_code_backfill = MagicMock()
+    repo.apply_district_code_backfill_many = MagicMock()
+    repo.backfill_address_if_missing = MagicMock()
 
     items = [
         {"tour_content_id": "1", "name": "A", "longitude": None, "latitude": None, "area_cd": None, "signgu_cd": None},
@@ -352,6 +384,36 @@ def test_get_or_create_many_reselects_only_items_lost_to_a_race():
     assert result["1"] is inserted_place
     assert result["2"].tour_content_id == "2"
     assert repo.get_by_sources.call_count == 2
+
+
+# --- apply_district_code_backfill_many ---
+
+def test_apply_district_code_backfill_many_skips_db_when_no_complete_candidates():
+    db = MagicMock()
+    repo = PlaceRepository(db)
+    place = MagicMock(id=uuid4())
+
+    repo.apply_district_code_backfill_many([(place, None, "11110"), (place, "", "")])
+
+    db.execute.assert_not_called()
+
+
+def test_apply_district_code_backfill_many_locks_once_and_updates_only_changed_rows():
+    """잠금 조회는 대상 수와 무관하게 한 번만 나가고, 실제 값이 다른 행만 UPDATE된다."""
+    db = MagicMock()
+    place_a, place_b = MagicMock(id=uuid4()), MagicMock(id=uuid4())
+    row_a = MagicMock(id=place_a.id, area_cd=None, signgu_cd=None)  # 비어 있어 갱신 필요
+    row_b = MagicMock(id=place_b.id, area_cd="11", signgu_cd="11110")  # 이미 일치
+    db.execute.return_value.__iter__ = lambda self: iter([row_a, row_b])
+    repo = PlaceRepository(db)
+
+    repo.apply_district_code_backfill_many(
+        [(place_a, "11", "11110"), (place_b, "11", "11110")]
+    )
+
+    assert db.execute.call_count == 2  # 잠금 조회 1회 + UPDATE 1회(place_a만)
+    assert place_a.area_cd == "11" and place_a.signgu_cd == "11110"
+    db.flush.assert_called_once()
 
 
 def test_apply_district_code_backfill_locks_row_and_updates_when_status_updated():

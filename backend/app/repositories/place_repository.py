@@ -237,6 +237,7 @@ class PlaceRepository:
                         "region_id": region_id,
                         "name": item["name"],
                         "location": location,
+                        "address": item.get("address"),
                         "area_cd": item["area_cd"],
                         "signgu_cd": item["signgu_cd"],
                     }
@@ -257,9 +258,12 @@ class PlaceRepository:
             raced = self.get_by_sources([(source_type, cid) for cid in raced_cids])
             raced_by_cid = {cid: place for (_, cid), place in raced.items()}
 
-        for cid, place in {**existing_by_cid, **raced_by_cid}.items():
-            item = by_cid[cid]
-            self.apply_district_code_backfill(place, item["area_cd"], item["signgu_cd"])
+        found = {**existing_by_cid, **raced_by_cid}
+        self.apply_district_code_backfill_many(
+            [(place, by_cid[cid]["area_cd"], by_cid[cid]["signgu_cd"]) for cid, place in found.items()]
+        )
+        for cid, place in found.items():
+            self.backfill_address_if_missing(place, by_cid[cid].get("address"))
 
         self.db.flush()
         return {**existing_by_cid, **inserted_by_cid, **raced_by_cid}
@@ -310,6 +314,39 @@ class PlaceRepository:
         place.address = row[0]
         self.db.flush()
         return "updated"
+
+    def apply_district_code_backfill_many(
+        self, items: list[tuple[Place, str | None, str | None]]
+    ) -> None:
+        """apply_district_code_backfill()을 대상 수만큼 반복하면, 값이 이미 일치해서
+        UPDATE가 필요 없는 경우조차 매번 ``SELECT ... FOR UPDATE``로 잠그고 읽는다 —
+        get_or_create_many()가 검색 결과 대부분(이미 알던 장소)에 이걸 반복하면 건수만큼
+        잠금 조회가 나가 N+1 제거 효과가 깎인다(코드 리뷰로 발견). 잠금 조회만 IN 절
+        하나로 묶고, 실제 갱신이 필요한(드문) 건만 개별 UPDATE로 반영한다.
+        """
+        candidates = [(place, area_cd, signgu_cd) for place, area_cd, signgu_cd in items if area_cd and signgu_cd]
+        if not candidates:
+            return
+
+        ids = [place.id for place, _, _ in candidates]
+        current_by_id = {
+            row.id: (row.area_cd, row.signgu_cd)
+            for row in self.db.execute(
+                select(Place.id, Place.area_cd, Place.signgu_cd)
+                .where(Place.id.in_(ids))
+                .with_for_update()
+            )
+        }
+        for place, area_cd, signgu_cd in candidates:
+            current_area_cd, current_signgu_cd = current_by_id.get(place.id, (None, None))
+            status = _classify_district_code_backfill(current_area_cd, current_signgu_cd, area_cd, signgu_cd)
+            if status == "updated":
+                self.db.execute(
+                    update(Place).where(Place.id == place.id).values(area_cd=area_cd, signgu_cd=signgu_cd)
+                )
+                place.area_cd = area_cd
+                place.signgu_cd = signgu_cd
+        self.db.flush()
 
     def apply_district_code_backfill(
         self, place: Place, area_cd: str | None, signgu_cd: str | None
