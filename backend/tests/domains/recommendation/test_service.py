@@ -534,11 +534,13 @@ def test_create_share_link_creates_when_missing():
     trip_id = uuid4()
     trip = SimpleNamespace(id=trip_id, user_id=user.id, status="confirmed")
     svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.lock_trip = MagicMock(return_value=trip)
     svc.repo.get_active_share_link = MagicMock(return_value=None)
     svc.repo.create_share_link = MagicMock()
 
     result = svc.create_share_link(trip_id, user, None)
 
+    svc.repo.lock_trip.assert_called_once_with(trip_id)
     svc.repo.create_share_link.assert_called_once()
     created = svc.repo.create_share_link.call_args[0][0]
     assert created.visibility == "link"
@@ -558,6 +560,7 @@ def test_create_share_link_upserts_visibility_and_keeps_token():
         expires_at=None,
     )
     svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.lock_trip = MagicMock(return_value=trip)
     svc.repo.get_active_share_link = MagicMock(return_value=existing)
     svc.repo.create_share_link = MagicMock()
 
@@ -565,6 +568,7 @@ def test_create_share_link_upserts_visibility_and_keeps_token():
 
     assert existing.visibility == "public"
     assert result["token"] == "existing-token"
+    svc.repo.lock_trip.assert_called_once_with(trip_id)
     svc.repo.create_share_link.assert_not_called()
     db.commit.assert_called_once()
 
@@ -581,6 +585,7 @@ def test_create_share_link_without_visibility_keeps_public():
         expires_at=None,
     )
     svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.lock_trip = MagicMock(return_value=trip)
     svc.repo.get_active_share_link = MagicMock(return_value=existing)
     svc.repo.create_share_link = MagicMock()
 
@@ -599,8 +604,25 @@ def test_create_share_link_rejects_invalid_visibility():
     svc.repo.get_trip_owned = MagicMock(
         return_value=SimpleNamespace(id=trip_id, user_id=user.id, status="confirmed")
     )
+    svc.repo.lock_trip = MagicMock()
 
     with pytest.raises(AppError) as exc:
         svc.create_share_link(trip_id, user, "everyone")
 
     assert exc.value.status_code == 400
+    svc.repo.lock_trip.assert_not_called()
+
+
+def test_lock_trip_uses_for_update():
+    from app.repositories.recommendation_repository import RecommendationRepository
+
+    db = MagicMock()
+    repo = RecommendationRepository(db)
+    trip_id = uuid4()
+
+    repo.lock_trip(trip_id)
+
+    filtered = db.query.return_value.filter.return_value
+    filtered.populate_existing.assert_called_once()
+    filtered.populate_existing.return_value.with_for_update.assert_called_once()
+    filtered.populate_existing.return_value.with_for_update.return_value.first.assert_called_once()

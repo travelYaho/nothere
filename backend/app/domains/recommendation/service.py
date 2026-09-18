@@ -802,6 +802,7 @@ class RecommendationService:
                 ErrorCode.INVALID_REQUEST, "허용되지 않은 공개 범위입니다.", 400
             )
 
+        self.repo.lock_trip(trip.id)
         link = self.repo.get_active_share_link(trip.id)
         if link is None:
             token = secrets.token_urlsafe(12)
