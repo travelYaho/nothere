@@ -74,6 +74,28 @@ export function Button({
 }
 
 /* ------------------------------------------------------------------ */
+/* Spinner                                                             */
+/* ------------------------------------------------------------------ */
+interface SpinnerProps {
+  size?: number
+  className?: string
+}
+
+/** 데이터 로딩 중임을 보여주는 회전 인디케이터. Button 내부 로딩 표시와 같은
+ * 방식(테두리 일부만 색 채우고 animate-spin)을 밝은 배경용 색상으로 재사용한다. */
+export function Spinner({ size = 24, className = "" }: SpinnerProps) {
+  return (
+    <span
+      className={[
+        "inline-block animate-spin rounded-full border-2 border-line-chip border-t-primary",
+        className,
+      ].join(" ")}
+      style={{ width: size, height: size }}
+    />
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /* Chip — single(단일선택) / multi(다중선택)                          */
 /* ------------------------------------------------------------------ */
 interface ChipProps {

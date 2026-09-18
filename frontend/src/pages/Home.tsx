@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowRight, Bell, Heart, MapPin, Plus } from "@/components/common/icons"
-import { Button } from "@/components/common/primitives"
+import { Button, Spinner } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 import { getHomeSummary } from "@/features/trips/api/tripsApi"
@@ -104,6 +104,12 @@ export default function Home() {
 
       {error && (
         <p className="px-4 pb-2 text-[12px] font-medium text-congestion-high">{error}</p>
+      )}
+
+      {loading && (
+        <div className="flex justify-center py-10">
+          <Spinner />
+        </div>
       )}
 
       {!loading && draftSchedule && (

@@ -460,13 +460,13 @@ def test_build_guide_includes_saved_itinerary_fields():
         after_level="low",
     )
 
-    def get_place(place_id):
-        if place_id == from_place_id:
-            return SimpleNamespace(name="경복궁")
-        return SimpleNamespace(name="서울한방진흥센터 일대")
-
-    svc.repo.get_place = MagicMock(side_effect=get_place)
-    svc.repo.active_replacement = MagicMock(return_value=replacement)
+    svc.places.get_by_ids = MagicMock(
+        return_value={
+            from_place_id: SimpleNamespace(name="경복궁"),
+            to_place_id: SimpleNamespace(name="서울한방진흥센터 일대"),
+        }
+    )
+    svc.repo.active_replacements_map = MagicMock(return_value={tp.id: replacement})
     svc.repo.guide_entries = MagicMock(
         return_value=[
             SimpleNamespace(
@@ -476,7 +476,6 @@ def test_build_guide_includes_saved_itinerary_fields():
             )
         ]
     )
-    svc.routes.get_leg = MagicMock(return_value=None)
 
     result = svc.build_guide(trip)
 

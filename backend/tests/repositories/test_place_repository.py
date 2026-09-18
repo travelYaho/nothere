@@ -32,6 +32,28 @@ def test_get_by_sources_builds_dict_keyed_by_source_type_and_content_id():
     assert ("tour_api", "3") not in result  # DB에 없는 건 그냥 빠짐(에러 아님)
 
 
+def test_get_by_ids_returns_empty_dict_without_query_for_empty_list():
+    db = MagicMock()
+    repo = PlaceRepository(db)
+
+    result = repo.get_by_ids([])
+
+    assert result == {}
+    db.query.assert_not_called()
+
+
+def test_get_by_ids_builds_dict_keyed_by_id():
+    db = MagicMock()
+    id1, id2 = uuid4(), uuid4()
+    place1, place2 = MagicMock(id=id1), MagicMock(id=id2)
+    db.query.return_value.filter.return_value.all.return_value = [place1, place2]
+    repo = PlaceRepository(db)
+
+    result = repo.get_by_ids([id1, id2, uuid4()])
+
+    assert result == {id1: place1, id2: place2}
+
+
 def test_get_or_create_returns_new_place_on_successful_insert():
     """INSERT ... ON CONFLICT DO NOTHING이 실제로 새 행을 반환하면(충돌 없음) 그걸 쓴다."""
     db = MagicMock()
@@ -168,6 +190,95 @@ def test_classify_backfill_conflict_when_existing_value_differs():
 
 
 # --- apply_district_code_backfill / preview_district_code_backfill ---
+
+def test_get_or_create_many_returns_empty_dict_for_empty_items():
+    db = MagicMock()
+    repo = PlaceRepository(db)
+
+    result = repo.get_or_create_many(source_type="tour_api", region_id=1, items=[])
+
+    assert result == {}
+    db.execute.assert_not_called()
+
+
+def test_get_or_create_many_makes_one_query_and_one_insert_for_all_new_items():
+    """20건을 넘겨도 SELECT 1회 + INSERT 1회로 끝나야 한다(건당 왕복 반복 금지)."""
+    db = MagicMock()
+    repo = PlaceRepository(db)
+    repo.get_by_sources = MagicMock(return_value={})  # 아무것도 기존에 없음
+    inserted = [MagicMock(id=uuid4(), tour_content_id=str(i)) for i in range(20)]
+    db.execute.return_value.scalars.return_value.all.return_value = inserted
+
+    items = [
+        {
+            "tour_content_id": str(i),
+            "name": f"place-{i}",
+            "longitude": 127.0,
+            "latitude": 37.0,
+            "area_cd": "11",
+            "signgu_cd": "11110",
+        }
+        for i in range(20)
+    ]
+    result = repo.get_or_create_many(source_type="tour_api", region_id=1, items=items)
+
+    assert len(result) == 20
+    assert result["0"] is inserted[0]
+    repo.get_by_sources.assert_called_once()  # 존재 여부 확인은 한 번의 IN 절로
+    assert db.execute.call_count == 1  # INSERT도 한 번의 다중 VALUES로
+    db.flush.assert_called_once()
+
+
+def test_get_or_create_many_reuses_existing_place_without_inserting():
+    db = MagicMock()
+    repo = PlaceRepository(db)
+    existing_place = MagicMock(id=uuid4())
+    repo.get_by_sources = MagicMock(return_value={("tour_api", "126508"): existing_place})
+    repo.apply_district_code_backfill = MagicMock()
+
+    result = repo.get_or_create_many(
+        source_type="tour_api",
+        region_id=1,
+        items=[
+            {
+                "tour_content_id": "126508",
+                "name": "경복궁",
+                "longitude": 126.977041,
+                "latitude": 37.579617,
+                "area_cd": "11",
+                "signgu_cd": "11110",
+            }
+        ],
+    )
+
+    assert result == {"126508": existing_place}
+    db.execute.assert_not_called()  # INSERT 자체가 안 나감
+    repo.apply_district_code_backfill.assert_called_once_with(existing_place, "11", "11110")
+
+
+def test_get_or_create_many_reselects_only_items_lost_to_a_race():
+    """일부만 INSERT에서 조용히 빠지면(동시 세션이 먼저 커밋) 그 건만 재조회한다."""
+    db = MagicMock()
+    repo = PlaceRepository(db)
+    repo.get_by_sources = MagicMock()
+    repo.get_by_sources.side_effect = [
+        {},  # 최초 조회: 둘 다 없음
+        {("tour_api", "2"): MagicMock(id=uuid4(), tour_content_id="2")},  # raced 재조회
+    ]
+    inserted_place = MagicMock(id=uuid4(), tour_content_id="1")
+    db.execute.return_value.scalars.return_value.all.return_value = [inserted_place]  # "2"는 raced로 빠짐
+    repo.apply_district_code_backfill = MagicMock()
+
+    items = [
+        {"tour_content_id": "1", "name": "A", "longitude": None, "latitude": None, "area_cd": None, "signgu_cd": None},
+        {"tour_content_id": "2", "name": "B", "longitude": None, "latitude": None, "area_cd": None, "signgu_cd": None},
+    ]
+    result = repo.get_or_create_many(source_type="tour_api", region_id=1, items=items)
+
+    assert result["1"] is inserted_place
+    assert result["2"].tour_content_id == "2"
+    assert repo.get_by_sources.call_count == 2
+
 
 def test_apply_district_code_backfill_locks_row_and_updates_when_status_updated():
     db = MagicMock()
