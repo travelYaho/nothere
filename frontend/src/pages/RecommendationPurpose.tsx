@@ -5,11 +5,7 @@ import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Button, Chip } from "@/components/common/primitives"
 import { FlowHeader } from "@/components/layout/navigation"
-import {
-  fetchAnalysis,
-  useCreateRecommendationRequest,
-  useExperienceTags,
-} from "@/features/recommendation"
+import { fetchAnalysis, useExperienceTags } from "@/features/recommendation"
 import { useAccessToken } from "@/features/recommendation/hooks/usePart3"
 
 export default function RecommendationPurpose() {
@@ -17,7 +13,6 @@ export default function RecommendationPurpose() {
   const navigate = useNavigate()
   const token = useAccessToken()
   const { tags, loading: tagsLoading } = useExperienceTags()
-  const { create, loading: creating, error } = useCreateRecommendationRequest(tripPlaceId)
   const [selected, setSelected] = useState<number[]>([])
   const [placeName, setPlaceName] = useState<string>("")
 
@@ -35,13 +30,10 @@ export default function RecommendationPurpose() {
     setSelected((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]))
   }
 
-  const search = async (tagIds: number[]) => {
-    try {
-      const result = await create(tagIds)
-      navigate(`/trips/${tripId}/places/${tripPlaceId}/compare?requestId=${result.requestId}`)
-    } catch {
-      // useCreateRecommendationRequest가 error 상태로 노출한다.
-    }
+  const goSearch = (tagIds: number[]) => {
+    navigate(`/trips/${tripId}/places/${tripPlaceId}/searching`, {
+      state: { purposeTagIds: tagIds },
+    })
   }
 
   return (
@@ -75,13 +67,11 @@ export default function RecommendationPurpose() {
           ))}
         </div>
 
-        {error && <p className="text-[13px] text-congestion-high">{error}</p>}
-
         <div className="mt-auto flex flex-col gap-2 pt-4">
-          <Button block loading={creating} onClick={() => search(selected)}>
+          <Button block onClick={() => goSearch(selected)}>
             대안 찾기
           </Button>
-          <Button variant="text" onClick={() => search([])} disabled={creating}>
+          <Button variant="text" onClick={() => goSearch([])}>
             건너뛰기
           </Button>
         </div>

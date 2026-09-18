@@ -24,12 +24,16 @@ export function useAccessToken(): string {
   return session?.access_token ?? ""
 }
 
-export function useCompareFlow(requestId: string | undefined) {
+export function useCompareFlow(
+  requestId: string | undefined,
+  options?: { skipScoring?: boolean },
+) {
   const token = useAccessToken()
   const [data, setData] = useState<CompareCandidatesResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inFlightRef = useRef(false)
+  const skipScoring = options?.skipScoring ?? false
 
   const load = useCallback(async () => {
     if (!requestId || inFlightRef.current) return
@@ -37,7 +41,9 @@ export function useCompareFlow(requestId: string | undefined) {
     setLoading(true)
     setError(null)
     try {
-      await scoreRoutes(token, requestId)
+      if (!skipScoring) {
+        await scoreRoutes(token, requestId)
+      }
       const compared = await fetchScoredCandidates(token, requestId)
       setData(compared)
     } catch (e) {
@@ -46,7 +52,7 @@ export function useCompareFlow(requestId: string | undefined) {
       inFlightRef.current = false
       setLoading(false)
     }
-  }, [requestId, token])
+  }, [requestId, token, skipScoring])
 
   return { data, loading, error, load, token }
 }

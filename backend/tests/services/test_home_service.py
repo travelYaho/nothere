@@ -50,7 +50,7 @@ def test_get_home_maps_trip_fields_into_legacy_schedule_summary_shape():
 
     assert len(response.recent_schedules) == 2
     assert response.recent_schedules[0].schedule_id == recent[0].id
-    assert response.recent_schedules[0].resume_url == f"/trips/{recent[0].id}/guide"
+    assert response.recent_schedules[0].resume_url == f"/trips/{recent[0].id}/saved"
 
     service.trips.get_recent.assert_called_once_with(current_user.id, exclude_id=draft.id)
 

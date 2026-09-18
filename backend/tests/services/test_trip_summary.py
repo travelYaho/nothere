@@ -15,14 +15,14 @@ def _fake_trip(status: str):
     return trip
 
 
-def test_resume_path_confirmed_goes_to_guide():
+def test_resume_path_confirmed_goes_to_saved():
     trip = _fake_trip("confirmed")
-    assert resume_path(trip) == f"/trips/{trip.id}/guide"
+    assert resume_path(trip) == f"/trips/{trip.id}/saved"
 
 
-def test_resume_path_completed_goes_to_guide():
+def test_resume_path_completed_goes_to_saved():
     trip = _fake_trip("completed")
-    assert resume_path(trip) == f"/trips/{trip.id}/guide"
+    assert resume_path(trip) == f"/trips/{trip.id}/saved"
 
 
 def test_resume_path_draft_goes_to_places():
@@ -52,4 +52,4 @@ def test_build_trip_summary_uses_trip_id_field():
 
     assert summary.trip_id == trip.id
     assert summary.place_count == 5
-    assert summary.resume_url == f"/trips/{trip.id}/guide"
+    assert summary.resume_url == f"/trips/{trip.id}/saved"
