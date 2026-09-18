@@ -492,6 +492,7 @@ def test_build_guide_includes_saved_itinerary_fields():
     assert result["coverImageUrl"] == "https://example.com/cover.png"
     assert result["title"] == "서울 서촌 당일치기"
     assert result["visibility"] == "link"
+    assert result["shareToken"] is None
     stop = result["stops"][0]
     assert stop["stayMinutes"] == 90
     assert stop["visitTime"] == "10:00"
@@ -517,12 +518,13 @@ def test_build_guide_includes_public_visibility():
     )
     svc.repo.guide_entries = MagicMock(return_value=[])
     svc.repo.get_active_share_link = MagicMock(
-        return_value=SimpleNamespace(visibility="public")
+        return_value=SimpleNamespace(visibility="public", token="abc123XYZ")
     )
 
     result = svc.build_guide(trip)
 
     assert result["visibility"] == "public"
+    assert result["shareToken"] == "abc123XYZ"
 
 
 def test_create_share_link_creates_when_missing():

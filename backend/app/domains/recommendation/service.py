@@ -780,6 +780,7 @@ class RecommendationService:
             "stops": stops,
             "entries": ugc,
             "visibility": visibility,
+            "shareToken": share_link.token if share_link is not None else None,
         }
 
     def get_guide(self, trip_id: UUID, user: CurrentUser) -> dict:

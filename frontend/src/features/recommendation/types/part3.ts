@@ -114,6 +114,7 @@ export type GuideResponse = {
   stops: GuideStop[]
   entries: { content: string | null; imageUrl: string | null; displayOrder: number | null }[]
   visibility?: "link" | "private" | "public"
+  shareToken?: string | null
 }
 
 export type ShareLinkResponse = {
