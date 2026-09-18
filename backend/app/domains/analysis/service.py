@@ -259,8 +259,9 @@ class AnalysisService:
         analysis_map = {} if force else self.repo.get_analysis_map(
             [p.id for p in trip.trip_places]
         )
-        if force:
-            trip.needs_reanalysis = False
+        # needs_reanalysis는 모든 장소 분석과 get_analysis()가 끝난 뒤에만 끈다.
+        # upsert_analysis/upsert_mapping이 장소마다 commit하므로, 루프 전에 끄면
+        # 이후 장소가 실패해도 플래그가 이미 저장된 채로 남는다.
 
         # get_analysis()(응답 구성)까지 바깥의 하나의 try로 묶어서, 분석 루프가 아니라
         # 응답 구성 단계에서 오류가 나도(예: get_analysis 내부 DB 조회 실패) 실패 시각
@@ -286,6 +287,9 @@ class AnalysisService:
                 ) from exc
 
             result = self.get_analysis(user, trip_id, status_filter=None)
+            if force:
+                trip.needs_reanalysis = False
+                self.db.commit()
         except Exception:
             logger.error(
                 "run_analysis 실패(trip_id=%s): %.2fs 경과 후 오류", trip_id, time.monotonic() - t0

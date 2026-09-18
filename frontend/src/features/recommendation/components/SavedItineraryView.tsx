@@ -168,7 +168,7 @@ export function SavedItineraryView({
             <button
               type="button"
               onClick={onMakeGuidebook}
-              className="inline-flex h-[54px] min-w-0 flex-1 items-center justify-center rounded-[var(--radius-field)] bg-[#1864F5] px-3 text-[15px] font-extrabold tracking-[-0.16px] text-white shadow-[0px_8px_9px_rgba(24,100,245,0.55)] transition-[transform,filter,opacity] hover:brightness-[1.05] active:scale-[0.99]"
+              className="inline-flex h-[54px] min-w-0 flex-1 items-center justify-center rounded-[var(--radius-field)] bg-primary px-3 text-[15px] font-extrabold tracking-[-0.16px] text-primary-foreground shadow-[var(--shadow-primary)] transition-[transform,filter,opacity] hover:brightness-[1.05] active:scale-[0.99]"
             >
               가이드북 만들기
             </button>

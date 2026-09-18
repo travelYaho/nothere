@@ -102,6 +102,7 @@ export default function AlternativeSearchLoading() {
       error={error}
       loading={loading}
       onRetry={start}
+      onBack={() => navigate(-1)}
     />
   )
 }

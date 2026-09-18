@@ -241,7 +241,10 @@ class RecommendationService:
                 400,
             )
 
-        mode = transport_mode or trip.transport_mode or "walk"
+        # 요청 transport_mode override는 쓰지 않는다. get_candidates()가 trip 기준으로
+        # travelMinutes를 다시 계산하므로, 점수와 표시 시각이 같은 교통수단이어야 한다.
+        _ = transport_mode
+        mode = trip.transport_mode or "walk"
         limit = (
             extra_time_limit_minutes
             if extra_time_limit_minutes is not None

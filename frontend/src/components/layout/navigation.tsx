@@ -71,9 +71,15 @@ export function FlowHeader({
     <header className="bg-canvas/95 px-5 pb-3 pt-2 backdrop-blur">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button onClick={onBack} className="-ml-1 rounded-full p-1 text-ink hover:bg-ink/5">
-            <ChevronLeft size={22} />
-          </button>
+          {onBack !== undefined && (
+            <button
+              onClick={onBack}
+              aria-label="뒤로가기"
+              className="-ml-1 rounded-full p-1 text-ink hover:bg-ink/5"
+            >
+              <ChevronLeft size={22} />
+            </button>
+          )}
           <h1 className="text-[16px] font-extrabold tracking-[-0.32px] text-ink">{title}</h1>
         </div>
         {step !== undefined && totalSteps !== undefined && (
@@ -82,7 +88,13 @@ export function FlowHeader({
           </span>
         )}
       </div>
-      <div className="mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-[#dbe3f0]">
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+        className="mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-[#dbe3f0]"
+      >
         <div
           className="h-full rounded-full bg-primary transition-[width] duration-300"
           style={{ width: `${Math.round(progress * 100)}%` }}

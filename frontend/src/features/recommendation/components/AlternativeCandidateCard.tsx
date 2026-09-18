@@ -145,7 +145,7 @@ export function AlternativeCandidateCard({
             valueClass={congestionTextClass(level)}
           />
           <MetricCell
-            label="추가 이동"
+            label="이동 시간 변화"
             value={extra ?? "—"}
             valueClass={extra && extra.length > 10 ? "text-[11px] text-ink" : "text-ink"}
             divided

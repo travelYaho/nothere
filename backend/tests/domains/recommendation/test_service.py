@@ -221,6 +221,88 @@ def test_score_routes_returns_route_score_without_rank_or_total():
     db.commit.assert_called()
 
 
+def test_score_routes_uses_trip_transport_mode_not_request_override():
+    """요청의 car override는 무시하고 일정 기본값(walk)으로 경로를 계산한다."""
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    request_id = uuid4()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    place_id = uuid4()
+    candidate_id = uuid4()
+    cand_place_id = uuid4()
+    prev_place_id = uuid4()
+    next_place_id = uuid4()
+
+    req = SimpleNamespace(id=request_id, trip_place_id=trip_place_id, status="success")
+    tp = SimpleNamespace(
+        id=trip_place_id,
+        trip_id=trip_id,
+        place_id=place_id,
+        position=2,
+    )
+    trip = SimpleNamespace(
+        id=trip_id,
+        user_id=user.id,
+        transport_mode="walk",
+        extra_time_limit_minutes=30,
+    )
+    cand = SimpleNamespace(
+        id=candidate_id,
+        candidate_place_id=cand_place_id,
+        experience_score=Decimal("0.9000"),
+        congestion_level="low",
+        feasibility_status="OPEN_CONFIRMED",
+    )
+    prev_tp = SimpleNamespace(place_id=prev_place_id)
+    next_tp = SimpleNamespace(place_id=next_place_id)
+
+    svc.repo.get_request = MagicMock(return_value=req)
+    svc.repo.get_trip_place = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_place = MagicMock(
+        side_effect=lambda pid: SimpleNamespace(
+            name="창덕궁" if pid == cand_place_id else "경복궁"
+        )
+    )
+    svc.repo.neighbors = MagicMock(return_value=(prev_tp, next_tp))
+    svc.repo.list_candidates = MagicMock(return_value=[cand])
+    svc.repo.upsert_ranking = MagicMock(
+        return_value=SimpleNamespace(route_score=Decimal("0.8500"), total_score=None, rank=None)
+    )
+    svc.repo.upsert_route = MagicMock(
+        return_value=SimpleNamespace(
+            extra_minutes=5, distance_prev_m=100, distance_next_m=200, is_route_estimated=True,
+        )
+    )
+    svc.repo.upsert_reason = MagicMock(
+        return_value=SimpleNamespace(is_eligible=True, exclusion_reason=None)
+    )
+
+    with patch(
+        "app.domains.recommendation.service.RecommendationRanking",
+        return_value=SimpleNamespace(),
+    ), patch(
+        "app.domains.recommendation.service.RecommendationRoute",
+        return_value=SimpleNamespace(),
+    ), patch(
+        "app.domains.recommendation.service.RecommendationReason",
+        return_value=SimpleNamespace(),
+    ), patch.object(svc.routes, "get_leg") as get_leg:
+        get_leg.return_value = RouteResult(
+            distance_m=120,
+            duration_seconds=300,
+            provider="haversine",
+            is_estimated=True,
+            route_source="fallback_haversine",
+        )
+        svc.score_routes(request_id, user, "car", None)
+
+    modes = {call.args[2] for call in get_leg.call_args_list}
+    assert modes == {"walk"}
+
+
 def test_apply_replacement_clears_old_analysis_in_same_commit():
     """교체 후 옛 장소의 trip_place_analysis가 지워져야 새 장소 조회 시 옛 혼잡도가 안 남는다.
 
