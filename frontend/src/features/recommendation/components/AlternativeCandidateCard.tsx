@@ -7,6 +7,7 @@ import {
   districtFromAddress,
   formatExtraMinutes,
   formatNeighborDistance,
+  formatTravelChange,
   reasonLines,
   shortCongestionLabel,
 } from "../utils/compareFormat"
@@ -56,11 +57,13 @@ export function AlternativeCandidateCard({
   onChange,
   onMap,
   onDetail,
+  originalTravelMinutes,
 }: {
   candidate: CompareCandidate
   index: number
   expanded: boolean
   applying?: boolean
+  originalTravelMinutes?: number | null
   onToggle: () => void
   onChange: () => void
   onMap: () => void
@@ -68,7 +71,12 @@ export function AlternativeCandidateCard({
 }) {
   const letter = candidateLetter(index)
   const level = toUiCongestion(candidate.congestionLevel)
-  const extra = formatExtraMinutes(candidate.extraMinutes)
+  const extraShort = formatExtraMinutes(candidate.extraMinutes)
+  const extra = formatTravelChange(
+    originalTravelMinutes,
+    candidate.travelMinutes,
+    candidate.extraMinutes,
+  ) ?? extraShort
   const firstTag = (candidate.tags ?? [])[0]?.name
 
   if (!expanded) {
@@ -85,7 +93,7 @@ export function AlternativeCandidateCard({
           </span>
           <span className="block truncate text-[11px] font-medium leading-[16.5px]">
             <span className={congestionTextClass(level)}>{shortCongestionLabel(level)}</span>
-            {extra && <span className="text-ink-faint">{` · ${extra}`}</span>}
+            {extraShort && <span className="text-ink-faint">{` · ${extraShort}`}</span>}
             {firstTag && <span className="text-ink-faint">{` · ${firstTag}`}</span>}
           </span>
         </span>
@@ -136,7 +144,12 @@ export function AlternativeCandidateCard({
             value={shortCongestionLabel(level)}
             valueClass={congestionTextClass(level)}
           />
-          <MetricCell label="추가 이동" value={extra ?? "—"} divided />
+          <MetricCell
+            label="추가 이동"
+            value={extra ?? "—"}
+            valueClass={extra && extra.length > 10 ? "text-[11px] text-ink" : "text-ink"}
+            divided
+          />
           <MetricCell label="앞뒤 일정과의 거리" value={distance ?? "—"} divided />
         </div>
       </div>

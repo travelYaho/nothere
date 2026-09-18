@@ -255,6 +255,12 @@ class AnalysisService:
         # (area_cd, signgu_cd) -> (spots, items_by_name, api_failed). 이 run_analysis 호출
         # 하나 안에서만 존재하고 끝나면 버려진다 — 여러 요청에 걸쳐 재사용하지 않는다.
         region_cache: dict[tuple[str, str], tuple] = {}
+        force = bool(getattr(trip, "needs_reanalysis", False))
+        analysis_map = {} if force else self.repo.get_analysis_map(
+            [p.id for p in trip.trip_places]
+        )
+        if force:
+            trip.needs_reanalysis = False
 
         # get_analysis()(응답 구성)까지 바깥의 하나의 try로 묶어서, 분석 루프가 아니라
         # 응답 구성 단계에서 오류가 나도(예: get_analysis 내부 DB 조회 실패) 실패 시각
@@ -263,6 +269,14 @@ class AnalysisService:
         try:
             try:
                 for trip_place in trip.trip_places:
+                    existing = analysis_map.get(trip_place.id)
+                    if (
+                        not force
+                        and existing is not None
+                        and existing.analysis_status == AnalysisStatus.SUCCESS
+                        and existing.level is not None
+                    ):
+                        continue
                     place = places_map.get(trip_place.place_id)
                     self._analyze_place(trip_place, place, trip.travel_date, region_cache)
             except SQLAlchemyError as exc:

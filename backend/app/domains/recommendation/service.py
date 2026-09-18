@@ -19,6 +19,7 @@ from app.db.models.recommendation import (
 from app.db.models.replacement import Replacement
 from app.db.models.share_link import ShareLink, ShareLinkVisibility
 from app.db.models.trip import Trip
+from app.domains.analysis.service import AnalysisStatus, ConcentrationLevel, RULE_VERSION
 from app.domains.recommendation import candidates as candidate_pipeline
 from app.domains.recommendation.route import RouteService
 from app.domains.recommendation.scoring import (
@@ -196,6 +197,34 @@ class RecommendationService:
             raise AppError(ErrorCode.FORBIDDEN, "접근 권한이 없습니다.", 403)
         return req, tp, trip
 
+    @staticmethod
+    def _seconds_to_minutes(seconds: int | None) -> int | None:
+        if seconds is None:
+            return None
+        return int(round(seconds / 60.0))
+
+    def _adjacent_travel_seconds(
+        self,
+        prev_place_id: UUID | None,
+        place_id: UUID,
+        next_place_id: UUID | None,
+        mode: str,
+    ) -> int | None:
+        if prev_place_id is None and next_place_id is None:
+            return 0
+        total = 0
+        if prev_place_id is not None:
+            leg = self.routes.get_leg(prev_place_id, place_id, mode)
+            if leg is None:
+                return None
+            total += leg.duration_seconds
+        if next_place_id is not None:
+            leg = self.routes.get_leg(place_id, next_place_id, mode)
+            if leg is None:
+                return None
+            total += leg.duration_seconds
+        return total
+
     def score_routes(
         self,
         request_id: UUID,
@@ -267,12 +296,15 @@ class RecommendationService:
 
             if prev_tp is None and next_tp is None:
                 extra_minutes = 0
+                travel_minutes = 0
                 route_available = True
                 route_source = route_source or "api"
             elif route_available:
                 extra_minutes = max(0, int(round((new_seconds - baseline_seconds) / 60.0)))
+                travel_minutes = int(round(new_seconds / 60.0))
             else:
                 extra_minutes = None
+                travel_minutes = None
 
             route_result = compute_route_score(
                 extra_minutes=extra_minutes,
@@ -317,7 +349,7 @@ class RecommendationService:
             saved_ranking = self.repo.upsert_ranking(ranking)
             saved_route = self.repo.upsert_route(route)
             saved_reason = self.repo.upsert_reason(reason_row)
-            scored.append((cand, saved_ranking, saved_route, saved_reason, cand_name))
+            scored.append((cand, saved_ranking, saved_route, saved_reason, cand_name, travel_minutes))
 
         self.db.commit()
 
@@ -329,6 +361,7 @@ class RecommendationService:
                 "experienceScore": float(c.experience_score),
                 "routeScore": float(r.route_score or 0),
                 "extraMinutes": route.extra_minutes,
+                "travelMinutes": travel,
                 "distancePrevM": route.distance_prev_m,
                 "distanceNextM": route.distance_next_m,
                 "congestionLevel": c.congestion_level,
@@ -336,7 +369,7 @@ class RecommendationService:
                 "isEligible": reason.is_eligible,
                 "exclusionReason": reason.exclusion_reason,
             }
-            for c, r, route, reason, name in scored
+            for c, r, route, reason, name, travel in scored
         ]
         return {
             "requestId": str(request_id),
@@ -345,7 +378,7 @@ class RecommendationService:
         }
 
     def get_candidates(self, request_id: UUID, user: CurrentUser) -> dict:
-        req, tp, _trip = self._assert_request_owned(request_id, user)
+        req, tp, trip = self._assert_request_owned(request_id, user)
         original = self.repo.get_place(tp.place_id)
         analysis = self.repo.latest_analysis(tp.id)
         original_level = analysis.level if analysis and analysis.level else "unknown"
@@ -360,6 +393,13 @@ class RecommendationService:
         tags_map = self.repo.list_place_tags_map(
             [cand.candidate_place_id for cand, *_ in scored]
         )
+        mode = trip.transport_mode or "walk"
+        prev_tp, next_tp = self.repo.neighbors(trip.id, tp.position)
+        prev_place_id = prev_tp.place_id if prev_tp is not None else None
+        next_place_id = next_tp.place_id if next_tp is not None else None
+        original_travel_minutes = self._seconds_to_minutes(
+            self._adjacent_travel_seconds(prev_place_id, tp.place_id, next_place_id, mode)
+        )
         candidates = []
         for cand, ranking, route, reason in scored:
             place = self.repo.get_place(cand.candidate_place_id)
@@ -368,6 +408,11 @@ class RecommendationService:
             reason_text = None
             if reason is not None:
                 reason_text = reason.recommend_reason or reason.not_recommend_reason
+            travel_minutes = self._seconds_to_minutes(
+                self._adjacent_travel_seconds(
+                    prev_place_id, cand.candidate_place_id, next_place_id, mode
+                )
+            )
             candidates.append(
                 {
                     "candidateId": str(cand.id),
@@ -377,6 +422,7 @@ class RecommendationService:
                     "congestionLevel": after,
                     "congestionImprovement": improvement,
                     "extraMinutes": route.extra_minutes if route else None,
+                    "travelMinutes": travel_minutes,
                     "distancePrevM": route.distance_prev_m if route else None,
                     "distanceNextM": route.distance_next_m if route else None,
                     "reasonText": reason_text,
@@ -392,6 +438,7 @@ class RecommendationService:
                 "placeId": str(tp.place_id),
                 "name": original.name if original else "",
                 "congestionLevel": original_level,
+                "travelMinutes": original_travel_minutes,
             },
             "candidates": candidates,
             "requestId": str(req.id),
@@ -514,8 +561,21 @@ class RecommendationService:
         # 이 trip_place에 붙어 있던 옛 장소의 분석 결과를 지운다 — 안 지우면 다음 조회 때
         # 새 장소인데 옛 장소의 혼잡도가 그대로 보인다. place_concentration_mapping은 place_id
         # 기준 재사용 데이터라 여기서 지우지 않는다(analysis_repository.clear_analysis_for_trip_place 참고).
+        # 후보에 이미 계산된 혼잡도가 있으면 그 장소만 다시 채워, 다른 장소 분석을 건드리지 않는다.
         # 아래 self.db.commit() 하나로 이 메서드의 모든 변경이 같은 트랜잭션에 묶인다.
         self.analysis_repo.clear_analysis_for_trip_place(tp.id)
+        if cand.congestion_level in (
+            ConcentrationLevel.LOW,
+            ConcentrationLevel.MID,
+            ConcentrationLevel.HIGH,
+        ):
+            self.analysis_repo.write_analysis(
+                tp.id,
+                AnalysisStatus.SUCCESS,
+                cand.congestion_level,
+                None,
+                RULE_VERSION,
+            )
 
         self.repo.log_interaction(
             user_id=user.id,

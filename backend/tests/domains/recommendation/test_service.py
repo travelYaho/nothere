@@ -84,8 +84,8 @@ def test_get_candidates_includes_tags_and_address():
     candidate_id = uuid4()
 
     req = SimpleNamespace(id=request_id, trip_place_id=trip_place_id, status="success")
-    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4())
-    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4(), position=1)
+    trip = SimpleNamespace(id=trip_id, user_id=user.id, transport_mode="walk")
     cand = SimpleNamespace(
         id=candidate_id,
         candidate_place_id=cand_place_id,
@@ -115,10 +115,13 @@ def test_get_candidates_includes_tags_and_address():
     svc.repo.list_place_tags_map = MagicMock(
         return_value={cand_place_id: [{"id": 2, "name": "역사·문화"}, {"id": 4, "name": "사진·전망"}]}
     )
+    svc.repo.neighbors = MagicMock(return_value=(None, None))
 
     result = svc.get_candidates(request_id, user)
 
     assert result["originalPlace"]["name"] == "경복궁"
+    assert result["originalPlace"]["travelMinutes"] == 0
+    assert result["candidates"][0]["travelMinutes"] == 0
     assert result["candidates"][0]["address"] == "서울 동대문구 약령시로 21"
     assert result["candidates"][0]["tags"] == [
         {"id": 2, "name": "역사·문화"},
@@ -214,14 +217,15 @@ def test_score_routes_returns_route_score_without_rank_or_total():
     assert "totalScore" not in item
     assert "rank" not in item
     assert item["isEligible"] is True
+    assert item["travelMinutes"] == 0
     db.commit.assert_called()
 
 
 def test_apply_replacement_clears_old_analysis_in_same_commit():
     """교체 후 옛 장소의 trip_place_analysis가 지워져야 새 장소 조회 시 옛 혼잡도가 안 남는다.
 
-    clear_analysis_for_trip_place가 별도 commit 없이 flush만 하고, apply_replacement의
-    마지막 self.db.commit() 하나로 place_id 변경/분석 삭제/interaction 기록이 함께 묶여야 한다.
+    clear → 새 혼잡도 write 가 별도 commit 없이 flush만 하고, apply_replacement의
+    마지막 self.db.commit() 하나로 place_id 변경/분석 교체/interaction 기록이 함께 묶여야 한다.
     """
     db = MagicMock()
     svc = RecommendationService(db)
@@ -255,16 +259,19 @@ def test_apply_replacement_clears_old_analysis_in_same_commit():
     svc.repo.create_replacement = MagicMock()
     svc.repo.log_interaction = MagicMock()
     svc.analysis_repo.clear_analysis_for_trip_place = MagicMock()
+    svc.analysis_repo.write_analysis = MagicMock()
 
     call_order: list[str] = []
     svc.analysis_repo.clear_analysis_for_trip_place.side_effect = lambda *a, **k: call_order.append("clear")
+    svc.analysis_repo.write_analysis.side_effect = lambda *a, **k: call_order.append("write")
     db.commit.side_effect = lambda: call_order.append("commit")
 
     result = svc.apply_replacement(trip_place_id, candidate_id, user)
 
     assert tp.place_id == to_place_id
     svc.analysis_repo.clear_analysis_for_trip_place.assert_called_once_with(trip_place_id)
-    assert call_order == ["clear", "commit"]  # commit 전에 clear가 끝나 있어야 같은 트랜잭션
+    svc.analysis_repo.write_analysis.assert_called_once()
+    assert call_order == ["clear", "write", "commit"]
     assert result["resolutionStatus"] == "replaced"
     svc.repo.get_trip_place_for_update.assert_called_once_with(trip_place_id)
     svc.repo.get_candidate_for_trip_place.assert_called_once_with(candidate_id, trip_place_id)

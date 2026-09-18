@@ -19,11 +19,14 @@ import { useSession } from "@/store/sessionStore"
 
 type LocationState = {
   analysis?: { items: AnalysisItem[] }
-  reanalyze?: boolean
 } | null
 
 function isCrowdedPending(item: AnalysisItem) {
   return item.level === "high" && item.resolutionStatus === "pending" && !item.isFixed
+}
+
+function needsFreshAnalysis(items: AnalysisItem[]) {
+  return items.some((item) => !item.analyzedAt)
 }
 
 export default function RemainingCongested() {
@@ -70,15 +73,15 @@ export default function RemainingCongested() {
     setLoading(true)
     setError(null)
 
-    // 장소 교체 직후 재진입이면(옛 분석이 지워졌으므로) 재분석(POST), 아니면 저장된 결과만 조회(GET).
-    const request = pendingState?.reanalyze
-      ? runAnalysis().then((result) => {
-          if (result) return result
-          throw new Error("분석에 실패했습니다. 다시 시도해 주세요.")
-        })
-      : fetchAnalysis(token, tripId)
-
-    request
+    // 교체 후에는 저장된 분석만 GET한다. 전체 POST 재분석은 다른 장소 혼잡도를 덮어쓸 수 있다.
+    // 분석이 비어 있는 장소(교체분 unknown 등)만 있을 때 재분석을 돌리고, 백엔드는 성공 분을 건너뛴다.
+    fetchAnalysis(token, tripId)
+      .then(async (result) => {
+        if (!needsFreshAnalysis(result.items)) return result
+        const rerun = await runAnalysis()
+        if (rerun) return rerun
+        return result
+      })
       .then((result) => {
         if (cancelled) return
         setItems(result.items)
@@ -172,7 +175,7 @@ export default function RemainingCongested() {
         right={
           <button
             type="button"
-            className="text-[13px] font-bold leading-5 text-[#1864F5]"
+            className="text-[13px] font-bold leading-5 text-primary"
             // replace: 장소를 고쳐서 다시 점검하면 이 결과는 낡은 값이 되므로,
             // 뒤로가기가 이 결과 화면으로 다시 돌아오지 않게 히스토리에서 대체한다.
             onClick={() => navigate(`/trips/${tripId}/places`, { replace: true })}

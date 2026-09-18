@@ -124,6 +124,65 @@ def test_run_analysis_marks_no_district_code_when_place_missing_codes():
     svc.repo.upsert_mapping.assert_called_once_with(place_id, None, None, None, "no_mapping")
 
 
+def test_run_analysis_skips_successful_places_unless_needs_reanalysis():
+    """교체 후 부분 재분석 시 이미 성공한 장소는 다시 돌리지 않아 다른 장소 혼잡도가 유지된다."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    kept_place_id, missing_place_id = uuid4(), uuid4()
+    kept_tp_id, missing_tp_id = uuid4(), uuid4()
+
+    trip = SimpleNamespace(
+        id=trip_id,
+        travel_date=None,
+        needs_reanalysis=False,
+        trip_places=[
+            SimpleNamespace(
+                id=kept_tp_id, place_id=kept_place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            ),
+            SimpleNamespace(
+                id=missing_tp_id, place_id=missing_place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            ),
+        ],
+    )
+    kept_place = SimpleNamespace(id=kept_place_id, name="유지장소", area_cd="11", signgu_cd="11110")
+    missing_place = SimpleNamespace(
+        id=missing_place_id, name="새장소", area_cd=None, signgu_cd=None,
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(
+        return_value={kept_place_id: kept_place, missing_place_id: missing_place}
+    )
+    svc.repo.upsert_mapping = MagicMock()
+    svc.repo.upsert_analysis = MagicMock(
+        return_value=SimpleNamespace(
+            analysis_status=AnalysisStatus.UNAVAILABLE, level=None,
+            unknown_reason=UnknownReason.NO_DISTRICT_CODE, rule_version="v1",
+            analyzed_at=datetime.now(timezone.utc),
+        )
+    )
+    svc.repo.get_analysis_map = MagicMock(
+        return_value={
+            kept_tp_id: SimpleNamespace(
+                analysis_status=AnalysisStatus.SUCCESS, level=ConcentrationLevel.HIGH,
+            ),
+            missing_tp_id: None,
+        }
+    )
+    svc.get_analysis = MagicMock(
+        return_value={"tripId": str(trip_id), "items": []}
+    )
+
+    svc.run_analysis(user, trip_id)
+
+    svc.repo.upsert_analysis.assert_called_once_with(
+        missing_tp_id, AnalysisStatus.UNAVAILABLE, None, UnknownReason.NO_DISTRICT_CODE, "v1"
+    )
+
+
 def test_analyze_place_uses_reviewed_mapping_without_rematching():
     """approved 매핑이 있으면 match_concentration_spot을 다시 돌리지 않고 그 결과를 그대로 쓴다."""
     db = MagicMock()

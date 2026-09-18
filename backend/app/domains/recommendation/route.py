@@ -5,6 +5,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.clients.kakao_mobility import KakaoMobilityClient, RouteResult
@@ -127,34 +128,31 @@ class RouteService:
     ) -> None:
         now = datetime.now(timezone.utc)
         expires = now + timedelta(hours=settings.ROUTE_CACHE_TTL_HOURS)
-        existing = (
-            self.db.query(RouteCache)
-            .filter(
-                RouteCache.origin_place_id == origin_place_id,
-                RouteCache.destination_place_id == dest_place_id,
-                RouteCache.transport_mode == transport_mode,
-                RouteCache.provider == result.provider,
-            )
-            .first()
+        insert_stmt = pg_insert(RouteCache).values(
+            origin_place_id=origin_place_id,
+            destination_place_id=dest_place_id,
+            transport_mode=transport_mode,
+            distance_m=result.distance_m,
+            duration_seconds=result.duration_seconds,
+            provider=result.provider,
+            is_estimated=result.is_estimated,
+            fetched_at=now,
+            expires_at=expires,
         )
-        if existing:
-            existing.distance_m = result.distance_m
-            existing.duration_seconds = result.duration_seconds
-            existing.is_estimated = result.is_estimated
-            existing.fetched_at = now
-            existing.expires_at = expires
-        else:
-            self.db.add(
-                RouteCache(
-                    origin_place_id=origin_place_id,
-                    destination_place_id=dest_place_id,
-                    transport_mode=transport_mode,
-                    distance_m=result.distance_m,
-                    duration_seconds=result.duration_seconds,
-                    provider=result.provider,
-                    is_estimated=result.is_estimated,
-                    fetched_at=now,
-                    expires_at=expires,
-                )
-            )
+        stmt = insert_stmt.on_conflict_do_update(
+            index_elements=[
+                "origin_place_id",
+                "destination_place_id",
+                "transport_mode",
+                "provider",
+            ],
+            set_={
+                "distance_m": insert_stmt.excluded.distance_m,
+                "duration_seconds": insert_stmt.excluded.duration_seconds,
+                "is_estimated": insert_stmt.excluded.is_estimated,
+                "fetched_at": insert_stmt.excluded.fetched_at,
+                "expires_at": insert_stmt.excluded.expires_at,
+            },
+        )
+        self.db.execute(stmt)
         self.db.flush()

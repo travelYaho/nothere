@@ -8,6 +8,7 @@ export type RouteScoredCandidate = {
   experienceScore: number
   routeScore: number
   extraMinutes: number | null
+  travelMinutes?: number | null
   distancePrevM: number | null
   distanceNextM: number | null
   congestionLevel: CongestionLevelApi
@@ -35,6 +36,7 @@ export type CompareCandidate = {
   congestionLevel: CongestionLevelApi
   congestionImprovement: string
   extraMinutes: number | null
+  travelMinutes?: number | null
   distancePrevM: number | null
   distanceNextM: number | null
   reasonText: string | null
@@ -49,6 +51,7 @@ export type CompareCandidatesResponse = {
     placeId: string
     name: string
     congestionLevel: CongestionLevelApi
+    travelMinutes?: number | null
   }
   candidates: CompareCandidate[]
   requestId: string

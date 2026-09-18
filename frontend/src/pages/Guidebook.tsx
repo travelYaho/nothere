@@ -57,7 +57,7 @@ export default function Guidebook() {
   }
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden">
+    <div className="relative flex flex-1 flex-col overflow-hidden font-guidebook">
       <BasicHeader title="가이드북" onBack={handleBack} />
       <div className="flex flex-1 flex-col overflow-y-auto px-5 pb-10 pt-4">
         {loading && <p className="text-[13px] text-ink-muted">불러오는 중…</p>}

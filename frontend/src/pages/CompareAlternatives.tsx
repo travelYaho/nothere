@@ -50,8 +50,8 @@ export default function CompareAlternatives() {
   const visible = data?.candidates.filter((c) => c.isEligible) ?? []
   const originalLevel = toUiCongestion(data?.originalPlace.congestionLevel)
 
-  const goRemaining = (reanalyze = false) => {
-    navigate(`/trips/${tripId}/remaining`, reanalyze ? { state: { reanalyze: true } } : undefined)
+  const goRemaining = () => {
+    navigate(`/trips/${tripId}/remaining`)
   }
 
   const handleKeep = async () => {
@@ -75,7 +75,7 @@ export default function CompareAlternatives() {
     try {
       await applyReplacement(token, tripPlaceId, pending.candidateId)
       setPending(null)
-      goRemaining(true)
+      goRemaining()
     } catch (e) {
       setApplyError(e instanceof Error ? e.message : "교체 실패")
     } finally {
@@ -114,6 +114,7 @@ export default function CompareAlternatives() {
               <OriginalPlaceBar
                 name={data.originalPlace.name}
                 level={originalLevel}
+                travelMinutes={data.originalPlace.travelMinutes}
                 keeping={keeping}
                 onKeep={() => void handleKeep()}
               />
@@ -143,6 +144,7 @@ export default function CompareAlternatives() {
                     index={index}
                     expanded={candidate.candidateId === expandedId}
                     applying={applying && pending?.candidateId === candidate.candidateId}
+                    originalTravelMinutes={data.originalPlace.travelMinutes}
                     onToggle={() =>
                       setExpandedId((prev) =>
                         prev === candidate.candidateId ? null : candidate.candidateId,
