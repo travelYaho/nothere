@@ -121,10 +121,17 @@ export function useConfirmGuide(tripId: string | undefined) {
     }
   }, [tripId, token])
 
-  const share = useCallback(async () => {
-    if (!tripId) throw new Error("tripId 없음")
-    return createShareLink(token, tripId)
-  }, [tripId, token])
+  const share = useCallback(
+    async (visibility?: "link" | "private" | "public") => {
+      if (!tripId) throw new Error("tripId 없음")
+      const res = await createShareLink(token, tripId, visibility)
+      if (visibility) {
+        setGuide((current) => (current ? { ...current, visibility } : current))
+      }
+      return res
+    },
+    [tripId, token],
+  )
 
   const loadPublic = useCallback(async (shareToken: string) => {
     setLoading(true)
