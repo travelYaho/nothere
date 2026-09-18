@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/lib/supabase"
+import { ApiError } from "@/types/api"
 import type {
   CompareCandidatesResponse,
   ConfirmResponse,
@@ -36,6 +37,18 @@ async function v1Fetch<T>(
   const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
+    // { error: { code, message } } 형태면 code를 보존한 ApiError로 던진다 — 화면이
+    // 에러 문구(바뀔 수 있음)가 아니라 code로 분기할 수 있게 한다(2026-09-18, 코드
+    // 리뷰로 발견 — "요청 미완료"와 "후보 없음"이 같은 문구를 썼던 문제).
+    const err = body && typeof body === "object" ? (body as { error?: unknown }).error : undefined
+    if (
+      err &&
+      typeof err === "object" &&
+      typeof (err as { code?: unknown }).code === "string" &&
+      typeof (err as { message?: unknown }).message === "string"
+    ) {
+      throw new ApiError(response.status, err as { code: string; message: string })
+    }
     throw new Error(errorMessage(body, response.status))
   }
   if (body && typeof body === "object" && "data" in body) {

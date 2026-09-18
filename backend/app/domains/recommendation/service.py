@@ -203,8 +203,21 @@ class RecommendationService:
         transport_mode: str | None,
         extra_time_limit_minutes: int | None,
     ) -> dict:
-        """후보별 거리/경로 점수만 계산해 저장·반환한다. 순위·totalScore는 다루지 않는다."""
+        """후보별 거리/경로 점수만 계산해 저장·반환한다. 순위·totalScore는 다루지 않는다.
+
+        `status`는 지금 "success"/"no_candidate" 둘뿐이지만, 프론트가 두 가지를 구분해서
+        보여줘야 하므로("후보 없음"은 정상 결과, 그 외는 진짜 오류) 같은 문구·코드로 뭉뚱
+        그리면 안 된다 — "no_candidate"만 따로 코드를 내려서, 나중에 "success"가 아닌
+        다른 상태가 추가돼도(예: 생성 중 실패) 그게 조용히 "후보 없음"으로 오분류되지
+        않게 한다(2026-09-18, 코드 리뷰로 발견).
+        """
         req, tp, trip = self._assert_request_owned(request_id, user)
+        if req.status == "no_candidate":
+            raise AppError(
+                ErrorCode.NO_CANDIDATE,
+                "이 조건에 맞는 대안 후보를 찾지 못했습니다.",
+                400,
+            )
         if req.status != "success":
             raise AppError(
                 ErrorCode.INVALID_REQUEST,
