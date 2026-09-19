@@ -17,6 +17,7 @@ from urllib.parse import unquote
 import httpx
 from pydantic import BaseModel
 
+from app.clients._redact import redact_service_key
 from app.core.config import settings
 from app.core.exceptions import AppError, ErrorCode
 
@@ -109,12 +110,17 @@ def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPla
         response.raise_for_status()
         payload = response.json()
     except (httpx.HTTPError, ValueError) as exc:
-        logger.warning("TourAPI search 호출 실패: %s", exc)
+        logger.warning("TourAPI search 호출 실패: %s", redact_service_key(str(exc)))
+        # from None — exc(원본 요청 URL·서비스키 포함)가 일반 traceback 출력에 섞여 나오지
+        # 않도록 억제한다(원본 exc 객체 자체를 없애는 것은 아니다). AppError 메시지 자체는
+        # 고정 문구(_UNAVAILABLE_MESSAGE)라 안전하지만, 억제하지 않으면 exc가
+        # traceback.format_exception()의 기본 출력에 그대로 노출될 수 있다(코드 리뷰로
+        # 표현 교정, 2026-09-19).
         raise AppError(
             ErrorCode.EXTERNAL_API_UNAVAILABLE,
             _UNAVAILABLE_MESSAGE,
             status_code=503,
-        ) from exc
+        ) from None
 
     header = payload.get("response", {}).get("header", {}) if isinstance(payload, dict) else {}
     result_code = header.get("resultCode")
@@ -223,7 +229,7 @@ def fetch_nearby_places(latitude: float, longitude: float, radius_m: int) -> lis
         response.raise_for_status()
         payload = response.json()
     except httpx.HTTPError as exc:
-        logger.warning("TourAPI 호출 실패: %s", exc)
+        logger.warning("TourAPI 호출 실패: %s", redact_service_key(str(exc)))
         return []
     except ValueError as exc:
         # response.json()의 JSONDecodeError는 ValueError의 서브클래스다.

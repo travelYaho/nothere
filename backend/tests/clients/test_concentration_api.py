@@ -2,6 +2,8 @@
 
 실제 네트워크 호출은 전부 monkeypatch로 대체한다.
 """
+import traceback
+
 import httpx
 import pytest
 
@@ -15,6 +17,46 @@ def _response(json_body: dict) -> httpx.Response:
 
 def _header(result_code: str = "0000") -> dict:
     return {"resultCode": result_code, "resultMsg": "OK"}
+
+
+def test_fetch_concentration_failure_message_never_contains_service_key(monkeypatch):
+    """httpx.HTTPStatusError의 str()에는 요청 URL 전체(쿼리 포함)가 들어있으므로,
+    실패 시 ConcentrationApiError 메시지에 실제 serviceKey 값이 그대로 남으면 안 된다."""
+    monkeypatch.setattr(settings, "CONCENTRATION_API_KEY", "SUPER-SECRET-KEY-12345")
+
+    def _fake_get(url, params=None, **kwargs):
+        request = httpx.Request("GET", url, params=params)
+        return httpx.Response(500, request=request)
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    with pytest.raises(concentration_api.ConcentrationApiError) as exc_info:
+        concentration_api.fetch_concentration("11", "11110")
+
+    assert "SUPER-SECRET-KEY-12345" not in str(exc_info.value)
+
+
+def test_fetch_concentration_failure_exception_chain_never_contains_service_key(monkeypatch):
+    """메시지 마스킹만으로는 부족하다 — raise ... from exc로 원본 httpx 예외가
+    __cause__로 체인에 남으면, traceback.format_exception()이나 Sentry 같은 예외 추적
+    도구가 체인을 그대로 따라가 마스킹 이전의 원본 URL(서비스키 포함)을 노출할 수 있다."""
+    monkeypatch.setattr(settings, "CONCENTRATION_API_KEY", "SUPER-SECRET-KEY-12345")
+
+    def _fake_get(url, params=None, **kwargs):
+        request = httpx.Request("GET", url, params=params)
+        return httpx.Response(500, request=request)
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    with pytest.raises(concentration_api.ConcentrationApiError) as exc_info:
+        concentration_api.fetch_concentration("11", "11110")
+
+    full_trace = "".join(
+        traceback.format_exception(
+            type(exc_info.value), exc_info.value, exc_info.value.__traceback__
+        )
+    )
+    assert "SUPER-SECRET-KEY-12345" not in full_trace
 
 
 def test_fetch_concentration_raises_when_key_missing(monkeypatch):
