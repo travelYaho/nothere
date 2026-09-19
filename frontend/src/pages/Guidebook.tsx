@@ -16,6 +16,7 @@ export default function Guidebook() {
   const location = useLocation()
   const { guide, loading, error, loadGuide, share } = useConfirmGuide(tripId)
   const [shareMsg, setShareMsg] = useState<string | null>(null)
+  const [boastBusy, setBoastBusy] = useState(false)
 
   useEffect(() => {
     void loadGuide()
@@ -40,6 +41,18 @@ export default function Guidebook() {
       setShareMsg("공유 링크를 복사했습니다.")
     } catch (e) {
       setShareMsg(e instanceof Error ? e.message : "공유 실패")
+    }
+  }
+
+  const onToggleBoast = async (checked: boolean) => {
+    setBoastBusy(true)
+    try {
+      await share(checked ? "public" : "link")
+      setShareMsg(checked ? "둘러보기에 공개했습니다." : "둘러보기에서 내렸습니다.")
+    } catch (e) {
+      setShareMsg(e instanceof Error ? e.message : "공개 설정 실패")
+    } finally {
+      setBoastBusy(false)
     }
   }
 
@@ -84,6 +97,21 @@ export default function Guidebook() {
             )}
 
             <div className="mt-8 flex flex-col gap-2">
+              <label className="flex items-start gap-2.5 py-1">
+                <input
+                  type="checkbox"
+                  checked={guide.visibility === "public"}
+                  disabled={boastBusy}
+                  onChange={(e) => void onToggleBoast(e.target.checked)}
+                  className="mt-1 h-4 w-4 accent-primary"
+                />
+                <span>
+                  <span className="block text-[15px] font-bold text-ink">자랑하기</span>
+                  <span className="mt-0.5 block text-[12px] text-ink-muted">
+                    둘러보기 목록에 공개
+                  </span>
+                </span>
+              </label>
               <Button block onClick={() => void onShare()}>
                 공유 링크 복사
               </Button>

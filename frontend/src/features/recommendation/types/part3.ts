@@ -110,6 +110,7 @@ export type GuideResponse = {
   coverImageUrl?: string | null
   stops: GuideStop[]
   entries: { content: string | null; imageUrl: string | null; displayOrder: number | null }[]
+  visibility?: "link" | "private" | "public"
 }
 
 export type ShareLinkResponse = {

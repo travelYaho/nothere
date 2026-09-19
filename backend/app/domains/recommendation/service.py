@@ -17,7 +17,7 @@ from app.db.models.recommendation import (
     RecommendationRoute,
 )
 from app.db.models.replacement import Replacement
-from app.db.models.share_link import ShareLink
+from app.db.models.share_link import ShareLink, ShareLinkVisibility
 from app.db.models.trip import Trip
 from app.domains.recommendation import candidates as candidate_pipeline
 from app.domains.recommendation.route import RouteService
@@ -724,6 +724,13 @@ class RecommendationService:
         region = getattr(trip, "region", None)
         region_name = region.name if region is not None else None
 
+        share_link = self.repo.get_active_share_link(trip.id)
+        visibility = (
+            share_link.visibility
+            if share_link is not None
+            else ShareLinkVisibility.LINK
+        )
+
         return {
             "tripId": str(trip.id),
             "title": trip.title,
@@ -733,6 +740,7 @@ class RecommendationService:
             "coverImageUrl": cover_image_url,
             "stops": stops,
             "entries": ugc,
+            "visibility": visibility,
         }
 
     def get_guide(self, trip_id: UUID, user: CurrentUser) -> dict:
@@ -741,27 +749,39 @@ class RecommendationService:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정을 찾을 수 없습니다.", 404)
         return self.build_guide(trip)
 
-    def create_share_link(self, trip_id: UUID, user: CurrentUser, visibility: str) -> dict:
+    def create_share_link(
+        self, trip_id: UUID, user: CurrentUser, visibility: str | None
+    ) -> dict:
         trip = self.repo.get_trip_owned(trip_id, user.id)
         if trip is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정을 찾을 수 없습니다.", 404)
         if trip.status != "confirmed":
             raise AppError(ErrorCode.CONFLICT, "확정된 일정만 공유할 수 있습니다.", 409)
-        token = secrets.token_urlsafe(12)
-        link = ShareLink(
-            trip_id=trip.id,
-            token=token,
-            visibility=visibility or "link",
-            created_at=datetime.now(timezone.utc),
-        )
-        self.repo.create_share_link(link)
+        if visibility is not None and visibility not in ShareLinkVisibility.ALL:
+            raise AppError(
+                ErrorCode.INVALID_REQUEST, "허용되지 않은 공개 범위입니다.", 400
+            )
+
+        link = self.repo.get_active_share_link(trip.id)
+        if link is None:
+            token = secrets.token_urlsafe(12)
+            link = ShareLink(
+                trip_id=trip.id,
+                token=token,
+                visibility=visibility or ShareLinkVisibility.LINK,
+                created_at=datetime.now(timezone.utc),
+            )
+            self.repo.create_share_link(link)
+        elif visibility is not None:
+            link.visibility = visibility
+
         self.db.commit()
-        path = f"/guide/{token}"
+        path = f"/guide/{link.token}"
         return {
-            "token": token,
+            "token": link.token,
             "url": path,
             "absoluteUrl": f"{settings.FRONTEND_PUBLIC_ORIGIN.rstrip('/')}{path}",
-            "expiresAt": None,
+            "expiresAt": link.expires_at.isoformat() if link.expires_at else None,
         }
 
     def get_guide_by_token(self, token: str) -> dict:

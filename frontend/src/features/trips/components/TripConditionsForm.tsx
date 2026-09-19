@@ -160,7 +160,7 @@ export function TripConditionsForm() {
       <StepHeader
         title="여행 조건"
         step={1}
-        totalSteps={3}
+        totalSteps={2}
         onBack={isEditMode ? () => navigate(-1) : undefined}
       />
 

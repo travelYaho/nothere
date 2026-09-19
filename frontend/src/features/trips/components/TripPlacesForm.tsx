@@ -210,18 +210,20 @@ export function TripPlacesForm() {
     }
   }
 
-  function handleGoToPurpose() {
+  function handleGoToAnalysis() {
     if (!tripId) return
     setSubmitting(true)
-    // STEP3 완료 후 바로 분석으로 가지 않고, 등록된 장소마다 방문 목적을
-    // 먼저 받는다(3/3 단계) — 그다음에 분석 로딩 화면으로 이어진다.
-    navigate(`/trips/${tripId}/purpose`)
+    // STEP3 완료 후 방문 목적을 먼저 받던 중간 화면(TripPurposeForm)을 거치지 않고
+    // 바로 분석 로딩 화면으로 간다 — 그 화면이 모으던 목적 데이터는 STEP4/STEP6 어디서도
+    // 읽히지 않았고, "대안 찾기"에서 그 장소 하나만 물어보는 화면(RecommendationPurpose)이
+    // 이미 따로 있어 중복이었다(2026-09-16, 코드 리뷰로 확인).
+    navigate(`/trips/${tripId}/analysis`)
   }
 
   if (loading) {
     return (
       <div className="flex flex-1 flex-col">
-        <StepHeader title="내 여행 일정 만들기" step={2} totalSteps={3} />
+        <StepHeader title="내 여행 일정 만들기" step={2} totalSteps={2} />
         <div className="flex flex-1 items-center justify-center text-[13px] text-ink-muted">
           불러오는 중...
         </div>
@@ -232,7 +234,7 @@ export function TripPlacesForm() {
   if (loadError || !trip) {
     return (
       <div className="flex flex-1 flex-col">
-        <StepHeader title="내 여행 일정 만들기" step={2} totalSteps={3} />
+        <StepHeader title="내 여행 일정 만들기" step={2} totalSteps={2} />
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
           <p className="text-[13px] font-medium text-congestion-high">
             {loadError ?? "일정을 찾을 수 없습니다."}
@@ -248,7 +250,7 @@ export function TripPlacesForm() {
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden">
-      <StepHeader title="내 여행 일정 만들기" step={2} totalSteps={3} />
+      <StepHeader title="내 여행 일정 만들기" step={2} totalSteps={2} />
 
       <div className="flex items-center justify-between py-2 pl-8 pr-5">
         <p className="text-[12px] font-medium text-ink-muted">{formatConditionSummary(trip)}</p>
@@ -389,7 +391,7 @@ export function TripPlacesForm() {
             block
             loading={submitting}
             disabled={trip.places.length < 1}
-            onClick={handleGoToPurpose}
+            onClick={handleGoToAnalysis}
           >
             내 일정 점검하기
           </Button>
