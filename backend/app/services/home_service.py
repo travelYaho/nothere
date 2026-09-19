@@ -3,9 +3,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
+from app.repositories.guide_repository import GuideRepository
 from app.repositories.trip_place_repository import TripPlaceRepository
 from app.repositories.trip_repository import TripRepository
-from app.schemas.home import HomeResponse, HomeUserResponse
+from app.schemas.home import FeaturedGuideResponse, HomeResponse, HomeUserResponse
 from app.schemas.user import CurrentUser
 from app.services.trip_summary import build_schedule_summary
 
@@ -17,6 +18,7 @@ class HomeService:
         self.db = db
         self.trips = TripRepository(db)
         self.trip_places = TripPlaceRepository(db)
+        self.guides = GuideRepository(db)
 
     def get_home(self, current_user: CurrentUser) -> HomeResponse:
         try:
@@ -33,12 +35,23 @@ class HomeService:
             recent_schedules = [
                 build_schedule_summary(trip, place_counts.get(trip.id, 0)) for trip in recent
             ]
+            top_guide = self.guides.get_top_public()
         except SQLAlchemyError as exc:
             raise AppError(
                 ErrorCode.DB_ERROR,
                 "홈 정보를 조회하는 중 오류가 발생했습니다.",
                 status_code=500,
             ) from exc
+
+        featured_guide = None
+        if top_guide is not None:
+            link, trip, region, like_count = top_guide
+            featured_guide = FeaturedGuideResponse(
+                token=link.token,
+                title=trip.title,
+                region_name=region.name,
+                like_count=like_count,
+            )
 
         return HomeResponse(
             user=HomeUserResponse(
@@ -48,4 +61,5 @@ class HomeService:
             ),
             draft_schedule=draft_schedule,
             recent_schedules=recent_schedules,
+            featured_guide=featured_guide,
         )

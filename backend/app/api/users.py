@@ -2,7 +2,7 @@
 
 인증은 get_current_user 에 맡기고, 실제 비즈니스 로직은 UserService 가 처리한다.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
@@ -40,3 +40,13 @@ def update_me(
 ) -> ApiResponse[UserResponse]:
     """닉네임과 프로필 이미지 URL 을 부분 수정한다."""
     return ApiResponse(data=UserService(db).update_me(current_user, payload))
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_me(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """회원 탈퇴: 계정과 소유 데이터(일정·가이드북·좋아요)를 모두 삭제한다."""
+    UserService(db).delete_me(current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
