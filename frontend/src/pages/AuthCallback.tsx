@@ -5,17 +5,7 @@
 import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Spinner } from "@/components/common/primitives"
-import { completeOAuthCallback } from "@/features/auth"
-
-function toErrorMessage(err: unknown): string {
-  if (err instanceof Error) {
-    if (/failed to fetch|network/i.test(err.message)) {
-      return "서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요."
-    }
-    return err.message
-  }
-  return "카카오 로그인에 실패했습니다."
-}
+import { completeOAuthCallback, toKakaoLoginErrorMessage } from "@/features/auth"
 
 export default function AuthCallback() {
   const navigate = useNavigate()
@@ -28,7 +18,7 @@ export default function AuthCallback() {
       })
       .catch((err) => {
         if (!cancelled) {
-          navigate("/login", { replace: true, state: { error: toErrorMessage(err) } })
+          navigate("/login", { replace: true, state: { error: toKakaoLoginErrorMessage(err) } })
         }
       })
     return () => {

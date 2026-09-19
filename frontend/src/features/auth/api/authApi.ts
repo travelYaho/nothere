@@ -9,6 +9,29 @@ import { apiClient } from "@/api/apiClient"
 import { supabase } from "@/api/supabaseClient"
 import type { SignupRequest, SignupResponse, UserResponse } from "@/features/auth/types"
 
+function extractErrorText(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === "string") return err
+  if (err && typeof err === "object") {
+    const body = err as { msg?: unknown; message?: unknown; error_description?: unknown }
+    for (const value of [body.msg, body.message, body.error_description]) {
+      if (typeof value === "string" && value.trim()) return value
+    }
+  }
+  return ""
+}
+
+export function toKakaoLoginErrorMessage(err: unknown): string {
+  const raw = extractErrorText(err)
+  if (/failed to fetch|network/i.test(raw)) {
+    return "서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요."
+  }
+  if (/provider is not enabled|unsupported provider/i.test(raw)) {
+    return "카카오 로그인이 아직 켜져 있지 않습니다. Supabase Authentication > Providers > Kakao를 활성화한 뒤 다시 시도해 주세요."
+  }
+  return raw.trim() || "카카오 로그인에 실패했습니다."
+}
+
 export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error
@@ -22,11 +45,42 @@ export async function signInWithKakao() {
       "카카오 로그인 설정이 없습니다. frontend/.env 의 VITE_OAUTH_REDIRECT_URL 을 확인하세요.",
     )
   }
-  const { error } = await supabase.auth.signInWithOAuth({
+
+  // skipBrowserRedirect: authorize URL로 바로 이동하면 provider 미활성 시
+  // 브라우저가 JSON 에러 페이지만 보여주고, 로그인 화면 로딩이 안 풀린다.
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "kakao",
-    options: { redirectTo, skipBrowserRedirect: false },
+    options: { redirectTo, skipBrowserRedirect: true },
   })
-  if (error) throw error
+  if (error) throw new Error(toKakaoLoginErrorMessage(error))
+
+  const url = data.url
+  if (!url) throw new Error("카카오 로그인에 실패했습니다.")
+
+  let probe: Response
+  try {
+    probe = await fetch(url, { redirect: "manual" })
+  } catch {
+    window.location.assign(url)
+    return
+  }
+
+  if (probe.type === "opaqueredirect" || (probe.status >= 300 && probe.status < 400)) {
+    window.location.assign(url)
+    return
+  }
+
+  if (!probe.ok) {
+    let payload: unknown = { msg: probe.statusText }
+    try {
+      payload = await probe.json()
+    } catch {
+      // JSON 이 아니면 statusText 로 폴백한다.
+    }
+    throw new Error(toKakaoLoginErrorMessage(payload))
+  }
+
+  window.location.assign(url)
 }
 
 export function ensureProfile() {

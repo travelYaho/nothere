@@ -16,6 +16,8 @@ vi.mock("react-router-dom", async (importOriginal) => {
 
 vi.mock("@/features/auth", () => ({
   completeOAuthCallback: vi.fn(),
+  toKakaoLoginErrorMessage: (err: unknown) =>
+    err instanceof Error ? err.message : "카카오 로그인에 실패했습니다.",
 }))
 
 import { completeOAuthCallback } from "@/features/auth"

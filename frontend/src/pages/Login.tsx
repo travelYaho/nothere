@@ -7,7 +7,8 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { ChevronLeft } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { PasswordInput, TextInput } from "@/components/common/inputs"
-import { establishSession, signIn, signInWithKakao, signUp } from "@/features/auth"
+import { AlertDialog } from "@/components/feedback/modals"
+import { establishSession, signIn, signInWithKakao, signUp, toKakaoLoginErrorMessage } from "@/features/auth"
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof Error) {
@@ -34,10 +35,23 @@ export default function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [nickname, setNickname] = useState("")
-  const [error, setError] = useState<string | null>(() => oauthErrorFromState(location.state))
+  const [error, setError] = useState<string | null>(null)
+  const [kakaoError, setKakaoError] = useState<string | null>(() => oauthErrorFromState(location.state))
   const [notice, setNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [kakaoLoading, setKakaoLoading] = useState(false)
+
+  useEffect(() => {
+    function onPageShow(event: Event) {
+      setKakaoLoading(false)
+      const persisted = "persisted" in event && Boolean((event as PageTransitionEvent).persisted)
+      if (persisted) {
+        setKakaoError((current) => current ?? "카카오 로그인에 실패했습니다.")
+      }
+    }
+    window.addEventListener("pageshow", onPageShow)
+    return () => window.removeEventListener("pageshow", onPageShow)
+  }, [])
 
   useEffect(() => {
     if (!oauthErrorFromState(location.state)) return
@@ -47,6 +61,7 @@ export default function Login() {
   function switchTab(next: "login" | "signup") {
     setTab(next)
     setError(null)
+    setKakaoError(null)
     setNotice(null)
   }
 
@@ -79,18 +94,20 @@ export default function Login() {
 
   async function handleKakaoLogin() {
     setError(null)
+    setKakaoError(null)
     setNotice(null)
     setKakaoLoading(true)
     try {
       await signInWithKakao()
     } catch (err) {
-      setError(toErrorMessage(err))
+      setKakaoError(toKakaoLoginErrorMessage(err))
+    } finally {
       setKakaoLoading(false)
     }
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="relative flex flex-1 flex-col">
       <div className="flex items-center px-5 py-2">
         <button
           onClick={() => navigate(-1)}
@@ -184,6 +201,18 @@ export default function Login() {
           </Button>
         </div>
       </div>
+
+      <AlertDialog
+        open={kakaoError != null}
+        title="카카오 로그인에 실패했어요"
+        description={kakaoError ?? undefined}
+        confirmLabel="다시 시도"
+        cancelLabel="닫기"
+        onConfirm={() => {
+          void handleKakaoLogin()
+        }}
+        onCancel={() => setKakaoError(null)}
+      />
     </div>
   )
 }
