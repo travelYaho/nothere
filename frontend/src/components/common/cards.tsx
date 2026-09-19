@@ -71,6 +71,9 @@ export function CongestionCard({
   replacedFrom,
   onAlternative,
   onKeep,
+  analysisFailed = false,
+  retrying = false,
+  onRetry,
 }: {
   time: string
   place: string
@@ -81,6 +84,13 @@ export function CongestionCard({
   replacedFrom?: string | null
   onAlternative?: () => void
   onKeep?: () => void
+  /** true면 이 장소의 분석 자체가 실패한 것 — "정보 없음" 뱃지만으로는 안 보이는 재시도
+   * 경로를 별도로 보여준다. onRetry가 없으면 표시하지 않는다. */
+  analysisFailed?: boolean
+  /** 재시도 요청이 진행 중이면 버튼을 비활성화한다(트립 전체 재분석 1건이 여러 카드에
+   * 걸릴 수 있어, 진행 중엔 모든 실패 카드의 버튼이 함께 비활성화된다). */
+  retrying?: boolean
+  onRetry?: () => void
 }) {
   const wasReplaced = Boolean(replacedFrom)
   const warn = level === "high" && !wasReplaced
@@ -124,6 +134,19 @@ export function CongestionCard({
           <Button variant="ghost" onClick={onKeep} className="w-[68px] shrink-0 text-[15px] font-bold">
             유지
           </Button>
+        </div>
+      )}
+      {analysisFailed && onRetry && (
+        <div className="flex items-center justify-between gap-2 pt-3">
+          <p className="text-[12px] font-medium text-ink-faint">분석에 실패했어요</p>
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={retrying}
+            className="text-[12px] font-bold text-primary disabled:opacity-50"
+          >
+            {retrying ? "다시 시도 중…" : "다시 시도"}
+          </button>
         </div>
       )}
     </div>
