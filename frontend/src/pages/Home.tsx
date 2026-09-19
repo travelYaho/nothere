@@ -8,6 +8,8 @@ import { ArrowRight, Bell, Heart, MapPin, Plus } from "@/components/common/icons
 import { Button } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
+import { exploreGuides } from "@/features/guides/api/guidesApi"
+import type { GuideCard } from "@/features/guides/types"
 import { getHomeSummary } from "@/features/trips/api/tripsApi"
 import { formatScheduleMeta } from "@/features/trips/utils/scheduleMeta"
 import type { ScheduleSummary } from "@/features/trips/types"
@@ -26,6 +28,22 @@ export default function Home() {
   const [recentSchedules, setRecentSchedules] = useState<ScheduleSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  /** 공개 가이드북 중 좋아요가 가장 많은 것 — 배너를 누르면 이 가이드북으로 이동한다. */
+  const [topGuide, setTopGuide] = useState<(GuideCard & { token: string }) | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    exploreGuides({ sort: "popular" })
+      .then((res) => {
+        if (cancelled) return
+        const top = res.guides.find((g): g is GuideCard & { token: string } => !!g.token)
+        setTopGuide(top ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -58,7 +76,11 @@ export default function Home() {
 
       <div className="px-4 pb-3.5">
         <BannerCard
-          imageUrl="https://images.unsplash.com/photo-1543039625-14cbd3802e7d?w=680&h=420&fit=crop&auto=format"
+          onClick={topGuide ? () => navigate(`/guide/${topGuide.token}`) : undefined}
+          imageUrl={
+            topGuide?.coverImageUrl ??
+            "https://images.unsplash.com/photo-1543039625-14cbd3802e7d?w=680&h=420&fit=crop&auto=format"
+          }
           title={
             <>
               새로운 장소에서
@@ -68,13 +90,23 @@ export default function Home() {
           }
           subtitle="여기말GO가 숨은 명소를 알려드릴게요. 함께 출발해볼까요?"
           footer={
-            <div className="-mx-[22px] -mb-[22px] flex h-[73px] flex-col justify-center bg-black/20 px-[18px]">
-              <p className="text-[9px] font-bold tracking-[0.9px] text-white/60">
-                TODAY'S RECOMMENDATION
-              </p>
-              <p className="mt-[3px] text-[13px] font-bold text-white">유성온천</p>
-              <p className="mt-[2px] text-[10px] font-semibold text-congestion-low">● 여유 예상</p>
-            </div>
+            topGuide && (
+              <div className="-mx-[22px] -mb-[22px] flex h-[73px] items-center gap-3 bg-black/20 px-[18px]">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[9px] font-bold tracking-[0.9px] text-white/60">
+                    가장 인기 있는 가이드북
+                  </p>
+                  <p className="mt-[3px] truncate text-[13px] font-bold text-white">
+                    {topGuide.regionName} · {topGuide.title}
+                  </p>
+                  <p className="mt-[2px] flex items-center gap-1 text-[10px] font-semibold text-white/80">
+                    <Heart size={10} />
+                    {topGuide.likeCount} · 장소 {topGuide.placeCount}곳
+                  </p>
+                </div>
+                <ArrowRight size={16} className="shrink-0 text-white/80" />
+              </div>
+            )
           }
         />
       </div>

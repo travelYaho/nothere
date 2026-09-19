@@ -199,6 +199,7 @@ export function BannerCard({
   tone = "primary",
   imageUrl,
   footer,
+  onClick,
 }: {
   eyebrow?: React.ReactNode
   title: React.ReactNode
@@ -206,13 +207,23 @@ export function BannerCard({
   tone?: "primary" | "warn"
   imageUrl?: string
   footer?: React.ReactNode
+  onClick?: () => void
 }) {
   const grad =
     tone === "warn"
       ? "linear-gradient(90deg, #dd874d 0%, rgba(218,145,97,0.64) 46%, rgba(218,145,97,0) 97%)"
       : "linear-gradient(90deg, #3A8F60 0%, rgba(58,143,96,0.64) 57%, rgba(34,92,60,0) 97%)"
   return (
-    <div className="relative h-[210px] w-full overflow-hidden rounded-[var(--radius-banner)] bg-primary-strong">
+    <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => (e.key === "Enter" || e.key === " ") && onClick() : undefined}
+      className={[
+        "relative h-[210px] w-full overflow-hidden rounded-[var(--radius-banner)] bg-primary-strong",
+        onClick ? "cursor-pointer transition-transform active:scale-[0.99]" : "",
+      ].join(" ")}
+    >
       {imageUrl && (
         <img
           src={imageUrl}
