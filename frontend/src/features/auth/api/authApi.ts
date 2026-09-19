@@ -120,3 +120,17 @@ export async function establishSession(accessToken: string, refreshToken: string
 export function signUp(payload: SignupRequest) {
   return apiClient.post<SignupResponse>("/auth/signup", payload)
 }
+
+/** 비밀번호 재설정 메일 발송 — 메일 링크는 /reset-password 로 돌아온다. */
+export async function requestPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  })
+  if (error) throw error
+}
+
+/** 재설정 링크로 만들어진 세션에서 새 비밀번호로 변경한다. */
+export async function updatePassword(password: string) {
+  const { error } = await supabase.auth.updateUser({ password })
+  if (error) throw error
+}

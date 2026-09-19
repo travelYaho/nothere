@@ -3,6 +3,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
+from app.core.supabase import delete_auth_user
 from app.repositories.trip_repository import TripRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.user import CurrentUser, UserResponse, UserStatsResponse, UserUpdateRequest
@@ -60,3 +61,24 @@ class UserService:
         """마이페이지 통계 카드: 일정 생성 시작 수 / 확정까지 간 수."""
         total, confirmed = self.trips.count_stats(current_user.id)
         return UserStatsResponse(total_trip_count=total, confirmed_trip_count=confirmed)
+
+    def delete_me(self, current_user: CurrentUser) -> None:
+        """회원 탈퇴: Auth 유저를 삭제하면 profile/일정/가이드북/좋아요가 CASCADE 로 함께 지워진다."""
+        try:
+            self.users.detach_auth_references(current_user.id)
+        except SQLAlchemyError as exc:
+            self.db.rollback()
+            raise AppError(
+                ErrorCode.DB_ERROR,
+                "회원 탈퇴 처리 중 오류가 발생했습니다.",
+                status_code=500,
+            ) from exc
+
+        try:
+            delete_auth_user(current_user.id)
+        except Exception as exc:
+            raise AppError(
+                ErrorCode.EXTERNAL_API_ERROR,
+                "회원 탈퇴 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+                status_code=502,
+            ) from exc

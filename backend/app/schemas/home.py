@@ -24,8 +24,17 @@ class ScheduleSummary(APIModel):
     resume_url: str
 
 
+class FeaturedGuideResponse(APIModel):
+    """홈 상단 추천 카드가 연결될 공개 가이드북(좋아요 최다). 카드를 누르면 /guide/{token} 으로 이동한다."""
+    token: str
+    title: str
+    region_name: str
+    like_count: int
+
+
 class HomeResponse(APIModel):
     """홈 화면 한 번 호출로 반환할 사용자 + 일정 요약 묶음."""
     user: HomeUserResponse
     draft_schedule: ScheduleSummary | None = None
     recent_schedules: list[ScheduleSummary]
+    featured_guide: FeaturedGuideResponse | None = None

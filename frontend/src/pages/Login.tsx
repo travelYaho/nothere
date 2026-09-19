@@ -182,7 +182,13 @@ export default function Login() {
         </form>
 
         <div className="mt-3 flex w-full max-w-[325px] items-center justify-between px-1">
-          <button className="text-[12px] font-medium text-ink-muted">비밀번호 찾기</button>
+          <button
+            type="button"
+            onClick={() => navigate("/forgot-password")}
+            className="text-[12px] font-medium text-ink-muted"
+          >
+            비밀번호 찾기
+          </button>
           <button className="text-[12px] font-medium text-ink-muted">이메일로 가입하기</button>
         </div>
 

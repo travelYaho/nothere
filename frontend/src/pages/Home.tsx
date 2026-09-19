@@ -10,7 +10,7 @@ import { BannerCard, ScheduleCard } from "@/components/common/cards"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 import { getHomeSummary } from "@/features/trips/api/tripsApi"
 import { formatScheduleMeta } from "@/features/trips/utils/scheduleMeta"
-import type { ScheduleSummary } from "@/features/trips/types"
+import type { FeaturedGuide, ScheduleSummary } from "@/features/trips/types"
 import { ApiError } from "@/types/api"
 
 function toErrorMessage(err: unknown): string {
@@ -24,6 +24,7 @@ export default function Home() {
 
   const [draftSchedule, setDraftSchedule] = useState<ScheduleSummary | null>(null)
   const [recentSchedules, setRecentSchedules] = useState<ScheduleSummary[]>([])
+  const [featuredGuide, setFeaturedGuide] = useState<FeaturedGuide | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,6 +35,7 @@ export default function Home() {
         if (cancelled) return
         setDraftSchedule(res.draftSchedule)
         setRecentSchedules(res.recentSchedules)
+        setFeaturedGuide(res.featuredGuide)
       })
       .catch((err) => {
         if (!cancelled) setError(toErrorMessage(err))
@@ -68,13 +70,24 @@ export default function Home() {
           }
           subtitle="여기말GO가 숨은 명소를 알려드릴게요. 함께 출발해볼까요?"
           footer={
-            <div className="-mx-[22px] -mb-[22px] flex h-[73px] flex-col justify-center bg-black/20 px-[18px]">
+            <button
+              onClick={() =>
+                navigate(featuredGuide ? `/guide/${featuredGuide.token}` : "/guides/explore")
+              }
+              className="-mx-[22px] -mb-[22px] flex h-[73px] w-[calc(100%+44px)] flex-col justify-center bg-black/20 px-[18px] text-left"
+            >
               <p className="text-[9px] font-bold tracking-[0.9px] text-white/60">
                 TODAY'S RECOMMENDATION
               </p>
-              <p className="mt-[3px] text-[13px] font-bold text-white">유성온천</p>
-              <p className="mt-[2px] text-[10px] font-semibold text-congestion-low">● 여유 예상</p>
-            </div>
+              <p className="mt-[3px] truncate text-[13px] font-bold text-white">
+                {featuredGuide ? featuredGuide.title : "가이드북 둘러보기"}
+              </p>
+              <p className="mt-[2px] text-[10px] font-semibold text-white/80">
+                {featuredGuide
+                  ? `${featuredGuide.regionName} · ♥ ${featuredGuide.likeCount}`
+                  : "공개된 가이드북을 만나보세요"}
+              </p>
+            </button>
           }
         />
       </div>

@@ -11,6 +11,10 @@ export function getMyStats() {
   return apiClient.get<UserStatsResponse>("/users/me/stats")
 }
 
+export function deleteMe() {
+  return apiClient.delete("/users/me")
+}
+
 export function updateNickname(nickname: string) {
   return apiClient.patch<UserResponse>("/users/me", { nickname })
 }

@@ -154,8 +154,16 @@ export interface HomeUser {
   profileImageUrl: string | null
 }
 
+export interface FeaturedGuide {
+  token: string
+  title: string
+  regionName: string
+  likeCount: number
+}
+
 export interface HomeResponse {
   user: HomeUser
   draftSchedule: ScheduleSummary | null
   recentSchedules: ScheduleSummary[]
+  featuredGuide: FeaturedGuide | null
 }
