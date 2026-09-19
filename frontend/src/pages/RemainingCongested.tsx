@@ -25,6 +25,20 @@ function isCrowdedPending(item: AnalysisItem) {
   return item.level === "high" && item.resolutionStatus === "pending" && !item.isFixed
 }
 
+// analysisStatus는 고정/교체 여부와 무관하게 그 자체로 참이다 — "유지"나 "교체"를
+// 선택했다는 사실이 "분석이 성공했다"는 뜻은 아니다(코드 리뷰로 발견, 2026-09-19). 예를
+// 들어 예전에 혼잡(high)으로 떠서 "유지"한 장소도, 이후 일정이 바뀌어 재분석이 걸리면
+// (trip.needs_reanalysis) 다시 분석되고 이번엔 API 호출이 실패할 수 있다 — 그런데도
+// isFixed만 보고 "이미 처리됨"으로 묶어 실패 집계에서 빼면, 사용자는 그 장소가 실제로는
+// 한 번도 성공적으로 분석되지 못했다는 걸 알 방법이 없다. 그래서 이 두 함수는
+// resolutionStatus/isFixed를 전혀 보지 않고 analysisStatus만으로 판단한다.
+function isFailedAnalysis(item: AnalysisItem) {
+  return item.analysisStatus === "failed"
+}
+function isUnavailableAnalysis(item: AnalysisItem) {
+  return item.analysisStatus === "unavailable"
+}
+
 function needsFreshAnalysis(items: AnalysisItem[]) {
   return items.some((item) => !item.analyzedAt)
 }
@@ -35,7 +49,13 @@ export default function RemainingCongested() {
   const location = useLocation()
   const token = useAccessToken()
   const { isLoading: sessionLoading } = useSession()
-  const { run: runAnalysis } = useRunAnalysis(tripId)
+  // retrying/retryError는 이 훅 하나가 트립 전체 재분석을 책임진다 — 카드 하나만 골라
+  // 재시도하는 API가 없어서, 실패한 카드 중 아무거나 눌러도 실제로는 트립의 모든
+  // 미해결(failed/unavailable) 장소가 함께 재시도된다. 백엔드 run_analysis()는 평소엔
+  // analysis_status="success"인 장소를 건너뛰지만, trip.needs_reanalysis가 켜져 있으면
+  // (일정 변경 등) 그 예외로 성공한 장소까지 포함해 전체를 다시 분석한다 — "성공한 장소는
+  // 절대 재분석하지 않는다"는 항상 참은 아니다(코드 리뷰로 표현 교정, 2026-09-19).
+  const { run: runAnalysis, loading: retrying, error: retryError } = useRunAnalysis(tripId)
 
   const [items, setItems] = useState<AnalysisItem[] | null>(null)
   const [loading, setLoading] = useState(true)
@@ -132,7 +152,15 @@ export default function RemainingCongested() {
     }
   }
 
+  const handleRetry = async () => {
+    const result = await runAnalysis()
+    if (result) setItems(result.items)
+  }
+
   const crowdedCount = (items ?? []).filter(isCrowdedPending).length
+  const failedCount = (items ?? []).filter(isFailedAnalysis).length
+  const unavailableCount = (items ?? []).filter(isUnavailableAnalysis).length
+  const notAnalyzedCount = failedCount + unavailableCount
   const firstCrowdedId = (items ?? []).find(isCrowdedPending)?.tripPlaceId
 
   const goConfirm = () => navigate(`/trips/${tripId}/confirm`)
@@ -144,6 +172,7 @@ export default function RemainingCongested() {
     ? items.map((item) => {
         const showActions = item.resolutionStatus === "pending" && !item.isFixed
         const isFirstCrowded = item.tripPlaceId === firstCrowdedId
+        const analysisFailed = item.analysisStatus === "failed"
         return (
           <div key={item.tripPlaceId} ref={isFirstCrowded ? firstCrowdedRef : undefined}>
             <CongestionCard
@@ -156,6 +185,9 @@ export default function RemainingCongested() {
                 navigate(`/trips/${tripId}/places/${item.tripPlaceId}/purpose`)
               }
               onKeep={() => void handleKeep(item)}
+              analysisFailed={analysisFailed}
+              retrying={retrying}
+              onRetry={analysisFailed ? () => void handleRetry() : undefined}
             />
             {keepErrors[item.tripPlaceId] && (
               <p className="mt-1 text-[12px] text-congestion-high">
@@ -191,16 +223,52 @@ export default function RemainingCongested() {
       {!loading && !error && items && (
         <>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2">
-            <div className="rounded-2xl bg-[#E8F6EE] px-4 py-[14px]">
-              <p className="text-[15px] font-extrabold leading-[22.5px] text-[#1F8A56]">
-                {crowdedCount > 0 ? `남은 혼잡 ${crowdedCount}곳` : "모든 혼잡 장소를 확인했어요"}
+            <div
+              className={[
+                "rounded-2xl px-4 py-[14px]",
+                crowdedCount === 0 && notAnalyzedCount > 0 ? "bg-surface-chip" : "bg-[#E8F6EE]",
+              ].join(" ")}
+            >
+              <p
+                className={[
+                  "text-[15px] font-extrabold leading-[22.5px]",
+                  crowdedCount === 0 && notAnalyzedCount > 0 ? "text-ink" : "text-[#1F8A56]",
+                ].join(" ")}
+              >
+                {crowdedCount > 0
+                  ? `남은 혼잡 ${crowdedCount}곳`
+                  : notAnalyzedCount > 0
+                    ? `분석하지 못한 장소 ${notAnalyzedCount}곳`
+                    : "모든 혼잡 장소를 확인했어요"}
               </p>
-              {crowdedCount > 0 && (
+              {/* 세 갈래로 나눈다 — 재시도 버튼은 analysisStatus==="failed" 카드에만 있다.
+                  unavailable(지역코드 없음, 검수 대기 등)은 영구히 고정된 상태가 아니라
+                  예측 데이터 갱신이나 매핑 검수 이후 달라질 수 있지만, 지금 다시 누른다고
+                  바로 해결된다고 보장할 수 없어 버튼을 주지 않는다(코드 리뷰로 표현 교정,
+                  2026-09-19 — "재시도해도 안 바뀌는 상태"는 과장이었다). 안내 문구가 버튼의
+                  실제 존재 여부와 어긋나면 안 된다(2026-09-19, 코드 리뷰로 발견 —
+                  unavailable만 있을 때도 "다시 시도할 수 있어요"라고 안내해 버튼 없는 화면을
+                  만들고 있었다). */}
+              {crowdedCount > 0 ? (
                 <p className="pt-0.5 text-[12px] font-medium leading-[18px] text-[#4A8A6C]">
                   계속 점검하거나 지금 확정할 수 있어요
+                  {notAnalyzedCount > 0 && ` · 분석하지 못한 장소 ${notAnalyzedCount}곳`}
                 </p>
+              ) : failedCount > 0 ? (
+                <p className="pt-0.5 text-[12px] font-medium leading-[18px] text-ink-faint">
+                  아래 카드에서 다시 시도할 수 있어요
+                </p>
+              ) : (
+                unavailableCount > 0 && (
+                  <p className="pt-0.5 text-[12px] font-medium leading-[18px] text-ink-faint">
+                    일부 장소는 혼잡도 정보를 제공하지 못해요
+                  </p>
+                )
               )}
             </div>
+            {retryError && (
+              <p className="pt-2 text-[12px] text-congestion-high">{retryError}</p>
+            )}
 
             <div className="flex flex-col gap-2.5 pt-3">{placeList}</div>
 
