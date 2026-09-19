@@ -2,6 +2,7 @@ import { Navigate, createBrowserRouter, useParams } from "react-router-dom"
 import { MobileLayout } from "@/components/layout/MobileLayout"
 import HomeGuest from "@/pages/HomeGuest"
 import Login from "@/pages/Login"
+import AuthCallback from "@/pages/AuthCallback"
 import Home from "@/pages/Home"
 import Bookmarks from "@/pages/Bookmarks"
 import TripConditions from "@/pages/TripConditions"
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
     children: [
       { path: "/", element: <HomeGuest /> },
       { path: "/login", element: <Login /> },
+      { path: "/auth/callback", element: <AuthCallback /> },
       { path: "/home", element: <Home /> },
       { path: "/bookmarks", element: <Bookmarks /> },
       { path: "/trips/new", element: <TripConditions /> },

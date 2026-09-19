@@ -2,12 +2,12 @@
  * Login — 로그인 화면.
  * Figma: 여기말GO / node 48:3448 "로그인 화면"
  */
-import { useState, type FormEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { useEffect, useState, type FormEvent } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import { ChevronLeft } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { PasswordInput, TextInput } from "@/components/common/inputs"
-import { establishSession, signIn, signUp } from "@/features/auth"
+import { establishSession, signIn, signInWithKakao, signUp } from "@/features/auth"
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof Error) {
@@ -21,15 +21,28 @@ function toErrorMessage(err: unknown): string {
   return "요청 중 문제가 발생했습니다."
 }
 
+function oauthErrorFromState(state: unknown): string | null {
+  if (!state || typeof state !== "object" || !("error" in state)) return null
+  const value = (state as { error?: unknown }).error
+  return typeof value === "string" && value.trim() ? value : null
+}
+
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [tab, setTab] = useState<"login" | "signup">("login")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [nickname, setNickname] = useState("")
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() => oauthErrorFromState(location.state))
   const [notice, setNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [kakaoLoading, setKakaoLoading] = useState(false)
+
+  useEffect(() => {
+    if (!oauthErrorFromState(location.state)) return
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [location.pathname, location.state, navigate])
 
   function switchTab(next: "login" | "signup") {
     setTab(next)
@@ -61,6 +74,18 @@ export default function Login() {
       setError(toErrorMessage(err))
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleKakaoLogin() {
+    setError(null)
+    setNotice(null)
+    setKakaoLoading(true)
+    try {
+      await signInWithKakao()
+    } catch (err) {
+      setError(toErrorMessage(err))
+      setKakaoLoading(false)
     }
   }
 
@@ -151,8 +176,8 @@ export default function Login() {
         </div>
 
         <div className="mt-4 flex w-full max-w-[325px] flex-col gap-2.5 pb-8">
-          <Button variant="ghost" block>
-            소셜 A로 계속하기
+          <Button type="button" variant="ghost" block loading={kakaoLoading} onClick={handleKakaoLogin}>
+            카카오로 계속하기
           </Button>
           <Button variant="ghost" block>
             소셜 B로 계속하기

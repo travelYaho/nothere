@@ -53,7 +53,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ## 인증
 
 * 회원가입: `POST /api/auth/signup`
+* OAuth 프로필 보정: `POST /api/auth/ensure-profile` (카카오 등 소셜 첫 로그인)
 * 로그인 / 로그아웃 / 토큰 갱신: 프론트엔드에서 Supabase Auth 사용
+* 카카오 로그인 키는 백엔드 env가 아니라 Supabase Dashboard > Authentication > Providers > Kakao
 * 보호 API는 `Authorization: Bearer <access_token>` 필요
 
 ## 주요 API

@@ -15,9 +15,14 @@ class UserRepository:
         """profile PK 로 단건 조회한다."""
         return self.db.get(Profile, user_id)
 
-    def create(self, user_id: UUID, nickname: str) -> Profile:
-        """회원가입 직후 auth.users.id 와 같은 UUID 로 profile 을 생성한다."""
-        profile = Profile(id=user_id, nickname=nickname)
+    def create(
+        self,
+        user_id: UUID,
+        nickname: str,
+        profile_image_url: str | None = None,
+    ) -> Profile:
+        """회원가입/OAuth 직후 auth.users.id 와 같은 UUID 로 profile 을 생성한다."""
+        profile = Profile(id=user_id, nickname=nickname, profile_image_url=profile_image_url)
         self.db.add(profile)
         self.db.commit()
         self.db.refresh(profile)
