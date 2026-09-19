@@ -2,7 +2,7 @@
  * 일정 점검 결과 — STEP4 분석 결과를 전체 장소 목록으로 보여주고,
  * 혼잡한 장소는 카드에서 바로 대안보기/유지를 할 수 있게 한다.
  */
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import { CongestionCard } from "@/components/common/cards"
 import { Button } from "@/components/common/primitives"
@@ -63,6 +63,37 @@ export default function RemainingCongested() {
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
   const [keepErrors, setKeepErrors] = useState<Record<string, string>>({})
   const firstCrowdedRef = useRef<HTMLDivElement>(null)
+  // 이 effect가 두 번 걸리면(StrictMode 개발 중복 마운트, 혹은 의존성 재실행) 예전 코드는
+  // 두 실행 다 끝까지 runAnalysis()(트립 전체 재분석 POST)를 그대로 실행했다 — cancelled
+  // 플래그는 결과를 화면에 반영할지만 막았을 뿐, 그 비싼 호출 자체를 막지 않았다(실사용
+  // 로그에서 같은 지역 집중률 조회가 거의 동시에 두 번 도는 것으로 확인됨, 2026-09-19
+  // 코드 리뷰). 실행마다 증가하는 번호로 "지금 이 실행이 여전히 최신인지"를 각 await
+  // 지점에서 확인해, 뒤처진 실행이 runAnalysis()를 시작하지 않도록 막는다. 화면을 완전히
+  // 벗어나(언마운트) GET 응답이 늦게 와도 같은 방식으로 걸려야 하므로, effect cleanup에서도
+  // "아직 아무도 이 번호를 앞지르지 않았으면" 한 번 더 올려 무효화한다(2차 리뷰로 발견 —
+  // 처음엔 새 실행이 시작될 때만 번호를 올렸어서 언마운트 후 응답엔 이 가드가 전혀 안 걸렸다).
+  const executionRef = useRef(0)
+  // executionRef만으로는 "이미 시작된 POST"끼리의 경합은 못 막는다 — 실행 A가 runAnalysis()를
+  // await하는 도중에 실행 B가 시작되면, A는 이미 되돌릴 수 없이 요청을 보낸 뒤라 B도 같은
+  // 트립에 대해 또 요청을 보낼 수 있다(2차 리뷰로 발견). 트립ID별로 "지금 진행 중인 재분석
+  // Promise"를 기억해 두면, 같은 트립에 대한 동시 시도는 그 Promise를 나눠 쓰고, 다른
+  // 트립의 재분석은(맵의 키가 다르므로) 전혀 막지 않는다.
+  const inFlightAnalysisByTripRef = useRef<Map<string, ReturnType<typeof runAnalysis>>>(new Map())
+
+  // 같은 tripId로 이미 재분석이 진행 중이면 그 Promise를 그대로 나눠 쓴다 — 새 POST를 또
+  // 보내지 않는다. 자동 재분석(아래 effect)과 카드의 수동 "다시 시도"(handleRetry)가 동시에
+  // 걸려도 이 함수 하나를 같이 쓰므로 중복되지 않는다.
+  const startAnalysisIfNeeded = useCallback((): ReturnType<typeof runAnalysis> => {
+    if (!tripId) return Promise.resolve(null)
+    const inFlight = inFlightAnalysisByTripRef.current
+    const existing = inFlight.get(tripId)
+    if (existing) return existing
+    const promise = runAnalysis().finally(() => {
+      if (inFlight.get(tripId) === promise) inFlight.delete(tripId)
+    })
+    inFlight.set(tripId, promise)
+    return promise
+  }, [tripId, runAnalysis])
 
   // location.state는 새로고침에도 남아 있을 수 있다. 재렌더/재실행 때마다 다시 읽으면
   // 그 사이 지워졌는지에 따라 분기가 흔들릴 수 있으므로, 이 마운트에서 처음 읽은 값을
@@ -89,7 +120,7 @@ export default function RemainingCongested() {
     // 세션(토큰) 로딩이 끝나기 전에 호출하면 항상 401로 실패한다 — 기다렸다가 부른다.
     if (sessionLoading) return
 
-    let cancelled = false
+    const myExecution = ++executionRef.current
     setLoading(true)
     setError(null)
 
@@ -97,27 +128,34 @@ export default function RemainingCongested() {
     // 분석이 비어 있는 장소(교체분 unknown 등)만 있을 때 재분석을 돌리고, 백엔드는 성공 분을 건너뛴다.
     fetchAnalysis(token, tripId)
       .then(async (result) => {
+        // 이 사이 새 실행이 시작됐으면(재마운트 등) 여기서 멈춘다 — runAnalysis()는
+        // 트립 전체를 다시 분석하는 비싼 호출이라, 이미 낡은 실행이 이걸 시작하면 안 된다.
+        if (executionRef.current !== myExecution) return null
         if (!needsFreshAnalysis(result.items)) return result
-        const rerun = await runAnalysis()
-        if (rerun) return rerun
-        return result
+        const rerun = await startAnalysisIfNeeded()
+        if (executionRef.current !== myExecution) return null
+        return rerun ?? result
       })
       .then((result) => {
-        if (cancelled) return
+        if (executionRef.current !== myExecution || !result) return
         setItems(result.items)
       })
       .catch((e) => {
-        if (cancelled) return
+        if (executionRef.current !== myExecution) return
         setError(e instanceof Error ? e.message : "조회 실패")
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (executionRef.current === myExecution) setLoading(false)
       })
 
-    // 이 실행이 끝나기 전에 재실행되거나(예: 세션 로딩 완료) 화면을 벗어나면, 늦게 도착한
-    // 응답이 이후 상태를 덮어쓰지 않도록 막는다.
+    // 언마운트든 의존성 변경으로 인한 재실행이든, cleanup이 불렸다는 건 "이 실행을 더 이상
+    // 신뢰하면 안 된다"는 뜻이다. 다만 이미 새 실행이 시작돼 번호를 앞질러 놨다면(의존성
+    // 변경으로 인한 재실행 쪽은 React가 cleanup을 먼저 부르므로 보통은 아직 아니다) 그
+    // 값을 덮어써서 무효화하면 안 된다 — 그래서 "여전히 내 번호와 같을 때만" 올린다.
     return () => {
-      cancelled = true
+      if (executionRef.current === myExecution) {
+        executionRef.current += 1
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId, sessionLoading, token])
@@ -153,8 +191,16 @@ export default function RemainingCongested() {
   }
 
   const handleRetry = async () => {
-    const result = await runAnalysis()
-    if (result) setItems(result.items)
+    // executionRef는 effect 재실행/언마운트 때마다 올라간다 — 이 값을 클릭 시점에 찍어두면,
+    // "다시 시도"가 끝나기 전에 다른 트립으로 넘어가거나 화면을 벗어난 뒤에도 똑같이
+    // 감지할 수 있다(코드 리뷰로 발견, 2026-09-19 — 자동 조회 effect에는 이 검사가 있었지만
+    // 수동 재시도에는 없어서, A에서 재시도 중 B로 넘어가면 늦게 온 A의 결과가 B 화면을
+    // 덮어쓸 수 있었다). tripId도 함께 확인해 이중으로 방어한다.
+    const myExecution = executionRef.current
+    const myTripId = tripId
+    const result = await startAnalysisIfNeeded()
+    if (executionRef.current !== myExecution) return
+    if (result && result.tripId === myTripId) setItems(result.items)
   }
 
   const crowdedCount = (items ?? []).filter(isCrowdedPending).length
