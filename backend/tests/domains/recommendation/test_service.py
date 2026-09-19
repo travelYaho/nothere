@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from app.clients.kakao_mobility import RouteResult
-from app.core.exceptions import AppError
+from app.core.exceptions import AppError, ErrorCode
 from app.domains.recommendation.service import RecommendationService
 from app.schemas.user import CurrentUser
 
@@ -128,6 +128,59 @@ def test_get_candidates_includes_tags_and_address():
         {"id": 4, "name": "사진·전망"},
     ]
     svc.repo.list_place_tags_map.assert_called_once()
+
+
+def test_score_routes_no_candidate_status_raises_distinct_error_code():
+    """status가 "no_candidate"면 "요청 미완료"와 구분되는 전용 코드를 내려야 한다 — 프론트가
+    문자열 매칭이 아니라 이 코드로 "후보 없음"(정상 결과)과 진짜 오류를 구분한다
+    (2026-09-18, 코드 리뷰로 발견: req.status != "success" 하나로만 묶으면 나중에 "success"도
+    "no_candidate"도 아닌 다른 상태가 추가돼도 같은 문구로 뭉뚱그려질 위험이 있었음)."""
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    request_id = uuid4()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+
+    req = SimpleNamespace(id=request_id, trip_place_id=trip_place_id, status="no_candidate")
+    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4())
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+
+    svc.repo.get_request = MagicMock(return_value=req)
+    svc.repo.get_trip_place = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+
+    with pytest.raises(AppError) as exc:
+        svc.score_routes(request_id, user, None, None)
+
+    assert exc.value.code == ErrorCode.NO_CANDIDATE
+    assert exc.value.status_code == 400
+
+
+def test_score_routes_other_non_success_status_keeps_generic_not_completed_error():
+    """"success"도 "no_candidate"도 아닌(지금은 존재하지 않지만 향후 추가될 수 있는) 상태는
+    "no_candidate" 전용 코드로 오분류되지 않고 기존 일반 코드를 유지해야 한다."""
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    request_id = uuid4()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+
+    req = SimpleNamespace(id=request_id, trip_place_id=trip_place_id, status="pending")
+    tp = SimpleNamespace(id=trip_place_id, trip_id=trip_id, place_id=uuid4())
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+
+    svc.repo.get_request = MagicMock(return_value=req)
+    svc.repo.get_trip_place = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+
+    with pytest.raises(AppError) as exc:
+        svc.score_routes(request_id, user, None, None)
+
+    assert exc.value.code == ErrorCode.INVALID_REQUEST
+    assert exc.value.code != ErrorCode.NO_CANDIDATE
+    assert exc.value.status_code == 400
 
 
 def test_score_routes_returns_route_score_without_rank_or_total():

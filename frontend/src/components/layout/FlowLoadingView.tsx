@@ -18,6 +18,9 @@ export function FlowLoadingView({
   stepIndex,
   missingIdMessage,
   error,
+  notice,
+  noticeActionLabel = "돌아가기",
+  onNoticeAction,
   loading,
   onRetry,
   onBack,
@@ -28,7 +31,14 @@ export function FlowLoadingView({
   steps: readonly FlowLoadingStep[]
   stepIndex: number
   missingIdMessage?: string
+  /** 진짜 오류(네트워크·서버 실패 등) — 빨간 경고 스타일 + "다시 시도"로 보여준다. */
   error?: string | null
+  /** 오류가 아닌 안내(예: 조건에 맞는 결과가 없음) — 중립 스타일로 보여주고, 재시도
+   * 대신 onNoticeAction으로 다른 동작(예: 이전 화면으로)을 제공한다. 같은 조건으로
+   * "다시 시도"를 눌러도 결과가 안 바뀌는 경우에 error와 구분해서 쓴다. */
+  notice?: string | null
+  noticeActionLabel?: string
+  onNoticeAction?: () => void
   loading: boolean
   onRetry?: () => void
   onBack?: () => void
@@ -77,6 +87,16 @@ export function FlowLoadingView({
           <div className="flex flex-col items-center gap-3 pt-8">
             <p role="alert" className="text-[13px] text-congestion-high">{error}</p>
             {onRetry && <Button onClick={onRetry}>다시 시도</Button>}
+          </div>
+        )}
+        {notice && !loading && (
+          <div className="flex flex-col items-center gap-3 pt-8">
+            <p role="status" className="text-[13px] text-ink-muted">{notice}</p>
+            {onNoticeAction && (
+              <Button variant="ghost" onClick={onNoticeAction}>
+                {noticeActionLabel}
+              </Button>
+            )}
           </div>
         )}
       </div>
