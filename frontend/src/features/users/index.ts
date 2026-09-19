@@ -1,4 +1,5 @@
 export {
+  deleteMe,
   getMe,
   getMyStats,
   updateNickname,
