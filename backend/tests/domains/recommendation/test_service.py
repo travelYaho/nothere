@@ -412,6 +412,50 @@ def test_apply_replacement_clears_old_analysis_in_same_commit():
     svc.repo.get_candidate_for_trip_place.assert_called_once_with(candidate_id, trip_place_id)
 
 
+def test_apply_replacement_rejects_candidate_that_is_same_as_current_place():
+    """후보의 candidate_place_id가 현재 trip_place.place_id와 같으면(교체 전/후가 동일한
+    장소) 의미 없는 이력을 남기지 않고 409로 거부해야 한다 — 이 검사가 없으면 같은 장소로
+    반복 '교체'해도 매번 Replacement 행이 쌓인다(#오늘 반드시 처리할 것 ③)."""
+    db = MagicMock()
+    svc = RecommendationService(db)
+    user = _user()
+    trip_place_id = uuid4()
+    trip_id = uuid4()
+    candidate_id = uuid4()
+    same_place_id = uuid4()
+
+    tp = SimpleNamespace(
+        id=trip_place_id,
+        trip_id=trip_id,
+        place_id=same_place_id,
+        initial_place_id=None,
+        is_fixed=False,
+    )
+    trip = SimpleNamespace(id=trip_id, user_id=user.id)
+    cand = SimpleNamespace(id=candidate_id, candidate_place_id=same_place_id, congestion_level="low")
+    ranking = SimpleNamespace(id=uuid4())
+    reason = SimpleNamespace(is_eligible=True, recommend_reason="추천", not_recommend_reason=None)
+    route = SimpleNamespace(extra_minutes=5)
+
+    svc.repo.get_trip_place_for_update = MagicMock(return_value=tp)
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_candidate_for_trip_place = MagicMock(return_value=cand)
+    svc.repo.get_ranking_by_candidate = MagicMock(return_value=ranking)
+    svc.repo.get_reason_by_candidate = MagicMock(return_value=reason)
+    svc.repo.get_route_by_candidate = MagicMock(return_value=route)
+    svc.repo.create_replacement = MagicMock()
+    db.commit = MagicMock()
+
+    with pytest.raises(AppError) as exc:
+        svc.apply_replacement(trip_place_id, candidate_id, user)
+
+    assert exc.value.status_code == 409
+    assert exc.value.code == ErrorCode.CONFLICT
+    svc.repo.create_replacement.assert_not_called()
+    db.commit.assert_not_called()
+    assert tp.place_id == same_place_id
+
+
 def test_apply_replacement_rejects_candidate_from_another_trip_place():
     """candidate_id가 다른 trip_place(다른 사용자 포함)의 추천 요청에서 나온 것이면
     get_candidate_for_trip_place()가 None을 돌려주고, 그대로 404 처리돼야 한다 —

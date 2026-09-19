@@ -549,6 +549,10 @@ class RecommendationService:
         route = self.repo.get_route_by_candidate(candidate_id)
         if ranking is None or reason is None or not reason.is_eligible:
             raise AppError(ErrorCode.INVALID_REQUEST, "경로 점수가 없는 후보입니다.", 400)
+        # 이미 잠근 tp 기준으로 비교한다 — 현재 장소와 같은 장소로의 "교체"는 의미 없는
+        # 이력만 쌓는다(교체 전/후가 동일).
+        if cand.candidate_place_id == tp.place_id:
+            raise AppError(ErrorCode.CONFLICT, "이미 적용된 장소입니다.", 409)
 
         from_place_id = tp.place_id
         to_place_id = cand.candidate_place_id
