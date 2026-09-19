@@ -189,7 +189,7 @@ def test_list_trips_maps_rows_and_forwards_filter():
     assert len(result.trips) == 1
     assert result.trips[0].trip_id == trip.id
     assert result.trips[0].place_count == 2
-    assert result.trips[0].resume_url == f"/trips/{trip.id}/guide"
+    assert result.trips[0].resume_url == f"/trips/{trip.id}/saved"
 
 
 def test_list_trips_has_next_true_when_more_remain():

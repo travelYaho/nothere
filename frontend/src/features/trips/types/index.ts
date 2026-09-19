@@ -119,7 +119,7 @@ export interface TripConditionsUpdateRequest {
   preferredExperienceTagIds?: number[]
 }
 
-/** 카드를 누르면 resumeUrl 로 이동한다 — 확정된 일정이면 가이드북, 아니면 STEP3 장소 목록. */
+/** 카드를 누르면 resumeUrl 로 이동한다 — 확정된 일정이면 확정 일정 저장본, 아니면 STEP3 장소 목록. */
 export interface TripSummary {
   tripId: string
   title: string
