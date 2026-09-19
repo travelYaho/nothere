@@ -58,6 +58,21 @@ class RecommendationRepository:
             .first()
         )
 
+    def lock_trip(self, trip_id: UUID) -> Trip | None:
+        """공유 링크 생성 전에 trip 행을 잠근다.
+
+        get_active_share_link()만으로는 두 요청이 동시에 활성 링크 없음을 보고
+        서로 다른 token으로 insert 할 수 있다. 조회 전에 이 잠금을 잡아
+        같은 trip의 공유 링크 upsert를 직렬화한다.
+        """
+        return (
+            self.db.query(Trip)
+            .filter(Trip.id == trip_id)
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+
     def get_trip_place(self, trip_place_id: UUID) -> TripPlace | None:
         return self.db.query(TripPlace).filter(TripPlace.id == trip_place_id).first()
 

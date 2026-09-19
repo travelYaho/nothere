@@ -24,6 +24,19 @@ export function formatExtraMinutes(minutes: number | null | undefined): string |
   return minutes >= 0 ? `+${minutes}분` : `${minutes}분`
 }
 
+export function formatTravelChange(
+  originalMinutes: number | null | undefined,
+  travelMinutes: number | null | undefined,
+  extraMinutes: number | null | undefined,
+): string | null {
+  if (originalMinutes != null && travelMinutes != null) {
+    const extra = formatExtraMinutes(extraMinutes)
+    return extra ? `${originalMinutes}분 → ${travelMinutes}분 (${extra})` : `${originalMinutes}분 → ${travelMinutes}분`
+  }
+  if (travelMinutes != null) return `${travelMinutes}분`
+  return formatExtraMinutes(extraMinutes)
+}
+
 export function formatNeighborDistance(
   prevM: number | null | undefined,
   nextM: number | null | undefined,

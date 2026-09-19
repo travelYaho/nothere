@@ -30,11 +30,13 @@ export function SavedItineraryView({
   guide,
   onBack,
   onEdit,
+  onMakeGuidebook,
   onHome,
 }: {
   guide: GuideResponse
   onBack?: () => void
   onEdit: () => void
+  onMakeGuidebook?: () => void
   onHome: () => void
 }) {
   const coverSrc = guide.coverImageUrl || savedHero
@@ -162,6 +164,15 @@ export function SavedItineraryView({
           <Button variant="primary" onClick={onEdit} className="h-[54px] min-w-0 flex-1">
             수정하기
           </Button>
+          {onMakeGuidebook && (
+            <button
+              type="button"
+              onClick={onMakeGuidebook}
+              className="inline-flex h-[54px] min-w-0 flex-1 items-center justify-center rounded-[var(--radius-field)] bg-primary px-3 text-[15px] font-extrabold tracking-[-0.16px] text-primary-foreground shadow-[var(--shadow-primary)] transition-[transform,filter,opacity] hover:brightness-[1.05] active:scale-[0.99]"
+            >
+              가이드북 만들기
+            </button>
+          )}
           <Button
             variant="ghost"
             onClick={onHome}

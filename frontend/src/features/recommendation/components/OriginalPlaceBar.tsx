@@ -5,11 +5,13 @@ import { congestionTextClass, shortCongestionLabel } from "../utils/compareForma
 export function OriginalPlaceBar({
   name,
   level,
+  travelMinutes,
   keeping = false,
   onKeep,
 }: {
   name: string
   level: CongestionLevel
+  travelMinutes?: number | null
   keeping?: boolean
   onKeep?: () => void
 }) {
@@ -27,6 +29,11 @@ export function OriginalPlaceBar({
               {shortCongestionLabel(level)}
             </span>
           </p>
+          {travelMinutes != null && (
+            <p className="truncate text-[11px] font-medium leading-[16.5px] text-ink-faint">
+              기존 이동 {travelMinutes}분
+            </p>
+          )}
         </div>
       </div>
       <Button

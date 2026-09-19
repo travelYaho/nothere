@@ -176,7 +176,7 @@ export default function ConfirmTrip() {
         right={
           <button
             type="button"
-            className="text-[13px] font-bold leading-5 text-[#1864F5]"
+            className="text-[13px] font-bold leading-5 text-primary"
             onClick={() => tripId && navigate(`/trips/${tripId}/remaining`)}
           >
             일정 수정
@@ -243,7 +243,7 @@ export default function ConfirmTrip() {
                           <span
                             className={[
                               "mt-1 size-2.5 shrink-0 rounded-full",
-                              isFirst ? "bg-[#1864F5]" : "bg-[#C3CCD8]",
+                              isFirst ? "bg-primary" : "bg-[#C3CCD8]",
                             ].join(" ")}
                           />
                           {!isLast && <span className="mt-1 w-px flex-1 bg-[#DBE2EC]" />}
@@ -257,7 +257,7 @@ export default function ConfirmTrip() {
                               {place.name}
                             </p>
                             {wasReplaced && (
-                              <span className="rounded-md bg-[#E5EDFF] px-1.5 py-0.5 text-[10px] font-bold leading-[15px] text-[#1864F5]">
+                              <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold leading-[15px] text-primary">
                                 변경됨
                               </span>
                             )}
@@ -304,7 +304,7 @@ export default function ConfirmTrip() {
                 type="button"
                 disabled={busy || places.length === 0}
                 onClick={() => void onMakeGuidebook()}
-                className="inline-flex h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl bg-[#1864F5] text-[16px] font-extrabold tracking-[-0.16px] text-white shadow-[0px_8px_18px_-6px_rgba(24,100,245,0.55)] transition-[transform,filter,opacity] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-45"
+                className="inline-flex h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl bg-primary text-[16px] font-extrabold tracking-[-0.16px] text-primary-foreground shadow-[var(--shadow-primary)] transition-[transform,filter,opacity] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-45"
               >
                 <Doc size={16} />
                 {busy ? "처리 중…" : "가이드북 만들기"}

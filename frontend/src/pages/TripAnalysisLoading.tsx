@@ -8,9 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { Search } from "@/components/common/icons"
-import { Button } from "@/components/common/primitives"
-import { FlowHeader } from "@/components/layout/navigation"
+import { FlowLoadingView } from "@/components/layout/FlowLoadingView"
 import { useRunAnalysis } from "@/features/recommendation"
 import { useSession } from "@/store/sessionStore"
 
@@ -75,40 +73,17 @@ export default function TripAnalysisLoading() {
   }, [sessionLoading, start])
 
   return (
-    <div className="flex flex-1 flex-col">
-      <FlowHeader title="일정 점검" progress={4 / 9} />
-
-      <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-        <span className="flex size-16 items-center justify-center rounded-full bg-primary/10">
-          <Search size={28} className="text-primary" />
-        </span>
-        <h2 className="pt-6 text-[17px] font-extrabold text-ink">일정을 점검하고 있어요</h2>
-        <p className="min-h-[21px] pt-1.5 text-[13px] font-semibold leading-[21px] text-ink-muted">
-          {ANALYSIS_STEPS[stepIndex].label}
-        </p>
-        <div className="w-60 pt-8">
-          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-chip">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
-              style={{ width: `${ANALYSIS_STEPS[stepIndex].progress}%` }}
-            >
-              <div className="absolute inset-y-0 left-0 w-1/3 animate-progress-shimmer rounded-full bg-white/40" />
-            </div>
-          </div>
-          <p className="pt-2 text-[11px] font-semibold text-ink-faint">
-            {stepIndex + 1} / {ANALYSIS_STEPS.length}
-          </p>
-        </div>
-        {!tripId && (
-          <p className="pt-8 text-[12px] text-congestion-high">tripId 를 찾을 수 없습니다.</p>
-        )}
-        {error && !loading && (
-          <div className="flex flex-col items-center gap-3 pt-8">
-            <p className="text-[13px] text-congestion-high">{error}</p>
-            <Button onClick={start}>다시 시도</Button>
-          </div>
-        )}
-      </div>
-    </div>
+    <FlowLoadingView
+      headerTitle="일정 점검"
+      headerProgress={4 / 9}
+      title="일정을 점검하고 있어요"
+      steps={ANALYSIS_STEPS}
+      stepIndex={stepIndex}
+      missingIdMessage={tripId ? undefined : "tripId 를 찾을 수 없습니다."}
+      error={error}
+      loading={loading}
+      onRetry={start}
+      onBack={() => navigate(-1)}
+    />
   )
 }

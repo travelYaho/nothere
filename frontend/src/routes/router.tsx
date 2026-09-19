@@ -8,6 +8,7 @@ import TripConditions from "@/pages/TripConditions"
 import TripPlaces from "@/pages/TripPlaces"
 import CustomPlace from "@/pages/CustomPlace"
 import TripAnalysisLoading from "@/pages/TripAnalysisLoading"
+import AlternativeSearchLoading from "@/pages/AlternativeSearchLoading"
 import GuideExplore from "@/pages/GuideExplore"
 import GuideLiked from "@/pages/GuideLiked"
 import CompareAlternatives from "@/pages/CompareAlternatives"
@@ -51,6 +52,10 @@ export const router = createBrowserRouter([
       {
         path: "/trips/:tripId/places/:tripPlaceId/purpose",
         element: <RecommendationPurpose />,
+      },
+      {
+        path: "/trips/:tripId/places/:tripPlaceId/searching",
+        element: <AlternativeSearchLoading />,
       },
       {
         path: "/trips/:tripId/places/:tripPlaceId/compare",

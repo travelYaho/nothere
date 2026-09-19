@@ -102,7 +102,7 @@ export function CongestionCard({
             {place}
           </p>
           {wasReplaced && (
-            <span className="ml-1.5 shrink-0 rounded-md bg-[#E5EDFF] px-1.5 py-0.5 text-[10px] font-bold leading-[15px] text-[#1864F5]">
+            <span className="ml-1.5 shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold leading-[15px] text-primary">
               변경됨
             </span>
           )}

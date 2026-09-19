@@ -137,7 +137,7 @@ class AnalysisRepository:
             TripPlaceAnalysis.trip_place_id == trip_place_id
         ).delete()
 
-    def upsert_analysis(
+    def write_analysis(
         self,
         trip_place_id: UUID,
         analysis_status: str,
@@ -145,6 +145,7 @@ class AnalysisRepository:
         unknown_reason: str | None,
         rule_version: str | None,
     ) -> TripPlaceAnalysis:
+        """분석 결과를 세션에만 반영한다. commit은 호출측 트랜잭션에 맡긴다."""
         analysis = (
             self.db.query(TripPlaceAnalysis)
             .filter(TripPlaceAnalysis.trip_place_id == trip_place_id)
@@ -158,6 +159,20 @@ class AnalysisRepository:
         analysis.unknown_reason = unknown_reason
         analysis.rule_version = rule_version
         analysis.analyzed_at = datetime.now(timezone.utc)
+        self.db.flush()
+        return analysis
+
+    def upsert_analysis(
+        self,
+        trip_place_id: UUID,
+        analysis_status: str,
+        level: str | None,
+        unknown_reason: str | None,
+        rule_version: str | None,
+    ) -> TripPlaceAnalysis:
+        analysis = self.write_analysis(
+            trip_place_id, analysis_status, level, unknown_reason, rule_version
+        )
         self.db.commit()
         self.db.refresh(analysis)
         return analysis

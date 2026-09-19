@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { useSession } from "@/store/sessionStore"
 import {
   applyReplacement,
@@ -24,26 +24,35 @@ export function useAccessToken(): string {
   return session?.access_token ?? ""
 }
 
-export function useCompareFlow(requestId: string | undefined) {
+export function useCompareFlow(
+  requestId: string | undefined,
+  options?: { skipScoring?: boolean },
+) {
   const token = useAccessToken()
   const [data, setData] = useState<CompareCandidatesResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const inFlightRef = useRef(false)
+  const skipScoring = options?.skipScoring ?? false
 
   const load = useCallback(async () => {
-    if (!requestId) return
+    if (!requestId || inFlightRef.current) return
+    inFlightRef.current = true
     setLoading(true)
     setError(null)
     try {
-      await scoreRoutes(token, requestId)
+      if (!skipScoring) {
+        await scoreRoutes(token, requestId)
+      }
       const compared = await fetchScoredCandidates(token, requestId)
       setData(compared)
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오기 실패")
     } finally {
+      inFlightRef.current = false
       setLoading(false)
     }
-  }, [requestId, token])
+  }, [requestId, token, skipScoring])
 
   return { data, loading, error, load, token }
 }

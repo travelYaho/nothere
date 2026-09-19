@@ -32,7 +32,7 @@ export function Button({
     primary:
       "bg-primary text-primary-foreground shadow-[var(--shadow-primary-soft)] hover:brightness-[1.05] active:brightness-95 active:scale-[0.99]",
     accent:
-      "bg-[#1864F5] text-white shadow-[0px_8px_9px_rgba(24,100,245,0.55)] hover:brightness-[1.05] active:brightness-95 active:scale-[0.99]",
+      "bg-primary text-primary-foreground shadow-[var(--shadow-primary)] hover:brightness-[1.05] active:brightness-95 active:scale-[0.99]",
     ghost:
       "bg-surface text-ink-soft border-[0.667px] border-line-chip hover:bg-canvas active:scale-[0.99]",
     text: "bg-transparent text-primary hover:opacity-80 active:opacity-60",

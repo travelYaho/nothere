@@ -53,7 +53,7 @@ def test_list_trips_returns_mapped_trips(client):
     assert body["totalCount"] == 1
     assert body["trips"][0]["tripId"] == str(trip.id)
     assert body["trips"][0]["placeCount"] == 3
-    assert body["trips"][0]["resumeUrl"] == f"/trips/{trip.id}/guide"
+    assert body["trips"][0]["resumeUrl"] == f"/trips/{trip.id}/saved"
 
 
 def test_list_trips_forwards_status_filter_and_page(client):

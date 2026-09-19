@@ -8,6 +8,7 @@ import { TimetableDateHeader } from "@/components/common/TimetableDateHeader"
 import { Button } from "@/components/common/primitives"
 import { BasicHeader } from "@/components/layout/navigation"
 import { toUiCongestion, useConfirmGuide } from "@/features/recommendation"
+import { markGuidebookMade } from "@/features/recommendation/utils/guidebookMade"
 import { formatVisitTime } from "@/features/trips/utils/placeOrder"
 
 export default function Guidebook() {
@@ -21,6 +22,10 @@ export default function Guidebook() {
   useEffect(() => {
     void loadGuide()
   }, [loadGuide])
+
+  useEffect(() => {
+    if (tripId && guide) markGuidebookMade(tripId)
+  }, [tripId, guide])
 
   // 확정 직후(ConfirmTrip → 여기) 흐름뿐 아니라 보관함에서도 이 화면으로 들어온다.
   // 보관함에서 온 경우 "홈 화면" 만으로는 원래 있던 곳으로 못 돌아가서 뒤로가기도 둔다.
@@ -57,7 +62,7 @@ export default function Guidebook() {
   }
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden">
+    <div className="relative flex flex-1 flex-col overflow-hidden font-guidebook">
       <BasicHeader title="가이드북" onBack={handleBack} />
       <div className="flex flex-1 flex-col overflow-y-auto px-5 pb-10 pt-4">
         {loading && <p className="text-[13px] text-ink-muted">불러오는 중…</p>}

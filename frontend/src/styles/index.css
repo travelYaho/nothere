@@ -1,4 +1,5 @@
-/* Paperlogy — @import must precede all else */
+/* Pretendard — 앱 전역. Paperlogy는 가이드북 스코프 전용. @import must precede all else */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css");
 @import url("https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy/subsets/Paperlogy-dynamic-subset.css");
 
 @import "tailwindcss";
@@ -91,7 +92,7 @@
   --text-caption: 12px;
   --text-micro: 11px;
 
-  --font-sans: "Paperlogy", sans-serif;
+  --font-sans: "Pretendard Variable", Pretendard, sans-serif;
 }
 
 @layer base {
@@ -102,7 +103,7 @@
   }
 
   body {
-    font-family: "Paperlogy", sans-serif;
+    font-family: var(--font-sans);
     background: var(--color-canvas);
     color: var(--color-ink);
   }
@@ -186,6 +187,10 @@
 
   .animate-progress-shimmer {
     animation: ymg-progress-shimmer 1.1s ease-in-out infinite;
+  }
+
+  .font-guidebook {
+    font-family: "Paperlogy", sans-serif;
   }
 }
 
