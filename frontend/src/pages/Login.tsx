@@ -193,9 +193,19 @@ export default function Login() {
         </div>
 
         <div className="mt-4 flex w-full max-w-[325px] flex-col gap-2.5 pb-8">
-          <Button type="button" variant="ghost" block loading={kakaoLoading} onClick={handleKakaoLogin}>
-            카카오로 계속하기
-          </Button>
+          <button
+            type="button"
+            onClick={handleKakaoLogin}
+            disabled={kakaoLoading}
+            aria-busy={kakaoLoading}
+            className="block w-full disabled:pointer-events-none disabled:opacity-50"
+          >
+            <img
+              src="/images/kakao_login_large_wide.png"
+              alt="카카오 로그인"
+              className="block h-auto w-full"
+            />
+          </button>
           <Button variant="ghost" block>
             소셜 B로 계속하기
           </Button>

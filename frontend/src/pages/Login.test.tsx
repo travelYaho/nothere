@@ -43,7 +43,11 @@ describe("Login kakao", () => {
     const user = userEvent.setup()
     renderLogin()
 
-    await user.click(screen.getByRole("button", { name: "카카오로 계속하기" }))
+    expect(screen.getByRole("img", { name: "카카오 로그인" })).toHaveAttribute(
+      "src",
+      "/images/kakao_login_large_wide.png",
+    )
+    await user.click(screen.getByRole("button", { name: "카카오 로그인" }))
 
     expect(signInWithKakaoMock).toHaveBeenCalledTimes(1)
   })
@@ -62,11 +66,11 @@ describe("Login kakao", () => {
     )
     renderLogin()
 
-    await user.click(screen.getByRole("button", { name: "카카오로 계속하기" }))
+    await user.click(screen.getByRole("button", { name: "카카오 로그인" }))
 
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument()
     expect(screen.getByText(/카카오 로그인이 아직 켜져 있지 않습니다/)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "카카오로 계속하기" })).not.toBeDisabled()
+    expect(screen.getByRole("button", { name: "카카오 로그인" })).not.toBeDisabled()
   })
 
   it("카카오 시작이 실패하면 팝업을 띄운다", async () => {
@@ -74,7 +78,7 @@ describe("Login kakao", () => {
     signInWithKakaoMock.mockRejectedValue(new Error("카카오 로그인 설정이 없습니다."))
     renderLogin()
 
-    await user.click(screen.getByRole("button", { name: "카카오로 계속하기" }))
+    await user.click(screen.getByRole("button", { name: "카카오 로그인" }))
 
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument()
     expect(screen.getByText("카카오 로그인에 실패했어요")).toBeInTheDocument()
