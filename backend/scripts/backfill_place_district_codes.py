@@ -25,6 +25,7 @@ import time
 from collections import Counter
 
 from app.clients import tour_api
+from app.core.logging_setup import suppress_third_party_request_logging
 from app.db.models.place import Place
 from app.db.session import SessionLocal
 from app.repositories.place_repository import PlaceRepository
@@ -99,6 +100,10 @@ def run(dry_run: bool = False) -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # 이 스크립트는 app.main을 거치지 않고 직접 실행되므로, httpx의 요청 URL(쿼리의
+    # serviceKey 포함) INFO 로깅을 여기서도 따로 꺼야 한다 — main.py의 설정을
+    # 자동으로 물려받지 않는다.
+    suppress_third_party_request_logging()
     parser = argparse.ArgumentParser(description="place.area_cd/signgu_cd 백필")
     parser.add_argument("--dry-run", action="store_true", help="실제로 저장하지 않고 무엇을 할지만 출력")
     args = parser.parse_args()

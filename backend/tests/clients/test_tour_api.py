@@ -4,6 +4,8 @@ EXTERNAL_API_UNAVAILABLE(503)로 명확히 실패하는지 검증한다.
 실제 네트워크 호출은 전부 monkeypatch 로 대체해서, 지금처럼 TOUR_API_KEY 가
 없는 환경에서도 (그리고 있더라도) 결정적으로 돌아간다.
 """
+import traceback
+
 import httpx
 import pytest
 
@@ -25,6 +27,46 @@ def test_missing_key_raises_503_without_calling_network(monkeypatch):
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.code == ErrorCode.EXTERNAL_API_UNAVAILABLE
+
+
+def test_search_places_failure_log_never_contains_service_key(monkeypatch, caplog):
+    """httpx.HTTPStatusError의 str()엔 요청 URL 전체(쿼리 포함)가 들어있다 — search_places
+    실패 시 남기는 경고 로그에 실제 serviceKey 값이 그대로 찍히면 안 된다."""
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "SUPER-SECRET-KEY-12345")
+
+    def _fake_get(url, params=None, **kwargs):
+        request = httpx.Request("GET", url, params=params)
+        return httpx.Response(500, request=request)
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(AppError):
+            tour_api.search_places("경복궁")
+
+    assert "SUPER-SECRET-KEY-12345" not in caplog.text
+
+
+def test_search_places_failure_exception_chain_never_contains_service_key(monkeypatch):
+    """경고 로그 마스킹과 별개로, raise ... from exc가 원본 httpx 예외를 __cause__로
+    체인에 남기면 traceback.format_exception()류가 마스킹 이전의 원본 URL을 노출할 수 있다."""
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "SUPER-SECRET-KEY-12345")
+
+    def _fake_get(url, params=None, **kwargs):
+        request = httpx.Request("GET", url, params=params)
+        return httpx.Response(500, request=request)
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    with pytest.raises(AppError) as exc_info:
+        tour_api.search_places("경복궁")
+
+    full_trace = "".join(
+        traceback.format_exception(
+            type(exc_info.value), exc_info.value, exc_info.value.__traceback__
+        )
+    )
+    assert "SUPER-SECRET-KEY-12345" not in full_trace
 
 
 def test_network_failure_raises_503_not_500(monkeypatch):
@@ -247,6 +289,24 @@ def test_to_signgu_cd_rejects_non_string_codes():
 
 
 # --- fetch_nearby_places 빈/이상 응답 ---
+
+def test_fetch_nearby_places_failure_log_never_contains_service_key(monkeypatch, caplog):
+    """fetch_nearby_places도 같은 방식으로 serviceKey를 쿼리 파라미터로 보낸다 — 호출
+    실패 시 남기는 경고 로그에 실제 키 값이 그대로 찍히면 안 된다."""
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "SUPER-SECRET-KEY-12345")
+
+    def _fake_get(url, params=None, **kwargs):
+        request = httpx.Request("GET", url, params=params)
+        return httpx.Response(500, request=request)
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    with caplog.at_level("WARNING"):
+        result = tour_api.fetch_nearby_places(37.5, 127.0, 3000)
+
+    assert result == []
+    assert "SUPER-SECRET-KEY-12345" not in caplog.text
+
 
 def test_fetch_nearby_places_returns_empty_list_when_items_is_empty_string(monkeypatch):
     monkeypatch.setattr(settings, "TOUR_API_KEY", "dummy-key")

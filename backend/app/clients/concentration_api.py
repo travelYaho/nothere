@@ -10,6 +10,7 @@ from urllib.parse import unquote
 
 import httpx
 
+from app.clients._redact import redact_service_key
 from app.core.config import settings
 
 logger = logging.getLogger("yeogimalgo.concentration_api")
@@ -78,9 +79,14 @@ def _fetch_page(
         response.raise_for_status()
         payload = response.json()
     except httpx.HTTPError as exc:
+        # from None — httpx 예외(exc)가 일반 traceback 출력에 섞여 나오지 않도록 억제한다
+        # (원본 exc 객체 자체를 없애는 것은 아니다). 메시지는 redact_service_key()로
+        # 마스킹했지만, exc 객체 안에는 원본 요청 URL(서비스키 포함)이 그대로 남아 있어
+        # traceback.format_exception()의 기본 출력이나 Sentry 등 예외 추적 도구가 체인을
+        # 따라가면 마스킹 이전 값이 노출될 수 있다(코드 리뷰로 표현 교정, 2026-09-19).
         raise ConcentrationApiError(
-            f"집중률 API 호출 실패: {exc}", result_code=None, retryable=True
-        ) from exc
+            f"집중률 API 호출 실패: {redact_service_key(str(exc))}", result_code=None, retryable=True
+        ) from None
     except ValueError as exc:
         # response.json()의 JSONDecodeError는 ValueError의 서브클래스다.
         raise ConcentrationApiError(
