@@ -6,7 +6,6 @@ ScheduleSummary(schedule_id)와 TripSummaryResponse(trip_id)는 id 필드명만 
 (schemas/home.py 주석 참고) 그대로 두고, 여기서 공통 필드만 한 번만 계산한다.
 """
 from app.db.models.trip import Trip
-from app.repositories.trip_place_repository import TripPlaceRepository
 from app.schemas.home import ScheduleSummary
 from app.schemas.trip import TripSummaryResponse
 
@@ -14,31 +13,33 @@ from app.schemas.trip import TripSummaryResponse
 def resume_path(trip: Trip) -> str:
     """일정 카드를 눌렀을 때 이동할 경로.
 
-    확정(완료 포함)된 일정은 가이드북으로, 그 외(작성 중)는 항상 STEP3
+    확정(완료 포함)된 일정은 최종의 최종(/saved)으로, 그 외(작성 중)는 항상 STEP3
     장소 목록 화면으로 보낸다 — 방문목적/분석/혼잡해결 중 어디까지 진행했는지는
     더 세분화할 수 있지만(현재 current_step/status 만으로는 추적 불가, 별도
     조사 필요), STEP3 화면은 등록된 장소를 그대로 보여주고 거기서 다음 단계로
     계속 진행할 수 있어 언제나 안전한 재진입 지점이다.
     """
     if trip.status in ("confirmed", "completed"):
-        return f"/trips/{trip.id}/guide"
+        return f"/trips/{trip.id}/saved"
     return f"/trips/{trip.id}/places"
 
 
-def _common_fields(trip: Trip, trip_places: TripPlaceRepository) -> dict:
+def _common_fields(trip: Trip, place_count: int) -> dict:
     return dict(
         title=trip.title,
         travel_date=trip.travel_date,
         region_name=trip.region.name if trip.region else "",
-        place_count=trip_places.count_by_trip(trip.id),
+        place_count=place_count,
         status=trip.status,
         resume_url=resume_path(trip),
     )
 
 
-def build_schedule_summary(trip: Trip, trip_places: TripPlaceRepository) -> ScheduleSummary:
-    return ScheduleSummary(schedule_id=trip.id, **_common_fields(trip, trip_places))
+def build_schedule_summary(trip: Trip, place_count: int) -> ScheduleSummary:
+    """place_count는 호출부가 미리 구해서 넘긴다 — TripPlaceRepository.count_by_trips()로
+    목록 전체를 한 번에 세고 여기 결과만 꽂는다(건마다 COUNT 쿼리를 내지 않기 위해)."""
+    return ScheduleSummary(schedule_id=trip.id, **_common_fields(trip, place_count))
 
 
-def build_trip_summary(trip: Trip, trip_places: TripPlaceRepository) -> TripSummaryResponse:
-    return TripSummaryResponse(trip_id=trip.id, **_common_fields(trip, trip_places))
+def build_trip_summary(trip: Trip, place_count: int) -> TripSummaryResponse:
+    return TripSummaryResponse(trip_id=trip.id, **_common_fields(trip, place_count))

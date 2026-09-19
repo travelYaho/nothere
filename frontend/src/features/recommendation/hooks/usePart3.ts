@@ -32,7 +32,10 @@ export function useAccessToken(): string {
 // 메시지 문자열로 구분하면 안 된다 — "success"가 아닌 모든 상태가 한때 같은 문구를 썼고,
 // 문구가 바뀌면 이 구분 자체가 조용히 깨진다(2026-09-18, 코드 리뷰로 발견).
 
-export function useCompareFlow(requestId: string | undefined) {
+export function useCompareFlow(
+  requestId: string | undefined,
+  options?: { skipScoring?: boolean },
+) {
   const token = useAccessToken()
   const [data, setData] = useState<CompareCandidatesResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -42,8 +45,10 @@ export function useCompareFlow(requestId: string | undefined) {
   // 두 번 조회했는데 첫 응답이 늦게 오거나, A→B→A로 왕복한 뒤 첫 A 응답이 오거나,
   // requestId가 사라진 뒤에도 이전 실행을 무효화 못 하는 문제가 있었다(2026-09-18, 코드
   // 리뷰로 발견). 그래서 매 load() 호출마다 값이 늘어나는 실행 번호로 "이게 아직 최신
-  // 실행인지"를 판단한다 — requestId가 같아도 다르게 본다.
+  // 실행인지"를 판단한다 — requestId가 같아도 다르게 본다(단순 in-flight 불리언 가드보다
+  // 넓은 경쟁 상태를 잡는다).
   const executionRef = useRef(0)
+  const skipScoring = options?.skipScoring ?? false
 
   useEffect(() => {
     // 언마운트되면 이 훅 인스턴스가 갖고 있던 마지막 실행도 무효화한다 — 화면을 떠난 뒤
@@ -68,7 +73,9 @@ export function useCompareFlow(requestId: string | undefined) {
     }
     setLoading(true)
     try {
-      await scoreRoutes(token, requestId)
+      if (!skipScoring) {
+        await scoreRoutes(token, requestId)
+      }
       const compared = await fetchScoredCandidates(token, requestId)
       if (executionRef.current !== myExecution) return
       setData(compared)
@@ -82,7 +89,7 @@ export function useCompareFlow(requestId: string | undefined) {
     } finally {
       if (executionRef.current === myExecution) setLoading(false)
     }
-  }, [requestId, token])
+  }, [requestId, token, skipScoring])
 
   return { data, loading, error, noCandidate, load, token }
 }
@@ -160,10 +167,17 @@ export function useConfirmGuide(tripId: string | undefined) {
     }
   }, [tripId, token])
 
-  const share = useCallback(async () => {
-    if (!tripId) throw new Error("tripId 없음")
-    return createShareLink(token, tripId)
-  }, [tripId, token])
+  const share = useCallback(
+    async (visibility?: "link" | "private" | "public") => {
+      if (!tripId) throw new Error("tripId 없음")
+      const res = await createShareLink(token, tripId, visibility)
+      if (visibility) {
+        setGuide((current) => (current ? { ...current, visibility } : current))
+      }
+      return res
+    },
+    [tripId, token],
+  )
 
   const loadPublic = useCallback(async (shareToken: string) => {
     setLoading(true)

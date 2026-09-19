@@ -223,7 +223,7 @@ export default function ComponentGallery() {
             </Panel>
 
             <Panel>
-              <p className="mb-4 text-[13px] font-bold text-ink">타이포 (Paperlogy)</p>
+              <p className="mb-4 text-[13px] font-bold text-ink">타이포 (Pretendard)</p>
               <div className="flex flex-col gap-2.5">
                 <p className="text-[24px] font-extrabold tracking-[-0.63px]">Display 24 · 여기말고</p>
                 <p className="text-[19px] font-extrabold tracking-[-0.4px]">Title 19 · 일정 점검</p>

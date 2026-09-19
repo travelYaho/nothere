@@ -134,11 +134,11 @@ export function fetchTripGuide(accessToken: string, tripId: string) {
 export function createShareLink(
   accessToken: string,
   tripId: string,
-  visibility: string = "link",
+  visibility?: "link" | "private" | "public",
 ) {
   return v1Fetch<ShareLinkResponse>(`${base}/trips/${tripId}/share-link`, accessToken, {
     method: "POST",
-    body: JSON.stringify({ visibility }),
+    body: JSON.stringify(visibility ? { visibility } : {}),
   })
 }
 

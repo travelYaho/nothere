@@ -2,7 +2,7 @@
  * 대안 찾기 2/2 — 원래 장소 vs 추천 대안 비교
  */
 import { useEffect, useState } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/common/primitives"
 import { AlertDialog, BottomSheet } from "@/components/feedback/modals"
 import { FlowHeader } from "@/components/layout/navigation"
@@ -23,8 +23,14 @@ export default function CompareAlternatives() {
   const [params] = useSearchParams()
   const requestId = params.get("requestId") ?? undefined
   const navigate = useNavigate()
+  const location = useLocation()
   const token = useAccessToken()
-  const { data, loading, error, noCandidate, load } = useCompareFlow(requestId)
+  // AlternativeSearchLoading이 이미 scoreRoutes까지 실행한 뒤 이리로 넘어오면 여기서 또
+  // 부르지 않는다(state.scored) — 그 경로가 아니면(직접 접근·새로고침 등) 여기서 부른다.
+  const scored = Boolean((location.state as { scored?: boolean } | null)?.scored)
+  const { data, loading, error, noCandidate, load } = useCompareFlow(requestId, {
+    skipScoring: scored,
+  })
 
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [keeping, setKeeping] = useState(false)
@@ -62,8 +68,8 @@ export default function CompareAlternatives() {
   const visible = data?.candidates.filter((c) => c.isEligible) ?? []
   const originalLevel = toUiCongestion(data?.originalPlace.congestionLevel)
 
-  const goRemaining = (reanalyze = false) => {
-    navigate(`/trips/${tripId}/remaining`, reanalyze ? { state: { reanalyze: true } } : undefined)
+  const goRemaining = () => {
+    navigate(`/trips/${tripId}/remaining`)
   }
 
   const handleKeep = async () => {
@@ -106,7 +112,7 @@ export default function CompareAlternatives() {
     try {
       await applyReplacement(token, tripPlaceId, pending.candidateId)
       setPending(null)
-      goRemaining(true)
+      goRemaining()
     } catch (e) {
       setApplyError(e instanceof Error ? e.message : "교체 실패")
     } finally {
@@ -129,7 +135,7 @@ export default function CompareAlternatives() {
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
-        {loading && <p className="pt-2 text-[13px] text-ink-muted">가까운 대안을 찾는 중…</p>}
+        {loading && <p className="pt-2 text-[13px] text-ink-muted">불러오는 중…</p>}
         {error && <p className="pt-2 text-[13px] text-congestion-high">{error}</p>}
         {noCandidate && (
           <div className="pt-4">
@@ -158,6 +164,7 @@ export default function CompareAlternatives() {
               <OriginalPlaceBar
                 name={data.originalPlace.name}
                 level={originalLevel}
+                travelMinutes={data.originalPlace.travelMinutes}
                 keeping={keeping}
                 onKeep={() => void handleKeep()}
               />
@@ -187,6 +194,7 @@ export default function CompareAlternatives() {
                     index={index}
                     expanded={candidate.candidateId === expandedId}
                     applying={applying && pending?.candidateId === candidate.candidateId}
+                    originalTravelMinutes={data.originalPlace.travelMinutes}
                     onToggle={() =>
                       setExpandedId((prev) =>
                         prev === candidate.candidateId ? null : candidate.candidateId,

@@ -3,7 +3,7 @@ from datetime import date
 from uuid import UUID
 
 from sqlalchemy import desc, func, nulls_last, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.preference import TripPreferredExperience
 from app.db.models.trip import IN_PROGRESS_STATUSES, Trip
@@ -129,6 +129,7 @@ class TripRepository:
     def get_in_progress(self, user_id: UUID) -> Trip | None:
         return (
             self.db.query(Trip)
+            .options(joinedload(Trip.region))
             .filter(Trip.user_id == user_id, Trip.status.in_(IN_PROGRESS_STATUSES))
             .order_by(desc(_recency_expr()))
             .first()
@@ -143,6 +144,7 @@ class TripRepository:
     ) -> list[Trip]:
         query = (
             self.db.query(Trip)
+            .options(joinedload(Trip.region))
             .filter(
                 Trip.user_id == user_id,
                 ~Trip.status.in_(IN_PROGRESS_STATUSES),
@@ -165,7 +167,10 @@ class TripRepository:
         status_filter: str | None,
         page: int,
     ) -> tuple[list[Trip], int]:
-        query = self.db.query(Trip).filter(Trip.user_id == user_id)
+        # region은 build_trip_summary()가 매 건 trip.region.name을 읽으므로 여기서
+        # joinedload로 같이 가져온다 — 안 그러면 목록 건수만큼 지연 로딩 쿼리가 나간다
+        # (get_in_progress/get_recent도 같은 이유로 동일하게 처리).
+        query = self.db.query(Trip).options(joinedload(Trip.region)).filter(Trip.user_id == user_id)
         if status_filter == "draft":
             query = query.filter(Trip.status.in_(IN_PROGRESS_STATUSES))
         elif status_filter == "confirmed":

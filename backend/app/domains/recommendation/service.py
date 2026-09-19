@@ -17,8 +17,9 @@ from app.db.models.recommendation import (
     RecommendationRoute,
 )
 from app.db.models.replacement import Replacement
-from app.db.models.share_link import ShareLink
+from app.db.models.share_link import ShareLink, ShareLinkVisibility
 from app.db.models.trip import Trip
+from app.domains.analysis.service import AnalysisStatus, ConcentrationLevel, RULE_VERSION
 from app.domains.recommendation import candidates as candidate_pipeline
 from app.domains.recommendation.route import RouteService
 from app.domains.recommendation.scoring import (
@@ -196,6 +197,34 @@ class RecommendationService:
             raise AppError(ErrorCode.FORBIDDEN, "접근 권한이 없습니다.", 403)
         return req, tp, trip
 
+    @staticmethod
+    def _seconds_to_minutes(seconds: int | None) -> int | None:
+        if seconds is None:
+            return None
+        return int(round(seconds / 60.0))
+
+    def _adjacent_travel_seconds(
+        self,
+        prev_place_id: UUID | None,
+        place_id: UUID,
+        next_place_id: UUID | None,
+        mode: str,
+    ) -> int | None:
+        if prev_place_id is None and next_place_id is None:
+            return 0
+        total = 0
+        if prev_place_id is not None:
+            leg = self.routes.get_leg(prev_place_id, place_id, mode)
+            if leg is None:
+                return None
+            total += leg.duration_seconds
+        if next_place_id is not None:
+            leg = self.routes.get_leg(place_id, next_place_id, mode)
+            if leg is None:
+                return None
+            total += leg.duration_seconds
+        return total
+
     def score_routes(
         self,
         request_id: UUID,
@@ -225,7 +254,10 @@ class RecommendationService:
                 400,
             )
 
-        mode = transport_mode or trip.transport_mode or "walk"
+        # 요청 transport_mode override는 쓰지 않는다. get_candidates()가 trip 기준으로
+        # travelMinutes를 다시 계산하므로, 점수와 표시 시각이 같은 교통수단이어야 한다.
+        _ = transport_mode
+        mode = trip.transport_mode or "walk"
         limit = (
             extra_time_limit_minutes
             if extra_time_limit_minutes is not None
@@ -280,12 +312,15 @@ class RecommendationService:
 
             if prev_tp is None and next_tp is None:
                 extra_minutes = 0
+                travel_minutes = 0
                 route_available = True
                 route_source = route_source or "api"
             elif route_available:
                 extra_minutes = max(0, int(round((new_seconds - baseline_seconds) / 60.0)))
+                travel_minutes = int(round(new_seconds / 60.0))
             else:
                 extra_minutes = None
+                travel_minutes = None
 
             route_result = compute_route_score(
                 extra_minutes=extra_minutes,
@@ -330,7 +365,7 @@ class RecommendationService:
             saved_ranking = self.repo.upsert_ranking(ranking)
             saved_route = self.repo.upsert_route(route)
             saved_reason = self.repo.upsert_reason(reason_row)
-            scored.append((cand, saved_ranking, saved_route, saved_reason, cand_name))
+            scored.append((cand, saved_ranking, saved_route, saved_reason, cand_name, travel_minutes))
 
         self.db.commit()
 
@@ -342,6 +377,7 @@ class RecommendationService:
                 "experienceScore": float(c.experience_score),
                 "routeScore": float(r.route_score or 0),
                 "extraMinutes": route.extra_minutes,
+                "travelMinutes": travel,
                 "distancePrevM": route.distance_prev_m,
                 "distanceNextM": route.distance_next_m,
                 "congestionLevel": c.congestion_level,
@@ -349,7 +385,7 @@ class RecommendationService:
                 "isEligible": reason.is_eligible,
                 "exclusionReason": reason.exclusion_reason,
             }
-            for c, r, route, reason, name in scored
+            for c, r, route, reason, name, travel in scored
         ]
         return {
             "requestId": str(request_id),
@@ -358,7 +394,7 @@ class RecommendationService:
         }
 
     def get_candidates(self, request_id: UUID, user: CurrentUser) -> dict:
-        req, tp, _trip = self._assert_request_owned(request_id, user)
+        req, tp, trip = self._assert_request_owned(request_id, user)
         original = self.repo.get_place(tp.place_id)
         analysis = self.repo.latest_analysis(tp.id)
         original_level = analysis.level if analysis and analysis.level else "unknown"
@@ -373,6 +409,13 @@ class RecommendationService:
         tags_map = self.repo.list_place_tags_map(
             [cand.candidate_place_id for cand, *_ in scored]
         )
+        mode = trip.transport_mode or "walk"
+        prev_tp, next_tp = self.repo.neighbors(trip.id, tp.position)
+        prev_place_id = prev_tp.place_id if prev_tp is not None else None
+        next_place_id = next_tp.place_id if next_tp is not None else None
+        original_travel_minutes = self._seconds_to_minutes(
+            self._adjacent_travel_seconds(prev_place_id, tp.place_id, next_place_id, mode)
+        )
         candidates = []
         for cand, ranking, route, reason in scored:
             place = self.repo.get_place(cand.candidate_place_id)
@@ -381,6 +424,11 @@ class RecommendationService:
             reason_text = None
             if reason is not None:
                 reason_text = reason.recommend_reason or reason.not_recommend_reason
+            travel_minutes = self._seconds_to_minutes(
+                self._adjacent_travel_seconds(
+                    prev_place_id, cand.candidate_place_id, next_place_id, mode
+                )
+            )
             candidates.append(
                 {
                     "candidateId": str(cand.id),
@@ -390,6 +438,7 @@ class RecommendationService:
                     "congestionLevel": after,
                     "congestionImprovement": improvement,
                     "extraMinutes": route.extra_minutes if route else None,
+                    "travelMinutes": travel_minutes,
                     "distancePrevM": route.distance_prev_m if route else None,
                     "distanceNextM": route.distance_next_m if route else None,
                     "reasonText": reason_text,
@@ -405,6 +454,7 @@ class RecommendationService:
                 "placeId": str(tp.place_id),
                 "name": original.name if original else "",
                 "congestionLevel": original_level,
+                "travelMinutes": original_travel_minutes,
             },
             "candidates": candidates,
             "requestId": str(req.id),
@@ -527,8 +577,21 @@ class RecommendationService:
         # 이 trip_place에 붙어 있던 옛 장소의 분석 결과를 지운다 — 안 지우면 다음 조회 때
         # 새 장소인데 옛 장소의 혼잡도가 그대로 보인다. place_concentration_mapping은 place_id
         # 기준 재사용 데이터라 여기서 지우지 않는다(analysis_repository.clear_analysis_for_trip_place 참고).
+        # 후보에 이미 계산된 혼잡도가 있으면 그 장소만 다시 채워, 다른 장소 분석을 건드리지 않는다.
         # 아래 self.db.commit() 하나로 이 메서드의 모든 변경이 같은 트랜잭션에 묶인다.
         self.analysis_repo.clear_analysis_for_trip_place(tp.id)
+        if cand.congestion_level in (
+            ConcentrationLevel.LOW,
+            ConcentrationLevel.MID,
+            ConcentrationLevel.HIGH,
+        ):
+            self.analysis_repo.write_analysis(
+                tp.id,
+                AnalysisStatus.SUCCESS,
+                cand.congestion_level,
+                None,
+                RULE_VERSION,
+            )
 
         self.repo.log_interaction(
             user_id=user.id,
@@ -653,16 +716,37 @@ class RecommendationService:
         }
 
     def build_guide(self, trip: Trip) -> dict:
-        stops = []
         places_sorted = sorted(trip.trip_places, key=lambda p: p.position)
         mode = trip.transport_mode or "walk"
+
+        # 정류장마다 get_place()/active_replacement()를 반복 호출하면(가이드북 정류장
+        # 최대 수십 개) 그만큼 DB 왕복이 났다 — 필요한 걸 먼저 한 번에 모아서 조회한다.
+        replacements = self.repo.active_replacements_map([tp.id for tp in places_sorted])
+
+        place_ids: set[UUID] = set()
+        for tp in places_sorted:
+            place_ids.add(tp.place_id)
+            active = replacements.get(tp.id)
+            if active:
+                place_ids.add(active.from_place_id)
+            elif tp.initial_place_id and tp.initial_place_id != tp.place_id:
+                place_ids.add(tp.initial_place_id)
+        places_by_id = self.places.get_by_ids(list(place_ids))
+
+        leg_pairs = [
+            (places_sorted[i].place_id, places_sorted[i + 1].place_id)
+            for i in range(len(places_sorted) - 1)
+        ]
+        legs = self.routes.get_legs(leg_pairs, mode)
+
+        stops = []
         for i, tp in enumerate(places_sorted):
-            place = self.repo.get_place(tp.place_id)
-            active = self.repo.active_replacement(tp.id)
+            place = places_by_id.get(tp.place_id)
+            active = replacements.get(tp.id)
             travel_to_next = None
             if i + 1 < len(places_sorted):
                 nxt = places_sorted[i + 1]
-                leg = self.routes.get_leg(tp.place_id, nxt.place_id, mode)
+                leg = legs.get((tp.place_id, nxt.place_id))
                 if leg:
                     travel_to_next = {
                         "distanceM": leg.distance_m,
@@ -674,14 +758,14 @@ class RecommendationService:
             before_level = None
             after_level = None
             if active:
-                from_place = self.repo.get_place(active.from_place_id)
+                from_place = places_by_id.get(active.from_place_id)
                 replaced_from = from_place.name if from_place else None
                 replace_reason = active.reason_snapshot
                 extra_minutes = active.extra_minutes
                 before_level = active.before_level
                 after_level = active.after_level
             elif tp.initial_place_id and tp.initial_place_id != tp.place_id:
-                from_place = self.repo.get_place(tp.initial_place_id)
+                from_place = places_by_id.get(tp.initial_place_id)
                 replaced_from = from_place.name if from_place else None
                 replace_reason = "혼잡 개선 및 유사 경험 제공"
 
@@ -716,6 +800,13 @@ class RecommendationService:
         region = getattr(trip, "region", None)
         region_name = region.name if region is not None else None
 
+        share_link = self.repo.get_active_share_link(trip.id)
+        visibility = (
+            share_link.visibility
+            if share_link is not None
+            else ShareLinkVisibility.LINK
+        )
+
         return {
             "tripId": str(trip.id),
             "title": trip.title,
@@ -725,6 +816,8 @@ class RecommendationService:
             "coverImageUrl": cover_image_url,
             "stops": stops,
             "entries": ugc,
+            "visibility": visibility,
+            "shareToken": share_link.token if share_link is not None else None,
         }
 
     def get_guide(self, trip_id: UUID, user: CurrentUser) -> dict:
@@ -733,27 +826,40 @@ class RecommendationService:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정을 찾을 수 없습니다.", 404)
         return self.build_guide(trip)
 
-    def create_share_link(self, trip_id: UUID, user: CurrentUser, visibility: str) -> dict:
+    def create_share_link(
+        self, trip_id: UUID, user: CurrentUser, visibility: str | None
+    ) -> dict:
         trip = self.repo.get_trip_owned(trip_id, user.id)
         if trip is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정을 찾을 수 없습니다.", 404)
         if trip.status != "confirmed":
             raise AppError(ErrorCode.CONFLICT, "확정된 일정만 공유할 수 있습니다.", 409)
-        token = secrets.token_urlsafe(12)
-        link = ShareLink(
-            trip_id=trip.id,
-            token=token,
-            visibility=visibility or "link",
-            created_at=datetime.now(timezone.utc),
-        )
-        self.repo.create_share_link(link)
+        if visibility is not None and visibility not in ShareLinkVisibility.ALL:
+            raise AppError(
+                ErrorCode.INVALID_REQUEST, "허용되지 않은 공개 범위입니다.", 400
+            )
+
+        self.repo.lock_trip(trip.id)
+        link = self.repo.get_active_share_link(trip.id)
+        if link is None:
+            token = secrets.token_urlsafe(12)
+            link = ShareLink(
+                trip_id=trip.id,
+                token=token,
+                visibility=visibility or ShareLinkVisibility.LINK,
+                created_at=datetime.now(timezone.utc),
+            )
+            self.repo.create_share_link(link)
+        elif visibility is not None:
+            link.visibility = visibility
+
         self.db.commit()
-        path = f"/guide/{token}"
+        path = f"/guide/{link.token}"
         return {
-            "token": token,
+            "token": link.token,
             "url": path,
             "absoluteUrl": f"{settings.FRONTEND_PUBLIC_ORIGIN.rstrip('/')}{path}",
-            "expiresAt": None,
+            "expiresAt": link.expires_at.isoformat() if link.expires_at else None,
         }
 
     def get_guide_by_token(self, token: str) -> dict:

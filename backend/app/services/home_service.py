@@ -25,8 +25,14 @@ class HomeService:
                 current_user.id,
                 exclude_id=draft.id if draft else None,
             )
-            draft_schedule = build_schedule_summary(draft, self.trip_places) if draft else None
-            recent_schedules = [build_schedule_summary(trip, self.trip_places) for trip in recent]
+            trips = ([draft] if draft else []) + recent
+            place_counts = self.trip_places.count_by_trips([trip.id for trip in trips])
+            draft_schedule = (
+                build_schedule_summary(draft, place_counts.get(draft.id, 0)) if draft else None
+            )
+            recent_schedules = [
+                build_schedule_summary(trip, place_counts.get(trip.id, 0)) for trip in recent
+            ]
         except SQLAlchemyError as exc:
             raise AppError(
                 ErrorCode.DB_ERROR,

@@ -23,6 +23,7 @@ vi.mock("react-router-dom", async (importOriginal) => {
     ...actual,
     useNavigate: () => mockNavigate,
     useParams: () => ({ tripId: "trip-1", tripPlaceId: "tp-1" }),
+    useLocation: () => ({ state: null, pathname: "", search: "", hash: "", key: "test" }),
     useSearchParams: () => [
       new URLSearchParams(mockRequestId ? { requestId: mockRequestId } : {}),
       vi.fn(),

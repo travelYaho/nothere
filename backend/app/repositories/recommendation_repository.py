@@ -58,6 +58,21 @@ class RecommendationRepository:
             .first()
         )
 
+    def lock_trip(self, trip_id: UUID) -> Trip | None:
+        """공유 링크 생성 전에 trip 행을 잠근다.
+
+        get_active_share_link()만으로는 두 요청이 동시에 활성 링크 없음을 보고
+        서로 다른 token으로 insert 할 수 있다. 조회 전에 이 잠금을 잡아
+        같은 trip의 공유 링크 upsert를 직렬화한다.
+        """
+        return (
+            self.db.query(Trip)
+            .filter(Trip.id == trip_id)
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+
     def get_trip_place(self, trip_place_id: UUID) -> TripPlace | None:
         return self.db.query(TripPlace).filter(TripPlace.id == trip_place_id).first()
 
@@ -480,11 +495,44 @@ class RecommendationRepository:
             .first()
         )
 
+    def active_replacements_map(self, trip_place_ids: list[UUID]) -> dict[UUID, Replacement]:
+        """active_replacement()를 정류장 수만큼 반복하면(가이드북 build_guide()) 그만큼
+        DB 왕복이 난다 — trip_place_id IN 절 하나로 모아 조회하고, 정류장별로 가장 최근
+        (reverted_at IS NULL) 교체 한 건만 골라 돌려준다. 정렬 기준은 active_replacement()와
+        동일(applied_at desc, id desc)해 같은 행을 고르는 걸 보장한다.
+        """
+        if not trip_place_ids:
+            return {}
+        rows = (
+            self.db.query(Replacement)
+            .filter(
+                Replacement.trip_place_id.in_(trip_place_ids),
+                Replacement.reverted_at.is_(None),
+            )
+            .order_by(Replacement.trip_place_id, desc(Replacement.applied_at), desc(Replacement.id))
+            .all()
+        )
+        result: dict[UUID, Replacement] = {}
+        for row in rows:
+            result.setdefault(row.trip_place_id, row)
+        return result
+
     # —— share / guide ——
     def create_share_link(self, link: ShareLink) -> ShareLink:
         self.db.add(link)
         self.db.flush()
         return link
+
+    def get_active_share_link(self, trip_id: UUID) -> ShareLink | None:
+        now = datetime.now(timezone.utc)
+        return (
+            self.db.query(ShareLink)
+            .filter(ShareLink.trip_id == trip_id)
+            .filter(ShareLink.revoked_at.is_(None))
+            .filter((ShareLink.expires_at.is_(None)) | (ShareLink.expires_at > now))
+            .order_by(ShareLink.created_at.desc(), ShareLink.id.desc())
+            .first()
+        )
 
     def get_share_by_token(self, token: str) -> ShareLink | None:
         return self.db.query(ShareLink).filter(ShareLink.token == token).first()

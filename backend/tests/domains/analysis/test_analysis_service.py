@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.clients.concentration_api import ConcentrationItem
 from app.core.exceptions import AppError, ErrorCode
@@ -122,6 +123,148 @@ def test_run_analysis_marks_no_district_code_when_place_missing_codes():
     assert result["items"][0]["analysisStatus"] == AnalysisStatus.UNAVAILABLE
     assert result["items"][0]["unknownReason"] == UnknownReason.NO_DISTRICT_CODE
     svc.repo.upsert_mapping.assert_called_once_with(place_id, None, None, None, "no_mapping")
+
+
+def test_run_analysis_skips_successful_places_unless_needs_reanalysis():
+    """교체 후 부분 재분석 시 이미 성공한 장소는 다시 돌리지 않아 다른 장소 혼잡도가 유지된다."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    kept_place_id, missing_place_id = uuid4(), uuid4()
+    kept_tp_id, missing_tp_id = uuid4(), uuid4()
+
+    trip = SimpleNamespace(
+        id=trip_id,
+        travel_date=None,
+        needs_reanalysis=False,
+        trip_places=[
+            SimpleNamespace(
+                id=kept_tp_id, place_id=kept_place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            ),
+            SimpleNamespace(
+                id=missing_tp_id, place_id=missing_place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            ),
+        ],
+    )
+    kept_place = SimpleNamespace(id=kept_place_id, name="유지장소", area_cd="11", signgu_cd="11110")
+    missing_place = SimpleNamespace(
+        id=missing_place_id, name="새장소", area_cd=None, signgu_cd=None,
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(
+        return_value={kept_place_id: kept_place, missing_place_id: missing_place}
+    )
+    svc.repo.upsert_mapping = MagicMock()
+    svc.repo.upsert_analysis = MagicMock(
+        return_value=SimpleNamespace(
+            analysis_status=AnalysisStatus.UNAVAILABLE, level=None,
+            unknown_reason=UnknownReason.NO_DISTRICT_CODE, rule_version="v1",
+            analyzed_at=datetime.now(timezone.utc),
+        )
+    )
+    svc.repo.get_analysis_map = MagicMock(
+        return_value={
+            kept_tp_id: SimpleNamespace(
+                analysis_status=AnalysisStatus.SUCCESS, level=ConcentrationLevel.HIGH,
+            ),
+            missing_tp_id: None,
+        }
+    )
+    svc.get_analysis = MagicMock(
+        return_value={"tripId": str(trip_id), "items": []}
+    )
+
+    svc.run_analysis(user, trip_id)
+
+    svc.repo.upsert_analysis.assert_called_once_with(
+        missing_tp_id, AnalysisStatus.UNAVAILABLE, None, UnknownReason.NO_DISTRICT_CODE, "v1"
+    )
+
+
+def test_run_analysis_keeps_needs_reanalysis_when_later_place_fails():
+    """첫 장소 upsert가 commit돼도 다음 장소가 실패하면 needs_reanalysis는 그대로 True다."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    first_place_id, second_place_id = uuid4(), uuid4()
+    first_tp_id, second_tp_id = uuid4(), uuid4()
+
+    trip = SimpleNamespace(
+        id=trip_id,
+        travel_date=None,
+        needs_reanalysis=True,
+        trip_places=[
+            SimpleNamespace(
+                id=first_tp_id, place_id=first_place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            ),
+            SimpleNamespace(
+                id=second_tp_id, place_id=second_place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            ),
+        ],
+    )
+    first_place = SimpleNamespace(id=first_place_id, name="첫장소", area_cd=None, signgu_cd=None)
+    second_place = SimpleNamespace(id=second_place_id, name="둘째장소", area_cd=None, signgu_cd=None)
+    saved = SimpleNamespace(
+        analysis_status=AnalysisStatus.UNAVAILABLE, level=None,
+        unknown_reason=UnknownReason.NO_DISTRICT_CODE, rule_version="v1",
+        analyzed_at=datetime.now(timezone.utc),
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(
+        return_value={first_place_id: first_place, second_place_id: second_place}
+    )
+    svc.repo.upsert_mapping = MagicMock()
+    svc.repo.upsert_analysis = MagicMock(side_effect=[saved, SQLAlchemyError("second place failed")])
+
+    with pytest.raises(AppError) as exc:
+        svc.run_analysis(user, trip_id)
+
+    assert exc.value.code == ErrorCode.DB_ERROR
+    assert trip.needs_reanalysis is True
+
+
+def test_run_analysis_clears_needs_reanalysis_only_after_full_success():
+    """모든 장소 분석과 get_analysis()가 끝난 뒤에만 플래그를 끈다."""
+    db = MagicMock()
+    svc = AnalysisService(db)
+    user = _user()
+    trip_id = uuid4()
+    place_id = uuid4()
+    trip_place_id = uuid4()
+
+    trip = SimpleNamespace(
+        id=trip_id,
+        travel_date=None,
+        needs_reanalysis=True,
+        trip_places=[
+            SimpleNamespace(
+                id=trip_place_id, place_id=place_id, is_fixed=False,
+                resolution_status="pending", visit_time=None,
+            )
+        ],
+    )
+    place = SimpleNamespace(id=place_id, name="이름없는장소", area_cd=None, signgu_cd=None)
+    saved = SimpleNamespace(
+        analysis_status=AnalysisStatus.UNAVAILABLE, level=None,
+        unknown_reason=UnknownReason.NO_DISTRICT_CODE, rule_version="v1",
+        analyzed_at=datetime.now(timezone.utc),
+    )
+    svc.repo.get_trip_owned = MagicMock(return_value=trip)
+    svc.repo.get_places_map = MagicMock(return_value={place_id: place})
+    svc.repo.upsert_mapping = MagicMock()
+    svc.repo.upsert_analysis = MagicMock(return_value=saved)
+    svc.get_analysis = MagicMock(return_value={"tripId": str(trip_id), "items": []})
+
+    svc.run_analysis(user, trip_id)
+
+    assert trip.needs_reanalysis is False
+    db.commit.assert_called()
 
 
 def test_analyze_place_uses_reviewed_mapping_without_rematching():

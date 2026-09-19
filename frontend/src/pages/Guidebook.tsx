@@ -8,6 +8,7 @@ import { TimetableDateHeader } from "@/components/common/TimetableDateHeader"
 import { Button } from "@/components/common/primitives"
 import { BasicHeader } from "@/components/layout/navigation"
 import { toUiCongestion, useConfirmGuide } from "@/features/recommendation"
+import { markGuidebookMade } from "@/features/recommendation/utils/guidebookMade"
 import { formatVisitTime } from "@/features/trips/utils/placeOrder"
 
 export default function Guidebook() {
@@ -16,10 +17,15 @@ export default function Guidebook() {
   const location = useLocation()
   const { guide, loading, error, loadGuide, share } = useConfirmGuide(tripId)
   const [shareMsg, setShareMsg] = useState<string | null>(null)
+  const [boastBusy, setBoastBusy] = useState(false)
 
   useEffect(() => {
     void loadGuide()
   }, [loadGuide])
+
+  useEffect(() => {
+    if (tripId && guide) markGuidebookMade(tripId)
+  }, [tripId, guide])
 
   // 확정 직후(ConfirmTrip → 여기) 흐름뿐 아니라 보관함에서도 이 화면으로 들어온다.
   // 보관함에서 온 경우 "홈 화면" 만으로는 원래 있던 곳으로 못 돌아가서 뒤로가기도 둔다.
@@ -43,8 +49,20 @@ export default function Guidebook() {
     }
   }
 
+  const onToggleBoast = async (checked: boolean) => {
+    setBoastBusy(true)
+    try {
+      await share(checked ? "public" : "link")
+      setShareMsg(checked ? "둘러보기에 공개했습니다." : "둘러보기에서 내렸습니다.")
+    } catch (e) {
+      setShareMsg(e instanceof Error ? e.message : "공개 설정 실패")
+    } finally {
+      setBoastBusy(false)
+    }
+  }
+
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden">
+    <div className="relative flex flex-1 flex-col overflow-hidden font-guidebook">
       <BasicHeader title="가이드북" onBack={handleBack} />
       <div className="flex flex-1 flex-col overflow-y-auto px-5 pb-10 pt-4">
         {loading && <p className="text-[13px] text-ink-muted">불러오는 중…</p>}
@@ -84,6 +102,21 @@ export default function Guidebook() {
             )}
 
             <div className="mt-8 flex flex-col gap-2">
+              <label className="flex items-start gap-2.5 py-1">
+                <input
+                  type="checkbox"
+                  checked={guide.visibility === "public"}
+                  disabled={boastBusy}
+                  onChange={(e) => void onToggleBoast(e.target.checked)}
+                  className="mt-1 h-4 w-4 accent-primary"
+                />
+                <span>
+                  <span className="block text-[15px] font-bold text-ink">자랑하기</span>
+                  <span className="mt-0.5 block text-[12px] text-ink-muted">
+                    둘러보기 목록에 공개
+                  </span>
+                </span>
+              </label>
               <Button block onClick={() => void onShare()}>
                 공유 링크 복사
               </Button>

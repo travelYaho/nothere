@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { GuidebookCard, ScheduleCard } from "@/components/common/cards"
-import { Button } from "@/components/common/primitives"
+import { Button, Spinner } from "@/components/common/primitives"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 import { listMyGuides } from "@/features/guides/api/guidesApi"
 import type { GuideCard } from "@/features/guides/types"
@@ -191,7 +191,9 @@ export default function Bookmarks() {
 
           <div className="flex flex-col gap-2.5 pb-4 pt-1">
             {tripsLoading && (
-              <p className="py-8 text-center text-[13px] text-ink-muted">불러오는 중...</p>
+              <div className="flex justify-center py-8">
+                <Spinner />
+              </div>
             )}
             {!tripsLoading && tripsError && (
               <p className="py-8 text-center text-[13px] font-medium text-congestion-high">
@@ -231,7 +233,11 @@ export default function Bookmarks() {
 
       {innerTab === "guidebooks" && (
         <div className="flex flex-1 flex-col overflow-y-auto px-5 pt-3">
-          {guidesLoading && <p className="py-8 text-center text-[13px] text-ink-muted">불러오는 중...</p>}
+          {guidesLoading && (
+            <div className="flex justify-center py-8">
+              <Spinner />
+            </div>
+          )}
           {!guidesLoading && guidesError && (
             <p className="py-8 text-center text-[13px] font-medium text-congestion-high">{guidesError}</p>
           )}

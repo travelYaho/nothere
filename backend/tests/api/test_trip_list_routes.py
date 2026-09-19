@@ -43,7 +43,7 @@ def test_list_trips_returns_mapped_trips(client):
     ) as MockTripPlaceRepo:
         trip = _fake_trip_row("confirmed")
         MockTripRepo.return_value.list_by_user.return_value = ([trip], 1)
-        MockTripPlaceRepo.return_value.count_by_trip.return_value = 3
+        MockTripPlaceRepo.return_value.count_by_trips.return_value = {trip.id: 3}
 
         res = client.get("/api/trips")
 
@@ -53,7 +53,7 @@ def test_list_trips_returns_mapped_trips(client):
     assert body["totalCount"] == 1
     assert body["trips"][0]["tripId"] == str(trip.id)
     assert body["trips"][0]["placeCount"] == 3
-    assert body["trips"][0]["resumeUrl"] == f"/trips/{trip.id}/guide"
+    assert body["trips"][0]["resumeUrl"] == f"/trips/{trip.id}/saved"
 
 
 def test_list_trips_forwards_status_filter_and_page(client):

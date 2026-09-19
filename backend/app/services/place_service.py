@@ -68,33 +68,57 @@ class PlaceService:
             area_code = _TOUR_API_AREA_CODES.get(region_id)
 
         results = tour_api.search_places(keyword, area_code=area_code)
-        items = [self._get_or_create_place(result, region_id) for result in results]
-        # get_or_create()/보충 로직이 flush만 하므로, 검색으로 새로 만든/보충한 place가
+
+        # content_id가 있는 건(대부분) 한 번에 upsert한다 — 결과마다 get_or_create()를
+        # 반복하면 최대 20건이 그만큼 DB 왕복을 냈다(PlaceRepository.get_or_create_many
+        # 참고). content_id가 없는 극소수 항목만 충돌 대상이 없어 개별 create()로 처리한다.
+        place_by_cid = self.places.get_or_create_many(
+            source_type="tour_api",
+            region_id=region_id,
+            items=[
+                {
+                    "tour_content_id": result.content_id,
+                    "name": result.name,
+                    "longitude": result.longitude,
+                    "latitude": result.latitude,
+                    "address": result.address,
+                    "area_cd": result.area_cd,
+                    "signgu_cd": result.signgu_cd,
+                }
+                for result in results
+                if result.content_id
+            ],
+        )
+
+        items = []
+        for result in results:
+            if result.content_id:
+                place = place_by_cid[result.content_id]
+            else:
+                place = self.places.create(
+                    source_type="tour_api",
+                    tour_content_id=None,
+                    region_id=region_id,
+                    name=result.name,
+                    longitude=result.longitude,
+                    latitude=result.latitude,
+                    address=result.address,
+                    area_cd=result.area_cd,
+                    signgu_cd=result.signgu_cd,
+                )
+            items.append(
+                PlaceSearchItem(
+                    place_id=place.id,
+                    name=result.name,
+                    address=result.address,
+                    latitude=result.latitude,
+                    longitude=result.longitude,
+                )
+            )
+        # get_or_create_many()/create()가 flush만 하므로, 검색으로 새로 만든/보충한 place가
         # 요청 종료 후에도 남도록 여기서 한 번만 commit한다.
         self.db.commit()
         return PlaceSearchResponse(places=items)
-
-    def _get_or_create_place(self, result: tour_api.TourApiPlace, region_id: int | None) -> PlaceSearchItem:
-        place = self.places.get_or_create(
-            source_type="tour_api",
-            tour_content_id=result.content_id or None,
-            region_id=region_id,
-            name=result.name,
-            longitude=result.longitude,
-            latitude=result.latitude,
-            area_cd=result.area_cd,
-            signgu_cd=result.signgu_cd,
-        )
-        # 지역코드 보충은 PlaceRepository.get_or_create() 내부(충돌 폴백 경로)에서 이미
-        # 처리된다 — STEP3(여기)·STEP6(recommendation/service.py)가 같은 메서드를 거치므로
-        # 별도 보충 로직을 여기 다시 두지 않는다.
-        return PlaceSearchItem(
-            place_id=place.id,
-            name=result.name,
-            address=result.address,
-            latitude=result.latitude,
-            longitude=result.longitude,
-        )
 
     def add_place_to_trip(
         self,

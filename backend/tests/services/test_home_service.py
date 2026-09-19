@@ -34,7 +34,9 @@ def test_get_home_maps_trip_fields_into_legacy_schedule_summary_shape():
     service.trips.get_in_progress.return_value = draft
     service.trips.get_recent.return_value = recent
     service.trip_places = MagicMock()
-    service.trip_places.count_by_trip.return_value = 4
+    service.trip_places.count_by_trips.return_value = {
+        draft.id: 4, recent[0].id: 4, recent[1].id: 4
+    }
 
     current_user = CurrentUser(id=uuid4(), email="tester@example.com", nickname="테스터")
     response = service.get_home(current_user)
@@ -50,7 +52,7 @@ def test_get_home_maps_trip_fields_into_legacy_schedule_summary_shape():
 
     assert len(response.recent_schedules) == 2
     assert response.recent_schedules[0].schedule_id == recent[0].id
-    assert response.recent_schedules[0].resume_url == f"/trips/{recent[0].id}/guide"
+    assert response.recent_schedules[0].resume_url == f"/trips/{recent[0].id}/saved"
 
     service.trips.get_recent.assert_called_once_with(current_user.id, exclude_id=draft.id)
 

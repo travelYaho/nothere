@@ -1,34 +1,33 @@
 /**
- * RecommendationPurpose(STEP5)의 후보 0건 처리 검증 — "같은 조건으로 다시 찾기" 버튼을
- * 없애고 "다른 목적을 선택해 주세요" 안내로 바꾼 수정을 실제 렌더링으로 확인한다
- * (2026-09-18, 코드 리뷰로 "같은 조건 재시도는 반경이 이미 자동 확대돼 의미가 없다"는
- * 지적을 받아 UX를 변경).
+ * RecommendationPurpose(STEP5) — 태그 선택 후 AlternativeSearchLoading으로 이동만
+ * 확인한다. 실제 검색(create/scoreRoutes)과 후보 0건 처리는 이제 그 화면으로 옮겨져서
+ * 이 컴포넌트는 더 이상 그 로직을 갖지 않는다(2026-09-19, develop 병합 — 팀 다른
+ * 브랜치가 STEP5→"searching" 로딩 화면 경유 흐름으로 리팩터함).
  */
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { useCallback, useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import RecommendationPurpose from "./RecommendationPurpose"
-
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
-    resolve = res
-  })
-  return { promise, resolve }
-}
 
 vi.mock("@/store/sessionStore", () => ({
   useSession: () => ({ session: { access_token: "test-token" }, user: null, isLoading: false }),
 }))
 
 const mockNavigate = vi.fn()
+let mockLocationState: unknown = null
 vi.mock("react-router-dom", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router-dom")>()
   return {
     ...actual,
     useNavigate: () => mockNavigate,
     useParams: () => ({ tripId: "trip-1", tripPlaceId: "tp-1" }),
+    useLocation: () => ({
+      state: mockLocationState,
+      pathname: "",
+      search: "",
+      hash: "",
+      key: "test",
+    }),
   }
 })
 
@@ -37,25 +36,19 @@ vi.mock("@/features/recommendation", async (importOriginal) => {
   return {
     ...actual,
     useExperienceTags: vi.fn(),
-    useCreateRecommendationRequest: vi.fn(),
     fetchAnalysis: vi.fn(),
   }
 })
 
-import {
-  fetchAnalysis,
-  useCreateRecommendationRequest,
-  useExperienceTags,
-} from "@/features/recommendation"
+import { fetchAnalysis, useExperienceTags } from "@/features/recommendation"
 
 const useExperienceTagsMock = vi.mocked(useExperienceTags)
-const useCreateRecommendationRequestMock = vi.mocked(useCreateRecommendationRequest)
 const fetchAnalysisMock = vi.mocked(fetchAnalysis)
 
 beforeEach(() => {
   mockNavigate.mockReset()
+  mockLocationState = null
   useExperienceTagsMock.mockReset()
-  useCreateRecommendationRequestMock.mockReset()
   fetchAnalysisMock.mockReset()
 
   useExperienceTagsMock.mockReturnValue({
@@ -69,125 +62,55 @@ beforeEach(() => {
 })
 
 describe("RecommendationPurpose", () => {
-  it("후보 0건 응답이면 compare로 이동하지 않고, 재시도 버튼 없이 안내와 돌아가기만 보여준다", async () => {
+  it("태그를 골라 '대안 찾기'를 누르면 searching 화면으로 선택한 태그를 들고 이동한다", async () => {
     const user = userEvent.setup()
-    const create = vi.fn().mockResolvedValue({
-      requestId: "req-1",
-      tripPlaceId: "tp-1",
-      searchMode: "default",
-      status: "no_candidate",
-      candidateCount: 0,
-      excludedCount: 0,
-    })
-    useCreateRecommendationRequestMock.mockReturnValue({ create, loading: false, error: null })
-
     render(<RecommendationPurpose />)
 
+    await user.click(screen.getByRole("button", { name: "역사·문화" }))
     await user.click(screen.getByRole("button", { name: "대안 찾기" }))
 
-    await waitFor(() => {
-      expect(screen.getByText(/다른 목적을 선택해 주세요/)).toBeInTheDocument()
-    })
-    // "같은 조건으로 다시 찾기"류의 재시도 버튼은 없어야 한다 — 같은 태그로 다시 요청해도
-    // 반경 확대가 이미 이번 요청 안에서 다 시도된 뒤라 결과가 똑같다(리뷰로 발견).
-    expect(screen.queryByText(/같은 조건으로 다시 찾기/)).not.toBeInTheDocument()
-    expect(screen.getByText("점검 결과로 돌아가기")).toBeInTheDocument()
-    expect(mockNavigate).not.toHaveBeenCalled()
-  })
-
-  it("후보가 있으면 compare 화면으로 이동한다(대조군)", async () => {
-    const user = userEvent.setup()
-    const create = vi.fn().mockResolvedValue({
-      requestId: "req-2",
-      tripPlaceId: "tp-1",
-      searchMode: "default",
-      status: "success",
-      candidateCount: 3,
-      excludedCount: 0,
-    })
-    useCreateRecommendationRequestMock.mockReturnValue({ create, loading: false, error: null })
-
-    render(<RecommendationPurpose />)
-    await user.click(screen.getByRole("button", { name: "대안 찾기" }))
-
-    await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith(
-        "/trips/trip-1/places/tp-1/compare?requestId=req-2",
-      )
+    expect(mockNavigate).toHaveBeenCalledWith("/trips/trip-1/places/tp-1/searching", {
+      state: { purposeTagIds: [1] },
     })
   })
 
-  it("후보 0건 안내가 뜬 뒤 태그를 바꾸면 안내가 사라지고 '대안 찾기' 버튼이 다시 나타난다", async () => {
+  it("건너뛰기를 누르면 태그 선택과 무관하게 빈 목록으로 이동한다", async () => {
     const user = userEvent.setup()
-    const create = vi.fn().mockResolvedValue({
-      requestId: "req-1",
-      tripPlaceId: "tp-1",
-      searchMode: "default",
-      status: "no_candidate",
-      candidateCount: 0,
-      excludedCount: 0,
-    })
-    useCreateRecommendationRequestMock.mockReturnValue({ create, loading: false, error: null })
-
     render(<RecommendationPurpose />)
-    await user.click(screen.getByRole("button", { name: "대안 찾기" }))
-    await waitFor(() => {
-      expect(screen.getByText(/다른 목적을 선택해 주세요/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "역사·문화" }))
+    await user.click(screen.getByRole("button", { name: "건너뛰기" }))
+
+    expect(mockNavigate).toHaveBeenCalledWith("/trips/trip-1/places/tp-1/searching", {
+      state: { purposeTagIds: [] },
     })
-
-    await user.click(screen.getByText("역사·문화"))
-
-    expect(screen.queryByText(/다른 목적을 선택해 주세요/)).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "대안 찾기" })).toBeInTheDocument()
   })
 
-  it("검색 중에는 태그를 바꿀 수 없고, 응답이 도착한 뒤에는 다시 바꿀 수 있다", async () => {
-    // A로 검색 중에 B로 바꾸면, A의 응답(예: 후보 없음)이 화면엔 B가 선택된 채로 뜬다 —
-    // 아직 검색하지도 않은 B가 후보 없는 것처럼 보이는 문제(2026-09-18, 코드 리뷰로 발견).
-    // 검색 중 태그 버튼을 막아 이 경로 자체를 없앤다.
-    const user = userEvent.setup()
-    const pending = deferred<{
-      requestId: string
-      tripPlaceId: string
-      searchMode: string
-      status: "success" | "no_candidate"
-      candidateCount: number
-      excludedCount: number
-    }>()
-    useCreateRecommendationRequestMock.mockImplementation(() => {
-      const [loading, setLoading] = useState(false)
-      const create = useCallback(async () => {
-        setLoading(true)
-        try {
-          return await pending.promise
-        } finally {
-          setLoading(false)
-        }
-      }, [])
-      return { create, loading, error: null }
-    })
-
+  it("AlternativeSearchLoading에서 돌아온 것이면(location.state.purposeTagIds) 그 태그가 이미 선택돼 있다", () => {
+    // "다른 목적 선택하기"로 되돌아온 직후 이전에 고른 태그가 사라지면 안 된다(2026-09-19,
+    // 코드 리뷰로 발견) — location.state로 넘어온 값이 초기 선택값으로 복원되는지 확인.
+    mockLocationState = { purposeTagIds: [2] }
     render(<RecommendationPurpose />)
-    await user.click(screen.getByRole("button", { name: "대안 찾기" }))
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "역사·문화" })).toBeDisabled()
-    })
-    expect(screen.getByRole("button", { name: "가족 활동" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "가족 활동" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    )
+    expect(screen.getByRole("button", { name: "역사·문화" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    )
+  })
 
-    await act(async () => {
-      pending.resolve({
-        requestId: "req-1",
-        tripPlaceId: "tp-1",
-        searchMode: "default",
-        status: "no_candidate",
-        candidateCount: 0,
-        excludedCount: 0,
-      })
-    })
+  it("헤더의 뒤로가기는 navigate(-1)이 아니라 일정 점검 결과 화면으로 명시 이동한다", async () => {
+    // "검색(후보없음)→목적 복원"을 거치면 방문 기록에 이 화면이 두 번 쌓일 수 있어(범위
+    // 밖으로 남겨둔 문제) navigate(-1)이 어디로 갈지 예측하기 어렵다 — 그래서 이 화면의
+    // 뒤로가기는 항상 점검 결과로 가도록 명시 경로를 쓰기로 정했다(2026-09-19).
+    const user = userEvent.setup()
+    render(<RecommendationPurpose />)
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "역사·문화" })).not.toBeDisabled()
-    })
+    await user.click(screen.getByRole("button", { name: "뒤로가기" }))
+
+    expect(mockNavigate).toHaveBeenCalledWith("/trips/trip-1/remaining")
   })
 })
