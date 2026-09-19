@@ -13,9 +13,11 @@ interface SessionState {
   session: Session | null
   user: User | null
   isLoading: boolean
+  /** 비밀번호 재설정 메일 링크로 진입해 만들어진 복구 세션인지(일반 로그인 세션과 구분). */
+  isRecovery: boolean
 }
 
-let state: SessionState = { session: null, user: null, isLoading: true }
+let state: SessionState = { session: null, user: null, isLoading: true, isRecovery: false }
 const listeners = new Set<() => void>()
 
 function setState(next: Partial<SessionState>) {
@@ -36,8 +38,11 @@ supabase.auth.getSession().then(({ data }) => {
   setState({ session: data.session, user: data.session?.user ?? null, isLoading: false })
 })
 
-supabase.auth.onAuthStateChange((_event, session) => {
-  setState({ session, user: session?.user ?? null, isLoading: false })
+supabase.auth.onAuthStateChange((event, session) => {
+  // PASSWORD_RECOVERY 는 재설정 링크로 들어온 직후에만 발생한다. 로그아웃되면 해제한다.
+  const isRecovery =
+    event === "PASSWORD_RECOVERY" ? true : event === "SIGNED_OUT" ? false : state.isRecovery
+  setState({ session, user: session?.user ?? null, isLoading: false, isRecovery })
 })
 
 export function useSession(): SessionState {

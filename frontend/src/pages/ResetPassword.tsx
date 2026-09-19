@@ -2,7 +2,8 @@
  * ResetPassword — 메일의 재설정 링크로 들어와 새 비밀번호를 설정한다.
  *
  * 링크로 진입하면 supabase-js 가 URL 의 토큰으로 임시(recovery) 세션을 만든다.
- * 세션이 없으면 만료됐거나 잘못된 링크로 간주한다.
+ * 복구 세션(PASSWORD_RECOVERY)이 확인된 경우에만 폼을 보여준다 — 일반 로그인 상태로
+ * 이 경로를 직접 열어도 현재 계정의 비밀번호를 바꾸는 폼이 뜨지 않게 한다.
  */
 import { useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
@@ -26,7 +27,7 @@ function toErrorMessage(err: unknown): string {
 
 export default function ResetPassword() {
   const navigate = useNavigate()
-  const { session, isLoading } = useSession()
+  const { session, isLoading, isRecovery } = useSession()
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
   const [loading, setLoading] = useState(false)
@@ -69,7 +70,7 @@ export default function ResetPassword() {
           </div>
         ) : isLoading ? (
           <p className="mt-6 text-[13px] text-ink-muted">확인하는 중...</p>
-        ) : !session ? (
+        ) : !session || !isRecovery ? (
           <div className="mt-6 flex flex-col gap-4">
             <p className="text-[13px] leading-[19px] font-medium text-congestion-high">
               만료되었거나 유효하지 않은 링크예요. 재설정 메일을 다시 요청해 주세요.
