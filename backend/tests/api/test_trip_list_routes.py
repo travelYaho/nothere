@@ -43,7 +43,7 @@ def test_list_trips_returns_mapped_trips(client):
     ) as MockTripPlaceRepo:
         trip = _fake_trip_row("confirmed")
         MockTripRepo.return_value.list_by_user.return_value = ([trip], 1)
-        MockTripPlaceRepo.return_value.count_by_trip.return_value = 3
+        MockTripPlaceRepo.return_value.count_by_trips.return_value = {trip.id: 3}
 
         res = client.get("/api/trips")
 

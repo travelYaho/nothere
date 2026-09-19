@@ -480,6 +480,28 @@ class RecommendationRepository:
             .first()
         )
 
+    def active_replacements_map(self, trip_place_ids: list[UUID]) -> dict[UUID, Replacement]:
+        """active_replacement()를 정류장 수만큼 반복하면(가이드북 build_guide()) 그만큼
+        DB 왕복이 난다 — trip_place_id IN 절 하나로 모아 조회하고, 정류장별로 가장 최근
+        (reverted_at IS NULL) 교체 한 건만 골라 돌려준다. 정렬 기준은 active_replacement()와
+        동일(applied_at desc, id desc)해 같은 행을 고르는 걸 보장한다.
+        """
+        if not trip_place_ids:
+            return {}
+        rows = (
+            self.db.query(Replacement)
+            .filter(
+                Replacement.trip_place_id.in_(trip_place_ids),
+                Replacement.reverted_at.is_(None),
+            )
+            .order_by(Replacement.trip_place_id, desc(Replacement.applied_at), desc(Replacement.id))
+            .all()
+        )
+        result: dict[UUID, Replacement] = {}
+        for row in rows:
+            result.setdefault(row.trip_place_id, row)
+        return result
+
     # —— share / guide ——
     def create_share_link(self, link: ShareLink) -> ShareLink:
         self.db.add(link)

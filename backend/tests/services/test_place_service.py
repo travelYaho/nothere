@@ -28,12 +28,12 @@ def _current_user():
 # --- search_places ---
 
 def test_search_places_creates_new_place_when_not_seen_before():
-    """get_or_create()가 새 place를 만들어 돌려주는 경로 — 신규/재사용 판단 자체는 이제
-    PlaceRepository.get_or_create() 내부(원자적 ON CONFLICT) 책임이라 여기서는 서비스가
+    """get_or_create_many()가 새 place를 만들어 돌려주는 경로 — 신규/재사용 판단 자체는
+    PlaceRepository.get_or_create_many() 내부(일괄 ON CONFLICT) 책임이라 여기서는 서비스가
     그 결과를 그대로 응답에 반영하는지만 확인한다(내부 분기는 test_place_repository.py)."""
     service = _service_with_mocks()
     new_place = MagicMock(id=uuid4(), area_cd="11", signgu_cd="11110")
-    service.places.get_or_create.return_value = new_place
+    service.places.get_or_create_many.return_value = {"126508": new_place}
 
     tour_result = TourApiPlace(
         content_id="126508", name="경복궁",
@@ -46,20 +46,55 @@ def test_search_places_creates_new_place_when_not_seen_before():
     assert len(result.places) == 1
     assert result.places[0].place_id == new_place.id
     assert result.places[0].name == "경복궁"
-    service.places.get_or_create.assert_called_once()
+    service.places.get_or_create_many.assert_called_once()
     service.db.commit.assert_called_once()
 
 
 def test_search_places_reuses_existing_place_for_same_content_id():
     service = _service_with_mocks()
     existing_place = MagicMock(id=uuid4(), area_cd="11", signgu_cd="11110")
-    service.places.get_or_create.return_value = existing_place
+    service.places.get_or_create_many.return_value = {"126508": existing_place}
 
     tour_result = TourApiPlace(content_id="126508", name="경복궁")
     with patch("app.services.place_service.tour_api.search_places", return_value=[tour_result]):
         result = service.search_places("경복궁", region_id=None)
 
     assert result.places[0].place_id == existing_place.id
+
+
+def test_search_places_batches_all_results_into_a_single_get_or_create_many_call():
+    """결과가 여러 건이어도 get_or_create_many()는 한 번만 불려야 한다 — 이게 이번에
+    건별 순차 DB 왕복(최대 20회)을 없앤 이유다."""
+    service = _service_with_mocks()
+    place_a, place_b = MagicMock(id=uuid4()), MagicMock(id=uuid4())
+    service.places.get_or_create_many.return_value = {"1": place_a, "2": place_b}
+
+    results = [
+        TourApiPlace(content_id="1", name="A"),
+        TourApiPlace(content_id="2", name="B"),
+    ]
+    with patch("app.services.place_service.tour_api.search_places", return_value=results):
+        result = service.search_places("궁", region_id=None)
+
+    service.places.get_or_create_many.assert_called_once()
+    assert [p.place_id for p in result.places] == [place_a.id, place_b.id]
+
+
+def test_search_places_creates_items_without_content_id_individually():
+    service = _service_with_mocks()
+    service.places.get_or_create_many.return_value = {}
+    custom_place = MagicMock(id=uuid4())
+    service.places.create.return_value = custom_place
+
+    tour_result = TourApiPlace(content_id="", name="컨텐츠ID 없는 결과")
+    with patch("app.services.place_service.tour_api.search_places", return_value=[tour_result]):
+        result = service.search_places("궁", region_id=None)
+
+    service.places.get_or_create_many.assert_called_once_with(
+        source_type="tour_api", region_id=None, items=[]
+    )
+    service.places.create.assert_called_once()
+    assert result.places[0].place_id == custom_place.id
 
 
 def test_search_places_maps_region_id_to_tour_api_area_code():

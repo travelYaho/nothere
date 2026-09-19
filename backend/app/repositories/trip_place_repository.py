@@ -83,6 +83,24 @@ class TripPlaceRepository:
         """최소 장소 수(minimum_places_required) 검증에 쓰는 현재 등록 수."""
         return self.db.query(TripPlace).filter(TripPlace.trip_id == trip_id).count()
 
+    def count_by_trips(self, trip_ids: list[UUID]) -> dict[UUID, int]:
+        """여러 Trip의 장소 수를 한 번에 센다(홈/보관함 목록용).
+
+        count_by_trip()을 목록 건수만큼 반복 호출하면(홈 최대 6건, 보관함 페이지당
+        최대 10건) 그만큼 COUNT 쿼리가 반복된다 — trip_summary.build_*_summary()가
+        건마다 부르던 걸 여기서 GROUP BY 한 번으로 대체한다. 결과에 없는 trip_id는
+        장소가 0개라는 뜻이므로 호출부가 `.get(trip_id, 0)`으로 처리한다.
+        """
+        if not trip_ids:
+            return {}
+        rows = (
+            self.db.query(TripPlace.trip_id, func.count(TripPlace.id))
+            .filter(TripPlace.trip_id.in_(trip_ids))
+            .group_by(TripPlace.trip_id)
+            .all()
+        )
+        return dict(rows)
+
     def delete(self, trip_place: TripPlace) -> None:
         self.db.delete(trip_place)
         self.db.commit()

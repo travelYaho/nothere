@@ -174,8 +174,8 @@ def _fake_trip_row(status="draft"):
 def test_list_trips_maps_rows_and_forwards_filter():
     service = _service_with_mocks()
     service.trip_places = MagicMock()
-    service.trip_places.count_by_trip.return_value = 2
     trip = _fake_trip_row("confirmed")
+    service.trip_places.count_by_trips.return_value = {trip.id: 2}
     service.trips.list_by_user.return_value = ([trip], 1)
     current_user = _current_user()
 
@@ -195,7 +195,7 @@ def test_list_trips_maps_rows_and_forwards_filter():
 def test_list_trips_has_next_true_when_more_remain():
     service = _service_with_mocks()
     service.trip_places = MagicMock()
-    service.trip_places.count_by_trip.return_value = 0
+    service.trip_places.count_by_trips.return_value = {}
     service.trips.list_by_user.return_value = ([_fake_trip_row()], 15)
 
     result = service.list_trips(_current_user(), status_filter=None, page=1)

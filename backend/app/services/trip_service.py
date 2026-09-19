@@ -232,8 +232,9 @@ class TripService:
         trips, total_count = self.trips.list_by_user(
             current_user.id, status_filter=status_filter, page=page
         )
+        place_counts = self.trip_places.count_by_trips([trip.id for trip in trips])
         return TripListResponse(
-            trips=[build_trip_summary(trip, self.trip_places) for trip in trips],
+            trips=[build_trip_summary(trip, place_counts.get(trip.id, 0)) for trip in trips],
             page=page,
             has_next=page * PAGE_SIZE < total_count,
             total_count=total_count,
