@@ -703,16 +703,37 @@ class RecommendationService:
         }
 
     def build_guide(self, trip: Trip) -> dict:
-        stops = []
         places_sorted = sorted(trip.trip_places, key=lambda p: p.position)
         mode = trip.transport_mode or "walk"
+
+        # 정류장마다 get_place()/active_replacement()를 반복 호출하면(가이드북 정류장
+        # 최대 수십 개) 그만큼 DB 왕복이 났다 — 필요한 걸 먼저 한 번에 모아서 조회한다.
+        replacements = self.repo.active_replacements_map([tp.id for tp in places_sorted])
+
+        place_ids: set[UUID] = set()
+        for tp in places_sorted:
+            place_ids.add(tp.place_id)
+            active = replacements.get(tp.id)
+            if active:
+                place_ids.add(active.from_place_id)
+            elif tp.initial_place_id and tp.initial_place_id != tp.place_id:
+                place_ids.add(tp.initial_place_id)
+        places_by_id = self.places.get_by_ids(list(place_ids))
+
+        leg_pairs = [
+            (places_sorted[i].place_id, places_sorted[i + 1].place_id)
+            for i in range(len(places_sorted) - 1)
+        ]
+        legs = self.routes.get_legs(leg_pairs, mode)
+
+        stops = []
         for i, tp in enumerate(places_sorted):
-            place = self.repo.get_place(tp.place_id)
-            active = self.repo.active_replacement(tp.id)
+            place = places_by_id.get(tp.place_id)
+            active = replacements.get(tp.id)
             travel_to_next = None
             if i + 1 < len(places_sorted):
                 nxt = places_sorted[i + 1]
-                leg = self.routes.get_leg(tp.place_id, nxt.place_id, mode)
+                leg = legs.get((tp.place_id, nxt.place_id))
                 if leg:
                     travel_to_next = {
                         "distanceM": leg.distance_m,
@@ -724,14 +745,14 @@ class RecommendationService:
             before_level = None
             after_level = None
             if active:
-                from_place = self.repo.get_place(active.from_place_id)
+                from_place = places_by_id.get(active.from_place_id)
                 replaced_from = from_place.name if from_place else None
                 replace_reason = active.reason_snapshot
                 extra_minutes = active.extra_minutes
                 before_level = active.before_level
                 after_level = active.after_level
             elif tp.initial_place_id and tp.initial_place_id != tp.place_id:
-                from_place = self.repo.get_place(tp.initial_place_id)
+                from_place = places_by_id.get(tp.initial_place_id)
                 replaced_from = from_place.name if from_place else None
                 replace_reason = "혼잡 개선 및 유사 경험 제공"
 
