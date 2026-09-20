@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.db.models.experience_tag import ExperienceTag
 from app.db.models.guide_entry import GuideEntry
 from app.db.models.place import Place
-from app.db.models.preference import PlaceExperienceTag
+from app.db.models.preference import PlaceExperienceTag, TripPreferredExperience
 from app.db.models.recommendation import (
     RecommendationCandidate,
     RecommendationInteraction,
@@ -544,6 +544,62 @@ class RecommendationRepository:
             .order_by(GuideEntry.display_order.asc().nullslast())
             .all()
         )
+
+    def trip_tag_names(self, trip_id: UUID, *, limit: int = 6) -> list[str]:
+        """일정 선호경험 태그 이름. 가이드북 표지 키워드에 쓴다."""
+        rows = (
+            self.db.query(ExperienceTag.name)
+            .join(
+                TripPreferredExperience,
+                TripPreferredExperience.experience_tag_id == ExperienceTag.id,
+            )
+            .filter(TripPreferredExperience.trip_id == trip_id)
+            .order_by(TripPreferredExperience.weight.desc())
+            .limit(limit)
+            .all()
+        )
+        names: list[str] = []
+        for row in rows or []:
+            name = row[0] if isinstance(row, tuple) else getattr(row, "name", None)
+            if isinstance(name, str):
+                names.append(name)
+        return names
+
+    def get_trip_memo_entry(self, trip_id: UUID) -> GuideEntry | None:
+        """장소와 묶이지 않은 트립 단위 엔트리(메모·표지 캐시)."""
+        return (
+            self.db.query(GuideEntry)
+            .filter(GuideEntry.trip_id == trip_id, GuideEntry.trip_place_id.is_(None))
+            .order_by(GuideEntry.created_at.asc())
+            .first()
+        )
+
+    def upsert_trip_memo(self, trip_id: UUID, content: str | None) -> GuideEntry:
+        entry = self.get_trip_memo_entry(trip_id)
+        if entry is None:
+            entry = GuideEntry(trip_id=trip_id, content=content, trip_place_id=None)
+            self.db.add(entry)
+        else:
+            entry.content = content
+        self.db.flush()
+        return entry
+
+    def cache_cover_image(self, trip_id: UUID, image_url: str) -> None:
+        """표지 사진을 트립 단위 entry 에 저장한다. 이미 있으면 덮지 않는다."""
+        entry = self.get_trip_memo_entry(trip_id)
+        if entry is None:
+            self.db.add(
+                GuideEntry(
+                    trip_id=trip_id,
+                    image_url=image_url,
+                    is_public=True,
+                    trip_place_id=None,
+                )
+            )
+        elif not entry.image_url:
+            entry.image_url = image_url
+            entry.is_public = True
+        self.db.flush()
 
     def log_interaction(
         self,

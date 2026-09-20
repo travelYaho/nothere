@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     # 장소 직접 추가 시 주소 -> 위경도 지오코딩에 쓴다. TourAPI 와 마찬가지로
     # 없어도 서버는 뜨고, 실제 호출 시점에 EXTERNAL_API_UNAVAILABLE 로 방어한다.
     KAKAO_REST_API_KEY: str = ""
+    # 카카오 연결 해제 웹훅 인증(Authorization: KakaoAK ...). 없으면 웹훅은 401.
+    KAKAO_ADMIN_KEY: str = ""
     ROUTE_CACHE_TTL_HOURS: int = 24
     FRONTEND_PUBLIC_ORIGIN: str = "http://localhost:5173"
     CONCENTRATION_API_KEY: str = ""
