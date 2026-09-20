@@ -87,9 +87,28 @@ export function ensureProfile() {
   return apiClient.post<UserResponse>("/auth/ensure-profile")
 }
 
-/** 카카오 OAuth 콜백 URL의 code를 세션으로 바꾸고 서비스 profile을 보정한다. */
-export async function completeOAuthCallback(search: string) {
-  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
+function shareInFlight<T>(cache: Map<string, Promise<T>>, key: string, run: () => Promise<T>): Promise<T> {
+  const existing = cache.get(key)
+  if (existing) return existing
+  const promise = run().finally(() => {
+    cache.delete(key)
+  })
+  cache.set(key, promise)
+  return promise
+}
+
+function callbackSearchKey(search: string) {
+  return search.startsWith("?") ? search : `?${search}`
+}
+
+function callbackParams(search: string) {
+  return new URLSearchParams(callbackSearchKey(search).slice(1))
+}
+
+const oauthCallbackInFlight = new Map<string, Promise<UserResponse>>()
+
+async function runOAuthCallback(search: string) {
+  const params = callbackParams(search)
   const oauthError = params.get("error_description") || params.get("error")
   if (oauthError) {
     throw new Error(oauthError)
@@ -101,6 +120,34 @@ export async function completeOAuthCallback(search: string) {
   const { error } = await supabase.auth.exchangeCodeForSession(code)
   if (error) throw error
   return ensureProfile()
+}
+
+/** 카카오 OAuth 콜백 URL의 code를 세션으로 바꾸고 서비스 profile을 보정한다. */
+export function completeOAuthCallback(search: string) {
+  const key = callbackSearchKey(search)
+  return shareInFlight(oauthCallbackInFlight, key, () => runOAuthCallback(key))
+}
+
+const passwordRecoveryInFlight = new Map<string, Promise<void>>()
+
+async function runPasswordRecovery(search: string) {
+  const params = callbackParams(search)
+  const recoveryError = params.get("error_description") || params.get("error")
+  if (recoveryError) {
+    throw new Error(recoveryError)
+  }
+  const code = params.get("code")
+  if (!code) {
+    throw new Error("만료되었거나 유효하지 않은 링크예요.")
+  }
+  const { error } = await supabase.auth.exchangeCodeForSession(code)
+  if (error) throw error
+}
+
+/** 비밀번호 재설정 메일의 PKCE code를 복구 세션으로 바꾼다. */
+export function completePasswordRecovery(search: string) {
+  const key = callbackSearchKey(search)
+  return shareInFlight(passwordRecoveryInFlight, key, () => runPasswordRecovery(key))
 }
 
 export async function signOut() {

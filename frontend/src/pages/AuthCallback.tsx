@@ -7,12 +7,22 @@ import { useNavigate } from "react-router-dom"
 import { Spinner } from "@/components/common/primitives"
 import { completeOAuthCallback, toKakaoLoginErrorMessage } from "@/features/auth"
 
+const oauthCallbackInFlight = new Map<string, ReturnType<typeof completeOAuthCallback>>()
+
 export default function AuthCallback() {
   const navigate = useNavigate()
 
   useEffect(() => {
     let cancelled = false
-    completeOAuthCallback(window.location.search)
+    const search = window.location.search
+    let pending = oauthCallbackInFlight.get(search)
+    if (!pending) {
+      pending = completeOAuthCallback(search).finally(() => {
+        oauthCallbackInFlight.delete(search)
+      })
+      oauthCallbackInFlight.set(search, pending)
+    }
+    pending
       .then(() => {
         if (!cancelled) navigate("/home", { replace: true })
       })

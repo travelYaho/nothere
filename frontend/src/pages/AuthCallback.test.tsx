@@ -2,6 +2,7 @@
  * AuthCallback이 OAuth code 교환 후 홈으로 보내고, 실패 시 로그인으로 되돌리는지 확인한다.
  */
 import { render, screen, waitFor } from "@testing-library/react"
+import { StrictMode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import AuthCallback from "./AuthCallback"
 
@@ -28,6 +29,7 @@ describe("AuthCallback", () => {
   beforeEach(() => {
     mockNavigate.mockReset()
     completeOAuthCallbackMock.mockReset()
+    window.history.replaceState({}, "", "/auth/callback?code=oauth-code")
   })
 
   it("성공하면 홈으로 보낸다", async () => {
@@ -45,6 +47,26 @@ describe("AuthCallback", () => {
       expect(completeOAuthCallbackMock).toHaveBeenCalledWith(window.location.search)
       expect(mockNavigate).toHaveBeenCalledWith("/home", { replace: true })
     })
+  })
+
+  it("StrictMode에서도 code 교환을 한 번만 한다", async () => {
+    completeOAuthCallbackMock.mockResolvedValue({
+      id: "user-1",
+      email: "kakao@example.com",
+      nickname: "말고마니",
+      profileImageUrl: null,
+    })
+
+    render(
+      <StrictMode>
+        <AuthCallback />
+      </StrictMode>,
+    )
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/home", { replace: true })
+    })
+    expect(completeOAuthCallbackMock).toHaveBeenCalledTimes(1)
   })
 
   it("실패하면 로그인 화면으로 에러를 넘긴다", async () => {

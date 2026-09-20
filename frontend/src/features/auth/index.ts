@@ -1,5 +1,6 @@
 export {
   completeOAuthCallback,
+  completePasswordRecovery,
   establishSession,
   requestPasswordReset,
   signIn,
