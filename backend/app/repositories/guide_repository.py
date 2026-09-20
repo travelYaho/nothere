@@ -59,6 +59,33 @@ class GuideRepository:
             link.expires_at is not None and link.expires_at <= now
         )
 
+    def get_top_public(self) -> tuple[ShareLink, Trip, Region, int] | None:
+        """공개 가이드북 중 좋아요가 가장 많은 1건과 좋아요 수를 반환한다(동률이면 최신순).
+
+        홈 상단 추천 카드용이라 목록 조회(list_public)의 카드 조립 없이 필요한 값만 뽑는다.
+        """
+        now = datetime.now(timezone.utc)
+        like_count_subq = (
+            select(func.count(GuideLike.id))
+            .where(GuideLike.share_link_id == ShareLink.id)
+            .correlate(ShareLink)
+            .scalar_subquery()
+        )
+        row = (
+            self.db.query(ShareLink, Trip, Region, like_count_subq)
+            .join(Trip, Trip.id == ShareLink.trip_id)
+            .join(Region, Region.id == Trip.region_id)
+            .filter(ShareLink.visibility == ShareLinkVisibility.PUBLIC)
+            .filter(ShareLink.revoked_at.is_(None))
+            .filter((ShareLink.expires_at.is_(None)) | (ShareLink.expires_at > now))
+            .order_by(like_count_subq.desc(), ShareLink.created_at.desc())
+            .first()
+        )
+        if row is None:
+            return None
+        share_link, trip, region, like_count = row
+        return share_link, trip, region, int(like_count or 0)
+
     def list_public(
         self,
         *,

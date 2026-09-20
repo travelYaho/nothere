@@ -16,10 +16,11 @@ import {
   MapPin,
   User,
 } from "@/components/common/icons"
+import { AlertDialog } from "@/components/feedback/modals"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 import { signOut } from "@/features/auth"
 import type { UserResponse } from "@/features/auth/types"
-import { getMe, getMyStats, updateNickname } from "@/features/users"
+import { deleteMe, getMe, getMyStats, updateNickname } from "@/features/users"
 import type { UserStatsResponse } from "@/features/users/types"
 import { ProfileEditSheet } from "@/features/users/components/ProfileEditSheet"
 import { useLocationPermission } from "@/features/users/hooks/useLocationPermission"
@@ -85,6 +86,10 @@ export function MyPageView() {
 
   const [logoutError, setLogoutError] = useState<string | null>(null)
 
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
   const geo = useLocationPermission()
 
   useEffect(() => {
@@ -142,6 +147,22 @@ export function MyPageView() {
       navigate("/")
     } catch (err) {
       setLogoutError(toErrorMessage(err))
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteMe()
+      // 서버에서 계정이 이미 삭제됐으므로 signOut 서버 호출이 실패해도 로컬 세션만 정리한다.
+      await signOut().catch(() => undefined)
+      navigate("/", { replace: true })
+    } catch (err) {
+      setDeleteError(toErrorMessage(err))
+      setDeleteOpen(false)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -294,11 +315,41 @@ export function MyPageView() {
                 {logoutError}
               </p>
             )}
+
+            <button
+              onClick={() => {
+                setDeleteError(null)
+                setDeleteOpen(true)
+              }}
+              className="mx-auto mt-4 block text-[12px] font-medium text-ink-faint underline"
+            >
+              회원 탈퇴
+            </button>
+            {deleteError && (
+              <p className="pt-2 text-center text-[12px] font-medium text-congestion-high">
+                {deleteError}
+              </p>
+            )}
           </>
         )}
       </div>
 
       <BottomTab active="my" onChange={handleTabChange} />
+
+      <AlertDialog
+        open={deleteOpen}
+        tone="danger"
+        title="정말 탈퇴하시겠어요?"
+        description="계정과 모든 일정, 공개한 가이드북, 좋아요 기록이 삭제되며 되돌릴 수 없어요."
+        confirmLabel={deleting ? "처리 중..." : "탈퇴하기"}
+        cancelLabel="취소"
+        onConfirm={() => {
+          if (!deleting) void handleDeleteAccount()
+        }}
+        onCancel={() => {
+          if (!deleting) setDeleteOpen(false)
+        }}
+      />
 
       {user && (
         <ProfileEditSheet

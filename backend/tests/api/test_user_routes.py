@@ -77,3 +77,23 @@ def test_update_me_missing_profile_returns_404(client):
 
     assert res.status_code == 404
     assert res.json()["error"]["code"] == "USER_NOT_FOUND"
+
+
+def test_delete_me_removes_auth_user_after_detaching_references(client):
+    with patch("app.services.user_service.UserRepository") as MockUserRepo, patch(
+        "app.services.user_service.delete_auth_user"
+    ) as mock_delete:
+        res = client.delete("/api/users/me")
+
+    assert res.status_code == 204
+    MockUserRepo.return_value.detach_auth_references.assert_called_once()
+    mock_delete.assert_called_once()
+
+
+def test_delete_me_returns_502_when_auth_delete_fails(client):
+    with patch("app.services.user_service.UserRepository"), patch(
+        "app.services.user_service.delete_auth_user", side_effect=RuntimeError("boom")
+    ):
+        res = client.delete("/api/users/me")
+
+    assert res.status_code == 502

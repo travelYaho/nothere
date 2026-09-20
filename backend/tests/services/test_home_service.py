@@ -34,6 +34,8 @@ def test_get_home_maps_trip_fields_into_legacy_schedule_summary_shape():
     service.trips.get_in_progress.return_value = draft
     service.trips.get_recent.return_value = recent
     service.trip_places = MagicMock()
+    service.guides = MagicMock()
+    service.guides.get_top_public.return_value = None
     service.trip_places.count_by_trips.return_value = {
         draft.id: 4, recent[0].id: 4, recent[1].id: 4
     }
@@ -62,6 +64,8 @@ def test_get_home_without_draft_trip_returns_none_and_excludes_nothing():
     service.trips = MagicMock()
     service.trips.get_in_progress.return_value = None
     service.trips.get_recent.return_value = []
+    service.guides = MagicMock()
+    service.guides.get_top_public.return_value = None
 
     current_user = CurrentUser(id=uuid4(), email="tester@example.com", nickname="테스터")
     response = service.get_home(current_user)
@@ -69,3 +73,41 @@ def test_get_home_without_draft_trip_returns_none_and_excludes_nothing():
     assert response.draft_schedule is None
     assert response.recent_schedules == []
     service.trips.get_recent.assert_called_once_with(current_user.id, exclude_id=None)
+
+
+def test_get_home_includes_top_liked_public_guide_as_featured_guide():
+    service = HomeService(db=MagicMock())
+    service.trips = MagicMock()
+    service.trips.get_in_progress.return_value = None
+    service.trips.get_recent.return_value = []
+    service.trip_places = MagicMock()
+    service.trip_places.count_by_trips.return_value = {}
+    link = MagicMock(token="tok123")
+    trip = _fake_trip(title="대전 여행")
+    region = MagicMock()
+    region.name = "대전"
+    service.guides = MagicMock()
+    service.guides.get_top_public.return_value = (link, trip, region, 7)
+
+    response = service.get_home(CurrentUser(id=uuid4(), email="t@example.com", nickname="t"))
+
+    assert response.featured_guide is not None
+    assert response.featured_guide.token == "tok123"
+    assert response.featured_guide.title == "대전 여행"
+    assert response.featured_guide.region_name == "대전"
+    assert response.featured_guide.like_count == 7
+
+
+def test_get_home_featured_guide_is_none_without_public_guides():
+    service = HomeService(db=MagicMock())
+    service.trips = MagicMock()
+    service.trips.get_in_progress.return_value = None
+    service.trips.get_recent.return_value = []
+    service.trip_places = MagicMock()
+    service.trip_places.count_by_trips.return_value = {}
+    service.guides = MagicMock()
+    service.guides.get_top_public.return_value = None
+
+    response = service.get_home(CurrentUser(id=uuid4(), email="t@example.com", nickname="t"))
+
+    assert response.featured_guide is None

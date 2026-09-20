@@ -90,9 +90,12 @@ def test_get_home_returns_data_envelope_with_null_draft(client):
     app.dependency_overrides[get_current_user] = lambda: fake_user
     app.dependency_overrides[get_db] = lambda: MagicMock()
 
-    with patch("app.services.home_service.TripRepository") as MockRepo:
+    with patch("app.services.home_service.TripRepository") as MockRepo, patch(
+        "app.services.home_service.GuideRepository"
+    ) as MockGuideRepo:
         MockRepo.return_value.get_in_progress.return_value = None
         MockRepo.return_value.get_recent.return_value = []
+        MockGuideRepo.return_value.get_top_public.return_value = None
 
         res = client.get("/api/home")
 
