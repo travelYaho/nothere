@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from app.clients._redact import redact_service_key
 from app.core.config import settings
 from app.core.exceptions import AppError, ErrorCode
+from app.core.perf import timed_external
 
 logger = logging.getLogger("yeogimalgo.tour_api")
 
@@ -102,12 +103,13 @@ def search_places(keyword: str, area_code: str | None = None) -> list[TourApiPla
         params["areaCode"] = area_code
 
     try:
-        response = httpx.get(
-            f"{TOUR_API_BASE_URL}/searchKeyword2",
-            params=params,
-            timeout=_TIMEOUT_SECONDS,
-            follow_redirects=True,
-        )
+        with timed_external("tourapi_search"):
+            response = httpx.get(
+                f"{TOUR_API_BASE_URL}/searchKeyword2",
+                params=params,
+                timeout=_TIMEOUT_SECONDS,
+                follow_redirects=True,
+            )
         response.raise_for_status()
         payload = response.json()
     except (httpx.HTTPError, ValueError) as exc:
@@ -295,7 +297,8 @@ def fetch_nearby_places(latitude: float, longitude: float, radius_m: int) -> lis
     }
 
     try:
-        response = httpx.get(NEARBY_BASE_URL, params=params, timeout=10.0)
+        with timed_external("tourapi_nearby"):
+            response = httpx.get(NEARBY_BASE_URL, params=params, timeout=10.0)
         response.raise_for_status()
         payload = response.json()
     except httpx.HTTPError as exc:

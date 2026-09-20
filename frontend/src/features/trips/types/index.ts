@@ -75,6 +75,7 @@ export interface TripPlaceAddResponse {
 export interface CustomPlaceAddRequest {
   name: string
   address: string
+  baseAddress?: string
   visitTime?: string | null
 }
 

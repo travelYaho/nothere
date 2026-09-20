@@ -4,7 +4,7 @@ from datetime import datetime, time
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import StringConstraints, field_validator
+from pydantic import StringConstraints, field_validator, model_validator
 
 from app.schemas.common import APIModel
 
@@ -67,6 +67,8 @@ class CustomPlaceAddRequest(APIModel):
     """
     name: PlaceName
     address: PlaceAddress
+    # 상세주소를 붙이기 전의 기본주소. 있으면 위치 조회는 이 값으로 하고 address는 저장용으로만 쓴다.
+    base_address: str | None = None
     visit_time: time | None = None
 
     @field_validator("address")
@@ -75,6 +77,27 @@ class CustomPlaceAddRequest(APIModel):
         if not _is_complete_address(value):
             raise ValueError("시/군/구, 도로명, 번지까지 포함한 전체 주소를 입력해야 합니다.")
         return value
+
+    @field_validator("base_address")
+    @classmethod
+    def _validate_base_address(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if not _is_complete_address(value):
+            raise ValueError("시/군/구, 도로명, 번지까지 포함한 전체 주소를 입력해야 합니다.")
+        return value
+
+    @model_validator(mode="after")
+    def _base_address_is_prefix_of_address(self) -> "CustomPlaceAddRequest":
+        if self.base_address is None:
+            return self
+        address = self.address.strip()
+        rest = address[len(self.base_address):]
+        # startswith만 보면 "…세종대로 11"이 "…세종대로 110"의 기본주소로 통과해 번지가 잘린다.
+        if not address.startswith(self.base_address) or (rest and not rest[0].isspace()):
+            raise ValueError("baseAddress는 address의 앞부분이어야 합니다.")
+        return self
 
 
 class CustomPlaceAddResponse(APIModel):
