@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { getHomeSummary } from "@/features/trips/api/tripsApi"
@@ -45,10 +46,17 @@ function renderHome() {
   )
 }
 
+const getCurrentPosition = vi.fn()
+
 describe("Home featured banner", () => {
   beforeEach(() => {
     getHomeSummaryMock.mockReset()
     getHomeSummaryMock.mockResolvedValue(homeResponse())
+    getCurrentPosition.mockReset()
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition },
+    })
   })
 
   it("TODAY'S RECOMMENDATION 배너에 선정된 일정의 표지 이미지를 보여준다", async () => {
@@ -70,5 +78,24 @@ describe("Home featured banner", () => {
       expect(screen.getByText("2026.09.24 친구 여행")).toBeInTheDocument()
     })
     expect(container.querySelector("img")?.getAttribute("src")).toContain("unsplash.com")
+  })
+
+  it("위치 아이콘을 누르면 브라우저 위치 권한을 요청한다", async () => {
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(screen.getByRole("button", { name: "위치 권한 설정" }))
+    expect(getCurrentPosition).toHaveBeenCalledTimes(1)
+  })
+
+  it("위치 권한이 거부되면 설정 안내 팝업을 보여준다", async () => {
+    getCurrentPosition.mockImplementation((_ok, err) => {
+      err({ code: 1, PERMISSION_DENIED: 1, message: "denied" })
+    })
+    const user = userEvent.setup()
+    renderHome()
+    await user.click(screen.getByRole("button", { name: "위치 권한 설정" }))
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument()
+    expect(screen.getByText("위치 권한을 허용해 주세요")).toBeInTheDocument()
+    expect(screen.getByText(/설정 앱의 앱 권한 메뉴/)).toBeInTheDocument()
   })
 })
