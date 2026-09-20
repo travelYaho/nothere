@@ -10,12 +10,15 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import AppError, ErrorCode
 from app.core.logging_setup import suppress_third_party_request_logging
+from app.core.rate_limit import limiter
 from app.db.session import check_db_connection
 
 logger = logging.getLogger("yeogimalgo")
@@ -41,6 +44,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -62,6 +67,15 @@ def health() -> dict[str, str]:
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
     """서비스 내부 AppError를 공통 {error:{code,message}} 형식으로 반환한다."""
     return JSONResponse(status_code=exc.status_code, content=exc.to_dict())
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(_request: Request, _exc: RateLimitExceeded) -> JSONResponse:
+    """요청 횟수 초과를 공통 {error:{code,message}} 형식의 429 로 반환한다."""
+    return JSONResponse(
+        status_code=429,
+        content={"error": {"code": ErrorCode.RATE_LIMITED, "message": "요청이 너무 많아요. 잠시 후 다시 시도해 주세요."}},
+    )
 
 
 @app.exception_handler(RequestValidationError)

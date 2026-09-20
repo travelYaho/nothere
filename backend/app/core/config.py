@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     # 카카오 연결 해제 웹훅 인증(Authorization: KakaoAK ...). 없으면 웹훅은 401.
     KAKAO_ADMIN_KEY: str = ""
     ROUTE_CACHE_TTL_HOURS: int = 24
+    # 요청 횟수 제한(IP 기준) 스위치. 테스트에서만 끈다.
+    RATE_LIMIT_ENABLED: bool = True
     FRONTEND_PUBLIC_ORIGIN: str = "http://localhost:5173"
     CONCENTRATION_API_KEY: str = ""
     # 관광사진(PhotoGalleryService1). KorService2 키와 활용신청이 다르다.

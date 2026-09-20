@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
+from app.core.rate_limit import SIGNUP_LIMIT, limiter
 from app.core.security import AuthUser, get_auth_user
 from app.db.session import get_db
 from app.schemas.auth import SignupRequest, SignupResponse
@@ -30,7 +31,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     response_model=ApiResponse[SignupResponse],
     response_model_exclude_none=True,
 )
-def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> ApiResponse[SignupResponse]:
+@limiter.limit(SIGNUP_LIMIT)
+def signup(
+    request: Request,
+    payload: SignupRequest,
+    db: Session = Depends(get_db),
+) -> ApiResponse[SignupResponse]:
     """이메일·비밀번호 회원가입 후 서비스용 profile 생성을 연결한다."""
     return ApiResponse(data=AuthService(db).signup(payload))
 
