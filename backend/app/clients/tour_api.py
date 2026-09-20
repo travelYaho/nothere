@@ -221,6 +221,8 @@ def fetch_place_image(content_id: str) -> str | None:
     if not isinstance(url, str):
         return None
     url = url.strip()
+    if url.startswith("http://tong.visitkorea.or.kr"):
+        url = "https://" + url[len("http://") :]
     return url or None
 
 

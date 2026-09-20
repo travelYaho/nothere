@@ -1,4 +1,4 @@
-import { coverMetaLine, guideKicker, shortPlaceLabel } from "./utils"
+import { coverMetaLine, displayGuideTitle, guideKicker, shortPlaceLabel } from "./utils"
 import type { GuideResponse } from "@/features/recommendation/types/part3"
 
 export function GuideCoverPage({
@@ -45,7 +45,7 @@ export function GuideCoverPage({
         <div className="absolute bottom-[38px] left-5 right-5 font-black leading-[0.95] tracking-[-2px] text-white">
           {city ? <p className="text-[clamp(44px,18vw,72px)]">{city}</p> : null}
           {district ? <p className="text-[clamp(44px,18vw,72px)]">{district}</p> : null}
-          {!city && !district ? <p className="text-[40px]">{guide.title}</p> : null}
+          {!city && !district ? <p className="text-[40px]">{displayGuideTitle(guide.title)}</p> : null}
         </div>
       </div>
       <div className="h-1 w-full shrink-0 bg-[#16182a]" />
@@ -56,7 +56,7 @@ export function GuideCoverPage({
         <div className="flex flex-col gap-3 px-6 pb-4 pt-7">
           <p className="text-[11px] font-extrabold tracking-[1.5px] text-[#1864f5]">{kicker}</p>
           <p className="text-[32px] font-extrabold leading-10 tracking-[-0.6px] text-ink">
-            {guide.title}
+            {displayGuideTitle(guide.title)}
           </p>
           {guide.tags && guide.tags.length > 0 ? (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] font-bold text-[#667385]">

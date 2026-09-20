@@ -36,6 +36,41 @@ def test_search_image_urls_parses_gallery_items(monkeypatch):
     ]
 
 
+def test_search_image_urls_calls_photo_gallery_service1(monkeypatch):
+    monkeypatch.setattr(settings, "PHOTO_GALLERY_API_KEY", "gallery-key")
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "tour-key")
+    captured: dict = {}
+
+    def _fake_get(url, params=None, **kwargs):
+        captured["url"] = url
+        captured["serviceKey"] = (params or {}).get("serviceKey")
+        return httpx.Response(
+            200,
+            json={"response": {"header": {"resultCode": "0000"}, "body": {"totalCount": 0}}},
+            request=httpx.Request("GET", "https://example.com"),
+        )
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+    photo_gallery.search_image_urls("서울")
+    assert captured["url"].endswith("/PhotoGalleryService1/gallerySearchList1")
+    assert captured["serviceKey"] == "gallery-key"
+
+
+def test_first_image_for_place_retries_without_parentheses(monkeypatch):
+    monkeypatch.setattr(settings, "PHOTO_GALLERY_API_KEY", "gallery-key")
+    keywords: list[str] = []
+
+    def _search(keyword, **kwargs):
+        keywords.append(keyword)
+        if keyword == "경국사":
+            return ["https://img.example/temple.jpg"]
+        return []
+
+    monkeypatch.setattr(photo_gallery, "search_image_urls", _search)
+    assert photo_gallery.first_image_for_place("경국사(서울)") == "https://img.example/temple.jpg"
+    assert keywords == ["경국사(서울)", "경국사"]
+
+
 def test_search_image_urls_returns_empty_on_network_error(monkeypatch):
     monkeypatch.setattr(settings, "TOUR_API_KEY", "dummy-key")
 

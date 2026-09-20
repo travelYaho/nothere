@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     ROUTE_CACHE_TTL_HOURS: int = 24
     FRONTEND_PUBLIC_ORIGIN: str = "http://localhost:5173"
     CONCENTRATION_API_KEY: str = ""
-    TOUR_API_KEY: str = ""
+    # 관광사진(PhotoGalleryService1). KorService2 키와 활용신청이 다르다.
+    PHOTO_GALLERY_API_KEY: str = ""
 
     @field_validator(
         "SUPABASE_URL",

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Calendar, Pencil } from "@/components/common/icons"
 import type { GuideResponse } from "@/features/recommendation/types/part3"
 import { GuideScheduleItem } from "./GuideScheduleItem"
-import { innerDatePill } from "./utils"
+import { displayGuideTitle, innerDatePill } from "./utils"
 
 export function GuideInnerPage({
   guide,
@@ -60,7 +60,7 @@ export function GuideInnerPage({
         <span className="inline-block rounded-[4px] bg-white/15 px-2 py-[3px] text-[9px] font-bold tracking-[2px] text-white/70">
           TRAVEL SCHEDULE
         </span>
-        <p className="mt-3.5 text-[26px] font-black tracking-[-0.5px] text-white">{guide.title}</p>
+        <p className="mt-3.5 text-[26px] font-black tracking-[-0.5px] text-white">{displayGuideTitle(guide.title)}</p>
         <div className="mt-3 inline-flex items-center gap-1.5 rounded-[20px] border border-white/20 bg-white/10 px-3 py-1.5">
           <Calendar size={10} className="text-white/80" />
           <p className="text-[11px] font-medium text-white/80">{innerDatePill(guide)}</p>

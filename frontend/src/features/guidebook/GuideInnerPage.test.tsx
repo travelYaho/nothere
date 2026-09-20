@@ -45,4 +45,10 @@ describe("GuideInnerPage", () => {
     box.blur()
     expect(onSaveMemo).toHaveBeenCalled()
   })
+
+  it("제목에서 자동생성 날짜를 뺀다", () => {
+    render(<GuideInnerPage guide={guide({ title: "2026.09.25 커플 여행" })} />)
+    expect(screen.getByText("커플 여행")).toBeInTheDocument()
+    expect(screen.queryByText("2026.09.25 커플 여행")).not.toBeInTheDocument()
+  })
 })

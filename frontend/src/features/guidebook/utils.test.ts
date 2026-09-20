@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { circledIndex, coverMetaLine, guideKicker, shortPlaceLabel } from "./utils"
+import { circledIndex, coverMetaLine, displayGuideTitle, guideKicker, shortPlaceLabel } from "./utils"
 import type { GuideResponse } from "@/features/recommendation/types/part3"
 
 describe("guidebook utils", () => {
@@ -28,5 +28,11 @@ describe("guidebook utils", () => {
     } satisfies GuideResponse
     expect(coverMetaLine(guide)).toBe("2026.08.15 · 서울 종로구 · 이동 66분")
     expect(shortPlaceLabel(guide)).toEqual({ city: "서울", district: "종로구" })
+  })
+
+  it("displayGuideTitle strips auto-generated date prefix", () => {
+    expect(displayGuideTitle("2026.09.25 커플 여행")).toBe("커플 여행")
+    expect(displayGuideTitle("서촌 당일치기")).toBe("서촌 당일치기")
+    expect(displayGuideTitle("2026.09.25")).toBe("2026.09.25")
   })
 })

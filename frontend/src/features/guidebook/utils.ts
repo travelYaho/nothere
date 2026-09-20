@@ -32,6 +32,14 @@ export function travelMinutes(guide: GuideResponse): number {
   return guide.stops.reduce((sum, stop) => sum + (stop.travelToNext?.durationMin ?? 0), 0)
 }
 
+const AUTO_TITLE_DATE = /^\d{4}\.\d{2}\.\d{2}\s+/
+
+export function displayGuideTitle(title: string | null | undefined): string {
+  const raw = title?.trim() ?? ""
+  const stripped = raw.replace(AUTO_TITLE_DATE, "").trim()
+  return stripped || raw
+}
+
 export function coverMetaLine(guide: GuideResponse): string {
   const { city, district } = shortPlaceLabel(guide)
   const parts = [
