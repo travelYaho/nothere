@@ -14,6 +14,9 @@ import type { FeaturedGuide, ScheduleSummary } from "@/features/trips/types"
 import { useSession } from "@/store/sessionStore"
 import { ApiError } from "@/types/api"
 
+const FALLBACK_BANNER =
+  "https://images.unsplash.com/photo-1543039625-14cbd3802e7d?w=680&h=420&fit=crop&auto=format"
+
 function toErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message
   return "일정을 불러오지 못했습니다."
@@ -64,7 +67,7 @@ export default function Home() {
 
       <div className="px-4 pb-3.5">
         <BannerCard
-          imageUrl="https://images.unsplash.com/photo-1543039625-14cbd3802e7d?w=680&h=420&fit=crop&auto=format"
+          imageUrl={featuredGuide?.coverImageUrl || FALLBACK_BANNER}
           title={
             <>
               새로운 장소에서

@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.db.models.place import Place
 from app.db.models.trip import Trip
 from app.db.models.trip_place import TripPlace
 
@@ -77,6 +78,16 @@ class TripPlaceRepository:
                 Trip.user_id == user_id,
             )
             .all()
+        )
+
+    def first_place(self, trip_id: UUID) -> Place | None:
+        """일정 첫 장소. 홈 추천 배너가 캐시된 표지가 없을 때 폴백 이미지를 고르는 데 쓴다."""
+        return (
+            self.db.query(Place)
+            .join(TripPlace, TripPlace.place_id == Place.id)
+            .filter(TripPlace.trip_id == trip_id)
+            .order_by(TripPlace.position.asc())
+            .first()
         )
 
     def count_by_trip(self, trip_id: UUID) -> int:

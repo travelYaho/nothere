@@ -159,6 +159,7 @@ export interface FeaturedGuide {
   title: string
   regionName: string
   likeCount: number
+  coverImageUrl: string | null
 }
 
 export interface HomeResponse {
