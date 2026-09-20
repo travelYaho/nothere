@@ -2,12 +2,13 @@
  * Login — 로그인 화면.
  * Figma: 여기말GO / node 48:3448 "로그인 화면"
  */
-import { useState, type FormEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { useEffect, useState, type FormEvent } from "react"
+import { useLocation, useNavigate } from "react-router-dom"
 import { ChevronLeft } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { PasswordInput, TextInput } from "@/components/common/inputs"
-import { establishSession, signIn, signUp } from "@/features/auth"
+import { AlertDialog } from "@/components/feedback/modals"
+import { establishSession, signIn, signInWithKakao, signUp, toKakaoLoginErrorMessage } from "@/features/auth"
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof Error) {
@@ -21,19 +22,46 @@ function toErrorMessage(err: unknown): string {
   return "요청 중 문제가 발생했습니다."
 }
 
+function oauthErrorFromState(state: unknown): string | null {
+  if (!state || typeof state !== "object" || !("error" in state)) return null
+  const value = (state as { error?: unknown }).error
+  return typeof value === "string" && value.trim() ? value : null
+}
+
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [tab, setTab] = useState<"login" | "signup">("login")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [nickname, setNickname] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [kakaoError, setKakaoError] = useState<string | null>(() => oauthErrorFromState(location.state))
   const [notice, setNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [kakaoLoading, setKakaoLoading] = useState(false)
+
+  useEffect(() => {
+    function onPageShow(event: Event) {
+      setKakaoLoading(false)
+      const persisted = "persisted" in event && Boolean((event as PageTransitionEvent).persisted)
+      if (persisted) {
+        setKakaoError((current) => current ?? "카카오 로그인에 실패했습니다.")
+      }
+    }
+    window.addEventListener("pageshow", onPageShow)
+    return () => window.removeEventListener("pageshow", onPageShow)
+  }, [])
+
+  useEffect(() => {
+    if (!oauthErrorFromState(location.state)) return
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [location.pathname, location.state, navigate])
 
   function switchTab(next: "login" | "signup") {
     setTab(next)
     setError(null)
+    setKakaoError(null)
     setNotice(null)
   }
 
@@ -64,8 +92,22 @@ export default function Login() {
     }
   }
 
+  async function handleKakaoLogin() {
+    setError(null)
+    setKakaoError(null)
+    setNotice(null)
+    setKakaoLoading(true)
+    try {
+      await signInWithKakao()
+    } catch (err) {
+      setKakaoError(toKakaoLoginErrorMessage(err))
+    } finally {
+      setKakaoLoading(false)
+    }
+  }
+
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="relative flex flex-1 flex-col">
       <div className="flex items-center px-5 py-2">
         <button
           onClick={() => navigate(-1)}
@@ -157,14 +199,36 @@ export default function Login() {
         </div>
 
         <div className="mt-4 flex w-full max-w-[325px] flex-col gap-2.5 pb-8">
-          <Button variant="ghost" block>
-            소셜 A로 계속하기
-          </Button>
+          <button
+            type="button"
+            onClick={handleKakaoLogin}
+            disabled={kakaoLoading}
+            aria-busy={kakaoLoading}
+            className="block w-full disabled:pointer-events-none disabled:opacity-50"
+          >
+            <img
+              src="/images/kakao_login_large_wide.png"
+              alt="카카오 로그인"
+              className="block h-auto w-full"
+            />
+          </button>
           <Button variant="ghost" block>
             소셜 B로 계속하기
           </Button>
         </div>
       </div>
+
+      <AlertDialog
+        open={kakaoError != null}
+        title="카카오 로그인에 실패했어요"
+        description={kakaoError ?? undefined}
+        confirmLabel="다시 시도"
+        cancelLabel="닫기"
+        onConfirm={() => {
+          void handleKakaoLogin()
+        }}
+        onCancel={() => setKakaoError(null)}
+      />
     </div>
   )
 }

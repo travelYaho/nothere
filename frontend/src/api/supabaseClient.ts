@@ -16,4 +16,11 @@ if (!supabaseUrl || !supabaseKey) {
   )
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    // PKCE code 교환은 /auth/callback, /reset-password 에서 명시적으로 한다.
+    // 기본값(true)이면 클라이언트 초기화와 페이지 effect가 같은 code를 두 번 쓸 수 있다.
+    detectSessionInUrl: false,
+    flowType: "pkce",
+  },
+})
