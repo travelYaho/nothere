@@ -7,6 +7,7 @@
  */
 import { apiClient } from "@/api/apiClient"
 import { supabase } from "@/api/supabaseClient"
+import { resolveOAuthRedirectUrl } from "@/features/auth/oauthRedirect"
 import type { SignupRequest, SignupResponse, UserResponse } from "@/features/auth/types"
 
 function extractErrorText(err: unknown): string {
@@ -39,12 +40,7 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signInWithKakao() {
-  const redirectTo = import.meta.env.VITE_OAUTH_REDIRECT_URL
-  if (!redirectTo) {
-    throw new Error(
-      "카카오 로그인 설정이 없습니다. frontend/.env 의 VITE_OAUTH_REDIRECT_URL 을 확인하세요.",
-    )
-  }
+  const redirectTo = resolveOAuthRedirectUrl()
 
   // skipBrowserRedirect: authorize URL로 바로 이동하면 provider 미활성 시
   // 브라우저가 JSON 에러 페이지만 보여주고, 로그인 화면 로딩이 안 풀린다.
