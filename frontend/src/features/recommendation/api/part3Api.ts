@@ -145,3 +145,10 @@ export function createShareLink(
 export function fetchPublicGuide(token: string) {
   return v1Fetch<GuideResponse>(`${base}/guide/${token}`, null)
 }
+
+export function saveGuideMemo(accessToken: string, tripId: string, content: string) {
+  return v1Fetch<{ memo: string | null }>(`${base}/trips/${tripId}/guide/memo`, accessToken, {
+    method: "PATCH",
+    body: JSON.stringify({ content }),
+  })
+}

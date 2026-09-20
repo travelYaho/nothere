@@ -13,7 +13,7 @@ from app.domains.analysis.service import AnalysisService
 from app.domains.recommendation.service import RecommendationService
 from app.schemas.common import ApiResponse
 from app.schemas.envelope import ok
-from app.schemas.recommendation import ShareLinkRequest
+from app.schemas.recommendation import GuideMemoRequest, ShareLinkRequest
 from app.schemas.trip import (
     TripConditionsUpdateRequest,
     TripConditionsUpdateResponse,
@@ -132,6 +132,19 @@ def trip_guide(
     db: Session = Depends(get_db),
 ):
     data = RecommendationService(db).get_guide(trip_id, current_user)
+    return ok(data)
+
+
+@router.patch("/{trip_id}/guide/memo")
+def update_guide_memo(
+    trip_id: UUID,
+    payload: GuideMemoRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    data = RecommendationService(db).update_guide_memo(
+        trip_id, current_user, payload.content
+    )
     return ok(data)
 
 
