@@ -301,9 +301,14 @@ export default function RemainingCongested() {
           // 등으로 그 사이 바뀐 필드가 있어도 함수형 갱신이라 놓치지 않는다.
           setItems((prev) => (prev ? mergeAnalysisFields(prev, rerun.items).items : rerun.items))
           if (needsRefetch) {
-            // 같은 자리의 장소(또는 trip_place 구성) 자체가 그 사이 바뀐 것으로 보인다(다른
-            // 탭 등) — refetchList()가 이 항목들을 "확인 중"+"확인 필요"로 표시하고 목록을
-            // 다시 조회해서 화면과 실제 상태를 맞춘다.
+            // 이 함수 시작부에서 currentItems 전체를 analyzingIds에 넣어뒀는데, refetchList()의
+            // analyzingIds 갱신은 더하기만 하고 빼지 않는다 — 여기서 먼저 전부 비우지 않으면
+            // 불일치 없이 정상 병합된 카드들이 analyzingIds에 계속 남고, 재조회가 실패하면
+            // (catch가 mismatchedIds만 빼므로) 그 카드들은 영영 "확인 중"에 갇힌다(코드
+            // 리뷰로 발견, 2026-09-19). 같은 자리의 장소(또는 trip_place 구성) 자체가 그
+            // 사이 바뀐 것으로 보이는(다른 탭 등) mismatchedIds만 refetchList()가 다시
+            // "확인 중"+"확인 필요"로 표시하고 목록을 다시 조회해서 화면과 실제 상태를 맞춘다.
+            setAnalyzingIds(new Set())
             refetchList(myExecution, mismatchedIds)
           } else {
             setAnalyzingIds(new Set())

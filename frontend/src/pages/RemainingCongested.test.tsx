@@ -813,6 +813,80 @@ describe("RemainingCongested", () => {
     expect(screen.getByRole("button", { name: "다시 조회하기" })).toBeInTheDocument()
   })
 
+  it("일부 카드만 placeId가 불일치할 때, 불일치 없이 정상 병합된 다른 카드는 재조회가 실패해도 '확인 중'에 갇히지 않는다", async () => {
+    // runBackgroundAnalysis()가 시작할 때 currentItems 전체를 analyzingIds에 넣는데,
+    // needsRefetch 분기에서 그 집합을 비우지 않고 곧장 refetchList(mismatchedIds)를 부르면
+    // — refetchList의 analyzingIds 갱신은 더하기만 하므로 — 불일치 없는 카드가 analyzingIds에
+    // 계속 남는다. 재조회가 실패하면 catch가 mismatchedIds만 빼서, 그 정상 카드는 영영
+    // "확인 중"에 갇힌다(코드 리뷰로 발견, 2026-09-19).
+    let getCall = 0
+    fetchAnalysisMock.mockImplementation(() => {
+      getCall += 1
+      if (getCall === 1) {
+        return Promise.resolve({
+          tripId: "trip-1",
+          highConcentrationCount: 0,
+          items: [
+            makeItem({
+              tripPlaceId: "tp-1",
+              placeId: "place-A",
+              placeName: "장소A",
+              analysisStatus: "failed",
+              level: null,
+              analyzedAt: null,
+            }),
+            makeItem({
+              tripPlaceId: "tp-2",
+              placeId: "place-C",
+              placeName: "장소C",
+              analysisStatus: "failed",
+              level: null,
+              analyzedAt: null,
+            }),
+          ],
+        })
+      }
+      // 재조회(2번째 GET, mismatchedIds만 대상)는 실패한다.
+      return Promise.reject(new Error("네트워크 오류"))
+    })
+    const run = vi.fn().mockResolvedValue({
+      tripId: "trip-1",
+      highConcentrationCount: 0,
+      items: [
+        // tp-1: placeId가 달라져 불일치(재조회 대상).
+        makeItem({
+          tripPlaceId: "tp-1",
+          placeId: "place-B",
+          placeName: "장소B(응답)",
+          analysisStatus: "success",
+          level: "low",
+        }),
+        // tp-2: placeId가 그대로라 정상 병합된다(재조회 대상 아님).
+        makeItem({
+          tripPlaceId: "tp-2",
+          placeId: "place-C",
+          placeName: "장소C",
+          analysisStatus: "success",
+          level: "low",
+        }),
+      ],
+    })
+    useRunAnalysisMock.mockReturnValue({ data: null, loading: false, error: null, run })
+
+    render(<RemainingCongested />)
+
+    // 재조회(불일치 카드만 대상)가 실패로 끝날 때까지 기다린다.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "다시 조회하기" })).toBeInTheDocument()
+    })
+
+    // 재조회가 끝난 뒤에는 어떤 카드도 "확인 중"이면 안 된다 — tp-1(불일치)은 실패로
+    // "최신 정보 확인 필요"가 되고, tp-2(불일치 없음)는 이미 병합이 끝나 정상 상태여야
+    // 한다. 버그가 있으면 tp-2가 analyzingIds에 남아 이 텍스트가 계속 보인다.
+    expect(screen.queryByText("혼잡도 확인 중")).not.toBeInTheDocument()
+    expect(screen.getByText("장소C")).toBeInTheDocument()
+  })
+
   it("placeId 불일치로 재조회가 실패하면, '확인 중' 표시는 꺼져도 그 카드의 등급·대안보기·유지는 계속 숨겨진다", async () => {
     // 재조회 실패 시 analyzingIds에서만 빼면 낡은 장소의 등급·행동 버튼이 다시 나타난다
     // (코드 리뷰로 발견, 2026-09-19) — 화면엔 교체 전 장소(장소A, high)가 보이는데 "유지"를
