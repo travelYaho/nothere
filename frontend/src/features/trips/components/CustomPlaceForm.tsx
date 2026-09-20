@@ -179,6 +179,7 @@ export function CustomPlaceForm() {
           <FieldLabel required>장소 이름</FieldLabel>
           <TextInput
             placeholder="예) 유성푸르지오시티"
+            maxLength={100}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -201,6 +202,7 @@ export function CustomPlaceForm() {
             <TextInput
               className="mt-2"
               placeholder="상세주소 (예: 102동 1301호)"
+              maxLength={100}
               value={detailAddress}
               onChange={(e) => setDetailAddress(e.target.value)}
             />

@@ -149,6 +149,7 @@ export default function Login() {
             placeholder="이메일"
             type="email"
             required
+            maxLength={254}
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -157,6 +158,7 @@ export default function Login() {
             placeholder="비밀번호"
             required
             minLength={tab === "signup" ? 6 : undefined}
+            maxLength={72}
             autoComplete={tab === "login" ? "current-password" : "new-password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
