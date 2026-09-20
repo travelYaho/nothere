@@ -72,8 +72,9 @@ export function CongestionCard({
   onAlternative,
   onKeep,
   analysisFailed = false,
-  retrying = false,
   onRetry,
+  analyzing = false,
+  stale = false,
 }: {
   time: string
   place: string
@@ -87,13 +88,25 @@ export function CongestionCard({
   /** true면 이 장소의 분석 자체가 실패한 것 — "정보 없음" 뱃지만으로는 안 보이는 재시도
    * 경로를 별도로 보여준다. onRetry가 없으면 표시하지 않는다. */
   analysisFailed?: boolean
-  /** 재시도 요청이 진행 중이면 버튼을 비활성화한다(트립 전체 재분석 1건이 여러 카드에
-   * 걸릴 수 있어, 진행 중엔 모든 실패 카드의 버튼이 함께 비활성화된다). */
-  retrying?: boolean
   onRetry?: () => void
+  /** true면 이 장소가 지금 (재)분석되고 있다는 뜻 — level이 이전 값(교체 전 등급, 혹은
+   * 아직 갱신 안 된 값)을 그대로 담고 있어도 그걸 뱃지로 보여주면 안 된다. 대신 중립적인
+   * "혼잡도 확인 중" 표시로 덮고, warn(빨간 테두리+대안보기/유지)·실패 재시도 줄도 함께
+   * 숨긴다 — 아직 판정이 없는 상태에서 행동을 유도하면 안 된다(코드 리뷰로 발견,
+   * 2026-09-19 — 재분석 중에도 화면 전체를 가리지 않고 목록을 먼저 보여주기로 하면서
+   * 개별 카드에 이 상태가 필요해졌다). */
+  analyzing?: boolean
+  /** true면 이 장소의 최신 상태를 아직 확인하지 못했다는 뜻 — 재분석 응답과 화면에 남은
+   * 장소가 다른 것으로 보여(placeId 불일치 등) 다시 조회를 기다리는 중이다. analyzing과는
+   * 다르다 — analyzing은 "지금 확인 중"(진행 표시), stale은 재조회가 실패해서 진행 표시는
+   * 꺼졌지만 "그래도 이 값을 믿을 수 없다"는 뜻이라, 재조회가 성공하기 전까지는 등급·
+   * 대안보기·유지를 계속 숨긴다(코드 리뷰로 발견, 2026-09-19 — 재조회 실패 시 진행 표시만
+   * 끄고 이 상태를 안 남기면, 화면엔 교체 전 장소가 보이는데 "유지"를 눌러 서버가 이미
+   * 교체된 다른 장소를 고정 처리할 수 있었다). */
+  stale?: boolean
 }) {
   const wasReplaced = Boolean(replacedFrom)
-  const warn = level === "high" && !wasReplaced
+  const warn = level === "high" && !wasReplaced && !analyzing && !stale
   return (
     <div
       className={[
@@ -118,7 +131,19 @@ export function CongestionCard({
           )}
         </div>
         <span className="shrink-0">
-          <CongestionBadge level={level} />
+          {analyzing ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-faint">
+              <span className="inline-block h-[7px] w-[7px] animate-pulse rounded-full bg-ink-faint" />
+              혼잡도 확인 중
+            </span>
+          ) : stale ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-faint">
+              <span className="inline-block h-[7px] w-[7px] rounded-full bg-ink-faint" />
+              최신 정보 확인 필요
+            </span>
+          ) : (
+            <CongestionBadge level={level} />
+          )}
         </span>
       </div>
       {wasReplaced && (
@@ -136,16 +161,15 @@ export function CongestionCard({
           </Button>
         </div>
       )}
-      {analysisFailed && onRetry && (
+      {!analyzing && !stale && analysisFailed && onRetry && (
         <div className="flex items-center justify-between gap-2 pt-3">
           <p className="text-[12px] font-medium text-ink-faint">분석에 실패했어요</p>
           <button
             type="button"
             onClick={onRetry}
-            disabled={retrying}
-            className="text-[12px] font-bold text-primary disabled:opacity-50"
+            className="text-[12px] font-bold text-primary"
           >
-            {retrying ? "다시 시도 중…" : "다시 시도"}
+            다시 시도
           </button>
         </div>
       )}
