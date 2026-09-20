@@ -6,7 +6,7 @@ import { Outlet } from "react-router-dom"
 export function MobileLayout() {
   return (
     <div className="flex min-h-screen w-full justify-center bg-surface-sunken">
-      <div className="flex w-full max-w-[393px] flex-col border-x-[0.667px] border-line-soft bg-canvas">
+      <div className="flex min-h-dvh w-full max-w-[393px] flex-col border-x-[0.667px] border-line-soft bg-canvas">
         <Outlet />
       </div>
     </div>

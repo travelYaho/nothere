@@ -1,4 +1,6 @@
 """로그인 사용자 프로필 조회/수정 비즈니스 로직을 담당한다."""
+from uuid import UUID
+
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -64,8 +66,12 @@ class UserService:
 
     def delete_me(self, current_user: CurrentUser) -> None:
         """회원 탈퇴: Auth 유저를 삭제하면 profile/일정/가이드북/좋아요가 CASCADE 로 함께 지워진다."""
+        self.delete_by_user_id(current_user.id)
+
+    def delete_by_user_id(self, user_id: UUID) -> None:
+        """카카오 연결 해제 웹훅처럼 로그인 세션 없이 Auth 유저를 삭제한다."""
         try:
-            self.users.detach_auth_references(current_user.id)
+            self.users.detach_auth_references(user_id)
         except SQLAlchemyError as exc:
             self.db.rollback()
             raise AppError(
@@ -75,7 +81,7 @@ class UserService:
             ) from exc
 
         try:
-            delete_auth_user(current_user.id)
+            delete_auth_user(user_id)
         except Exception as exc:
             raise AppError(
                 ErrorCode.EXTERNAL_API_ERROR,

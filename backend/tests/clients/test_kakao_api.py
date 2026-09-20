@@ -123,7 +123,7 @@ def test_geocode_rejects_invalid_coordinates_from_response(lat, lng):
         {"documents": 5},
         {"documents": {}},
         {"documents": ["text"]},
-        {"documents": [{"address_type": "ROAD_ADDR"}]},
+        {"documents": [{"address_type": "ROAD_ADDR", "address_name": "서울 종로구 창경궁로 185"}]},
     ],
 )
 def test_geocode_rejects_malformed_response_structure(payload):
@@ -169,3 +169,69 @@ def test_geocode_without_api_key_becomes_503_without_calling_kakao(monkeypatch):
 
     assert exc_info.value.status_code == 503
     get.assert_not_called()
+
+
+def test_geocode_single_result_with_a_different_address_is_rejected():
+    # 실제 카카오 응답: 존재하지 않는 "세종대로 2"를 검색하면 유사한 "세종대로 지하 2" 하나만 온다.
+    payload = {"documents": [_doc(name="서울 중구 세종대로 지하 2")]}
+    with patch("app.clients.kakao_api.httpx.get", return_value=_response(payload)):
+        with pytest.raises(AppError) as exc_info:
+            kakao_api.geocode_address("서울 중구 세종대로 2")
+
+    assert exc_info.value.code == ErrorCode.ADDRESS_NOT_FOUND
+    assert exc_info.value.status_code == 400
+    assert "달라요" in exc_info.value.message
+
+
+def test_geocode_single_result_that_differs_only_in_spacing_is_accepted():
+    payload = {"documents": [_doc(lat="37.5", lng="126.9", name="서울 종로구 창경궁로 185")]}
+    with patch("app.clients.kakao_api.httpx.get", return_value=_response(payload)):
+        result = kakao_api.geocode_address("서울 종로구 창경궁로185")
+
+    assert result.latitude == 37.5
+
+
+@pytest.mark.parametrize("document", [{"address_type": "ROAD_ADDR", "y": "37.5", "x": "126.9"}, _doc(name=None)])
+def test_geocode_result_without_a_usable_address_name_is_rejected(document):
+    with pytest.raises(AppError) as exc_info:
+        _geocode({"documents": [document]})
+
+    assert exc_info.value.status_code == 400
+
+
+def test_geocode_matching_result_without_coordinates_is_a_malformed_response():
+    with pytest.raises(AppError) as exc_info:
+        _geocode({"documents": [{"address_type": "ROAD_ADDR", "address_name": "서울 종로구 창경궁로 185"}]})
+
+    assert exc_info.value.status_code == 503
+
+
+def test_geocode_accepts_a_detail_address_that_follows_the_matched_address_after_a_space():
+    payload = {"documents": [_doc(lat="37.5", lng="126.9", name="서울 종로구 사직로 161")]}
+    with patch("app.clients.kakao_api.httpx.get", return_value=_response(payload)):
+        result = kakao_api.geocode_address("서울 종로구 사직로 161 3층 301호")
+
+    assert result.latitude == 37.5
+
+
+def test_geocode_rejects_a_result_whose_number_is_only_a_prefix_of_the_requested_number():
+    # "세종대로 1103"의 앞부분이 "세종대로 110"과 같아도 이어 붙은 번지라 다른 주소다.
+    payload = {"documents": [_doc(name="서울 중구 세종대로 110")]}
+    with patch("app.clients.kakao_api.httpx.get", return_value=_response(payload)):
+        with pytest.raises(AppError) as exc_info:
+            kakao_api.geocode_address("서울 중구 세종대로 1103")
+
+    assert exc_info.value.status_code == 400
+
+
+def test_geocode_detail_address_still_picks_the_exact_match_among_multiple_results():
+    payload = {
+        "documents": [
+            _doc(lat="37.571", lng="126.978", name="서울 종로구 종로 1"),
+            _doc(lat="37.5714", lng="127.0065", name="서울 종로구 종로41길 1"),
+        ]
+    }
+    with patch("app.clients.kakao_api.httpx.get", return_value=_response(payload)):
+        result = kakao_api.geocode_address("서울 종로구 종로 1 3층")
+
+    assert result.latitude == 37.571

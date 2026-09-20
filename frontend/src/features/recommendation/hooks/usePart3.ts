@@ -10,6 +10,7 @@ import {
   fetchReplacementPreview,
   fetchScoredCandidates,
   fetchTripGuide,
+  saveGuideMemo,
   scoreRoutes,
 } from "../api/part3Api"
 import type {
@@ -191,5 +192,15 @@ export function useConfirmGuide(tripId: string | undefined) {
     }
   }, [])
 
-  return { guide, loading, error, doConfirm, loadGuide, share, loadPublic, token }
+  const saveMemo = useCallback(
+    async (content: string) => {
+      if (!tripId) throw new Error("tripId 없음")
+      const res = await saveGuideMemo(token, tripId, content)
+      setGuide((current) => (current ? { ...current, memo: res.memo } : current))
+      return res
+    },
+    [tripId, token],
+  )
+
+  return { guide, loading, error, doConfirm, loadGuide, share, loadPublic, saveMemo, token }
 }

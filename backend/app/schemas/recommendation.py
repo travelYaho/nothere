@@ -23,6 +23,10 @@ class ShareLinkRequest(APIModel):
     visibility: str | None = None
 
 
+class GuideMemoRequest(APIModel):
+    content: str | None = None
+
+
 class RecommendationRequestCreate(APIModel):
     """STEP5(방문 목적 선택) 결과를 담아 STEP6 후보 탐색을 요청한다."""
     purpose_tag_ids: list[int] | None = None

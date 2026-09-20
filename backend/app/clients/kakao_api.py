@@ -16,6 +16,7 @@ _TIMEOUT_SECONDS = 5.0
 _UNAVAILABLE_MESSAGE = "주소 검색 서비스에 일시적으로 연결할 수 없습니다."
 _MALFORMED_MESSAGE = "주소 검색 서비스 응답 형식이 올바르지 않습니다."
 _AMBIGUOUS_MESSAGE = "주소가 여러 곳으로 검색돼요. 더 정확한 주소를 입력해 주세요."
+_MISMATCH_MESSAGE = "입력한 주소와 검색된 주소가 달라요. 주소 검색에서 선택한 주소를 그대로 입력해 주세요."
 
 # REGION(행정구역 중심)·ROAD(도로명만) 결과는 건물 단위 좌표가 아니라서 쓰지 않는다.
 _PRECISE_ADDRESS_TYPES = frozenset({"ROAD_ADDR", "REGION_ADDR"})
@@ -32,7 +33,15 @@ def _malformed() -> AppError:
 
 
 def _normalize(text: str) -> str:
-    return " ".join(text.split())
+    return "".join(text.split())
+
+
+def _matches_request(address: str, address_name: str) -> bool:
+    if _normalize(address) == _normalize(address_name):
+        return True
+    # baseAddress 없이 상세주소(층·호수 등)까지 붙어 온 입력 — 결과 주소 바로 뒤가 공백일 때만
+    # 상세주소로 본다("세종대로 110"의 "1103"처럼 번지가 이어진 경우는 다른 주소다).
+    return " ".join(address.split()).startswith(" ".join(address_name.split()) + " ")
 
 
 def _parse_point(document: object) -> GeocodedAddress:
@@ -53,8 +62,8 @@ def _parse_point(document: object) -> GeocodedAddress:
 def geocode_address(address: str) -> GeocodedAddress | None:
     """주소 문자열을 위경도로 변환한다. 쓸 수 있는 검색 결과가 없으면 None 을 반환한다
     (주소 자체가 이상한 것과 서비스 장애를 구분하기 위해 예외로 던지지 않는다).
-    결과가 여러 개면 요청 주소와 정확히 일치하는 하나만 쓰고, 그렇지 않으면 임의로 고르지 않고
-    ADDRESS_NOT_FOUND(400)로 거절한다.
+    요청 주소와 (공백을 무시하고) 일치하는 결과가 하나일 때만 쓰고(뒤에 공백으로 이어진 상세주소는 허용), 일치하는 결과가 없거나
+    여러 개면 임의로 고르지 않고 ADDRESS_NOT_FOUND(400)로 거절한다.
     """
     if not settings.KAKAO_REST_API_KEY:
         raise AppError(
@@ -94,12 +103,15 @@ def geocode_address(address: str) -> GeocodedAddress | None:
     if not precise:
         return None
 
-    if len(precise) > 1:
-        # 존재하지 않는 번지를 넣으면 비슷한 다른 도로의 같은 번지들이 함께 오고, 실제 주소도
-        # 그런 유사 결과와 섞여 온다 — 요청 주소와 정확히 같은 결과가 하나일 때만 고른다.
-        wanted = _normalize(address)
-        exact = [doc for doc in precise if _normalize(str(doc.get("address_name", ""))) == wanted]
-        if len(exact) != 1:
-            raise AppError(ErrorCode.ADDRESS_NOT_FOUND, _AMBIGUOUS_MESSAGE, status_code=400)
-        precise = exact
-    return _parse_point(precise[0])
+    # 존재하지 않는 번지를 넣으면 카카오가 비슷한 다른 주소(예: "세종대로 2" → "세종대로 지하 2")를
+    # 대신 돌려주는데, 그게 하나뿐이어도 다른 위치다 — 요청 주소와 정확히 같은 결과가 하나일
+    # 때만 좌표를 쓴다.
+    exact = [
+        doc
+        for doc in precise
+        if isinstance(doc.get("address_name"), str) and _matches_request(address, doc["address_name"])
+    ]
+    if len(exact) != 1:
+        message = _AMBIGUOUS_MESSAGE if len(precise) > 1 else _MISMATCH_MESSAGE
+        raise AppError(ErrorCode.ADDRESS_NOT_FOUND, message, status_code=400)
+    return _parse_point(exact[0])
