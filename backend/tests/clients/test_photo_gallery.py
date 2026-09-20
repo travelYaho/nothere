@@ -37,7 +37,7 @@ def test_search_image_urls_parses_gallery_items(monkeypatch):
 
 
 def test_search_image_urls_calls_photo_gallery_service1(monkeypatch):
-    monkeypatch.setattr(settings, "PHOTO_GALLERY_API_KEY", "gallery-key")
+    monkeypatch.setattr(settings, "TOUR_GALLERY_KEY", "gallery-key")
     monkeypatch.setattr(settings, "TOUR_API_KEY", "tour-key")
     captured: dict = {}
 
@@ -57,7 +57,7 @@ def test_search_image_urls_calls_photo_gallery_service1(monkeypatch):
 
 
 def test_first_image_for_place_retries_without_parentheses(monkeypatch):
-    monkeypatch.setattr(settings, "PHOTO_GALLERY_API_KEY", "gallery-key")
+    monkeypatch.setattr(settings, "TOUR_GALLERY_KEY", "gallery-key")
     keywords: list[str] = []
 
     def _search(keyword, **kwargs):

@@ -22,7 +22,8 @@ import type {
 
 /** 실제 Supabase 세션의 access token. 로그인 전이거나 세션 로딩 중이면 빈 문자열(백엔드 401). */
 export function useAccessToken(): string {
-  const { session } = useSession()
+  const { session, isLoading } = useSession()
+  if (isLoading) return ""
   return session?.access_token ?? ""
 }
 
@@ -145,7 +146,8 @@ export function useRemaining(tripId: string | undefined) {
 }
 
 export function useConfirmGuide(tripId: string | undefined) {
-  const token = useAccessToken()
+  const { session, isLoading: sessionLoading } = useSession()
+  const token = session?.access_token ?? ""
   const [guide, setGuide] = useState<GuideResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -156,7 +158,7 @@ export function useConfirmGuide(tripId: string | undefined) {
   }, [tripId, token])
 
   const loadGuide = useCallback(async () => {
-    if (!tripId) return
+    if (!tripId || sessionLoading) return
     setLoading(true)
     setError(null)
     try {
@@ -166,7 +168,7 @@ export function useConfirmGuide(tripId: string | undefined) {
     } finally {
       setLoading(false)
     }
-  }, [tripId, token])
+  }, [tripId, token, sessionLoading])
 
   const share = useCallback(
     async (visibility?: "link" | "private" | "public") => {

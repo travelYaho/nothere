@@ -2,10 +2,11 @@
  * HomeGuest — 신규(비로그인) 홈 화면.
  * Figma: 여기말GO / node 48:2124 "신규 (비로그인)"
  */
-import { useNavigate } from "react-router-dom"
+import { Navigate, useNavigate } from "react-router-dom"
 import { ArrowRight } from "@/components/common/icons"
-import { Button } from "@/components/common/primitives"
+import { Button, Spinner } from "@/components/common/primitives"
 import { BannerCard } from "@/components/common/cards"
+import { useSession } from "@/store/sessionStore"
 
 const GUIDE_STEPS = [
   { no: "01", title: "가려던 일정을 등록한다", desc: "날짜 · 장소 · 동행 조건 입력" },
@@ -29,6 +30,18 @@ function GuideStep({ no, title, desc }: { no: string; title: string; desc: strin
 
 export default function HomeGuest() {
   const navigate = useNavigate()
+  const { session, isLoading } = useSession()
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <Spinner />
+      </div>
+    )
+  }
+  if (session) {
+    return <Navigate to="/home" replace />
+  }
 
   return (
     <div className="flex flex-1 flex-col">

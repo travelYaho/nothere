@@ -11,6 +11,7 @@ import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 import { getHomeSummary } from "@/features/trips/api/tripsApi"
 import { formatScheduleMeta } from "@/features/trips/utils/scheduleMeta"
 import type { FeaturedGuide, ScheduleSummary } from "@/features/trips/types"
+import { useSession } from "@/store/sessionStore"
 import { ApiError } from "@/types/api"
 
 function toErrorMessage(err: unknown): string {
@@ -21,6 +22,7 @@ function toErrorMessage(err: unknown): string {
 export default function Home() {
   const navigate = useNavigate()
   const handleTabChange = useBottomTabNav()
+  const { isLoading: sessionLoading } = useSession()
 
   const [draftSchedule, setDraftSchedule] = useState<ScheduleSummary | null>(null)
   const [recentSchedules, setRecentSchedules] = useState<ScheduleSummary[]>([])
@@ -29,7 +31,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (sessionLoading) return
     let cancelled = false
+    setLoading(true)
     getHomeSummary()
       .then((res) => {
         if (cancelled) return
@@ -46,7 +50,7 @@ export default function Home() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [sessionLoading])
 
   return (
     <div className="flex flex-1 flex-col">

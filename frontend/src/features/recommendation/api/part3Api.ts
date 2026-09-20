@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/lib/supabase"
+import { API_BASE_URL } from "@/lib/apiBaseUrl"
 import { ApiError } from "@/types/api"
 import type {
   CompareCandidatesResponse,

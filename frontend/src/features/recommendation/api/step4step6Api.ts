@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/lib/supabase"
+import { API_BASE_URL } from "@/lib/apiBaseUrl"
 import { updateTripPlaceVisit } from "@/features/trips/api/placesApi"
 import type {
   AnalysisResponse,

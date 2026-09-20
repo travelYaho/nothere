@@ -5,10 +5,62 @@ SQLAlchemy 는 DATABASE_URL 을 사용해 Supabase Postgres 에 직접 연결한
 """
 from pathlib import Path
 
-from pydantic import field_validator
+from urllib.parse import urlparse
+
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def expand_cors_origins(raw: str) -> list[str]:
+    """CORS_ORIGINS 값을 리스트로 만들고 localhost↔127.0.0.1 별칭을 보탠다."""
+    seen: list[str] = []
+    for part in raw.split(","):
+        origin = part.strip().rstrip("/")
+        if not origin:
+            continue
+        for candidate in _localhost_aliases(origin):
+            if candidate not in seen:
+                seen.append(candidate)
+    return seen
+
+
+def _localhost_aliases(origin: str) -> list[str]:
+    parsed = urlparse(origin)
+    host = parsed.hostname or ""
+    aliases = [origin]
+    if host == "localhost":
+        netloc = parsed.netloc.replace("localhost", "127.0.0.1", 1)
+        aliases.append(parsed._replace(netloc=netloc).geturl())
+    elif host == "127.0.0.1":
+        netloc = parsed.netloc.replace("127.0.0.1", "localhost", 1)
+        aliases.append(parsed._replace(netloc=netloc).geturl())
+    return aliases
+
+
+def cors_origin_regex(origins: list[str]) -> str | None:
+    """CORS_ORIGINS 에 있는 포트로 사설망·루프백 Origin 을 허용하는 정규식."""
+    ports: set[int] = set()
+    for origin in origins:
+        parsed = urlparse(origin)
+        if parsed.port:
+            ports.add(parsed.port)
+        elif parsed.scheme == "https":
+            ports.add(443)
+        elif parsed.scheme == "http":
+            ports.add(80)
+    if not ports:
+        return None
+    port_alt = "|".join(str(port) for port in sorted(ports))
+    return (
+        r"https?://("
+        r"localhost|127\.0\.0\.1|\[::1\]|"
+        r"192\.168\.\d{1,3}\.\d{1,3}|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}"
+        rf"):({port_alt})$"
+    )
 
 
 class Settings(BaseSettings):
@@ -17,6 +69,7 @@ class Settings(BaseSettings):
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     SUPABASE_URL: str
@@ -39,7 +92,11 @@ class Settings(BaseSettings):
     FRONTEND_PUBLIC_ORIGIN: str = "http://localhost:5173"
     CONCENTRATION_API_KEY: str = ""
     # 관광사진(PhotoGalleryService1). KorService2 키와 활용신청이 다르다.
-    PHOTO_GALLERY_API_KEY: str = ""
+    # .env 의 PHOTO_GALLERY_API_KEY 도 그대로 읽는다.
+    TOUR_GALLERY_KEY: str = Field(
+        default="",
+        validation_alias=AliasChoices("TOUR_GALLERY_KEY", "PHOTO_GALLERY_API_KEY"),
+    )
 
     @field_validator(
         "SUPABASE_URL",
@@ -57,7 +114,12 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         """콤마 구분 CORS_ORIGINS 문자열을 리스트로 변환한다."""
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        return expand_cors_origins(self.CORS_ORIGINS)
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        """Vite --host 0.0.0.0 의 LAN Origin 을 CORS_ORIGINS 포트 기준으로 허용한다."""
+        return cors_origin_regex(self.cors_origin_list)
 
     @property
     def sqlalchemy_database_url(self) -> str:

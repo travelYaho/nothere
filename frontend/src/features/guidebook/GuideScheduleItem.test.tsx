@@ -24,6 +24,7 @@ describe("GuideScheduleItem", () => {
     )
     expect(container.querySelector("img")).toBeNull()
     expect(screen.getByText("통인시장")).toBeInTheDocument()
+    expect(screen.getByText("1")).toBeInTheDocument()
   })
 
   it("사진이 있으면 썸네일을 렌더한다", () => {

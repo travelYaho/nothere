@@ -1,9 +1,11 @@
 /**
- * 공유 링크 공개 가이드북 (비로그인)
+ * 공유 링크 공개 가이드북.
+ * 둘러보기/좋아요에서 들어와도 홈 버튼은 로그인 홈(/home)으로 보낸다.
  */
 import { useEffect } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { GuidebookBook } from "@/features/guidebook"
+import { GUIDEBOOK_HOME_PATH } from "@/features/guidebook/GuideActionBar"
 import { useConfirmGuide } from "@/features/recommendation"
 
 export default function SharedGuide() {
@@ -16,7 +18,7 @@ export default function SharedGuide() {
   }, [token, loadPublic])
 
   function handleHome() {
-    navigate("/")
+    navigate(GUIDEBOOK_HOME_PATH)
   }
 
   async function onShare() {
@@ -46,7 +48,6 @@ export default function SharedGuide() {
         guide={guide}
         memoReadOnly
         onShare={() => void onShare()}
-        onHome={handleHome}
       />
     </div>
   )

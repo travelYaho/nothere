@@ -15,7 +15,6 @@ export function GuidebookBook({
   memoReadOnly,
   onSaveMemo,
   onShare,
-  onHome,
   shareBusy,
   boast,
 }: {
@@ -23,7 +22,6 @@ export function GuidebookBook({
   memoReadOnly?: boolean
   onSaveMemo?: (content: string) => Promise<unknown>
   onShare: () => void
-  onHome: () => void
   shareBusy?: boolean
   boast?: ReactNode
 }) {
@@ -135,7 +133,6 @@ export function GuidebookBook({
       <GuideActionBar
         onShare={onShare}
         onPrint={() => window.print()}
-        onHome={onHome}
         shareBusy={shareBusy}
       />
       <GuidebookPrint guide={guide} memoReadOnly={memoReadOnly} />
