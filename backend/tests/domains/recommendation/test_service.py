@@ -743,14 +743,66 @@ def test_build_guide_resolves_photos_and_memo(monkeypatch):
 
     result = svc.build_guide(trip)
 
-    assert result["coverImageUrl"] == "https://img.example/cover.jpg"
+    assert result["coverImageUrl"] == "https://img.example/place.jpg"
     assert result["memo"] == "메모 본문"
     assert result["tags"] == ["한옥산책", "감성맛집"]
     assert result["cityName"] == "서울"
     assert result["districtName"] == "종로구"
     assert result["stops"][0]["imageUrl"] == "https://img.example/place.jpg"
+    svc.repo.cache_cover_image.assert_not_called()
+
+
+def test_build_guide_cover_falls_back_to_district_gallery(monkeypatch):
+    db = MagicMock()
+    svc = RecommendationService(db)
+    place_id = uuid4()
+    tp = SimpleNamespace(
+        id=uuid4(),
+        place_id=place_id,
+        initial_place_id=place_id,
+        position=1,
+        visit_time=time(10, 0),
+        stay_minutes=60,
+    )
+    trip = SimpleNamespace(
+        id=uuid4(),
+        title="서울 서촌 당일치기",
+        travel_date=date(2026, 8, 15),
+        status="confirmed",
+        transport_mode="walk",
+        region=SimpleNamespace(name="서울특별시"),
+        trip_places=[tp],
+    )
+    svc.places.get_by_ids = MagicMock(
+        return_value={
+            place_id: SimpleNamespace(
+                name="통인시장",
+                tour_content_id=None,
+                address="서울특별시 종로구 자하문로 15",
+            )
+        }
+    )
+    svc.repo.active_replacements_map = MagicMock(return_value={})
+    svc.repo.get_active_share_link = MagicMock(return_value=None)
+    svc.repo.guide_entries = MagicMock(return_value=[])
+    svc.repo.trip_tag_names = MagicMock(return_value=[])
+    svc.repo.cache_cover_image = MagicMock()
+    monkeypatch.setattr(
+        "app.domains.recommendation.service.photo_gallery.first_image_for_place",
+        lambda name: None,
+    )
+    monkeypatch.setattr(
+        "app.domains.recommendation.service.photo_gallery.pick_cover_image",
+        lambda city, district: "https://img.example/jongno.jpg"
+        if district == "종로구"
+        else "https://img.example/seoul.jpg",
+    )
+
+    result = svc.build_guide(trip)
+
+    assert result["stops"][0]["imageUrl"] is None
+    assert result["coverImageUrl"] == "https://img.example/jongno.jpg"
     svc.repo.cache_cover_image.assert_called_once()
-    db.commit.assert_called()
 
 
 def test_update_guide_memo_upserts_for_owner():

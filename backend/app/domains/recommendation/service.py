@@ -812,7 +812,6 @@ class RecommendationService:
         if memo is None:
             memo = next((e.content for e in entries if e.content), None)
 
-        cover_image_url = next((e.image_url for e in entries if e.image_url), None)
         region = getattr(trip, "region", None)
         region_name = region.name if region is not None else None
         city_name = short_city_name(region_name)
@@ -820,6 +819,9 @@ class RecommendationService:
             [getattr(places_by_id.get(tp.place_id), "address", None) for tp in places_sorted]
         ) or district_from_text(region_name)
 
+        cover_image_url = next((stop["imageUrl"] for stop in stops if stop.get("imageUrl")), None)
+        if not cover_image_url:
+            cover_image_url = next((e.image_url for e in entries if e.image_url), None)
         if not cover_image_url:
             fetched_cover = photo_gallery.pick_cover_image(city_name, district_name)
             if fetched_cover:

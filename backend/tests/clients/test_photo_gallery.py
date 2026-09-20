@@ -94,6 +94,20 @@ def test_pick_cover_image_returns_random_choice(monkeypatch):
     assert photo_gallery.pick_cover_image("서울", "종로구") == "https://img.example/a.jpg"
 
 
+def test_pick_cover_image_tries_district_before_city(monkeypatch):
+    keywords: list[str] = []
+
+    def _search(keyword, **kwargs):
+        keywords.append(keyword)
+        if keyword == "서울":
+            return ["https://img.example/city.jpg"]
+        return []
+
+    monkeypatch.setattr(photo_gallery, "search_image_urls", _search)
+    assert photo_gallery.pick_cover_image("서울", "종로구") == "https://img.example/city.jpg"
+    assert keywords == ["서울 종로구", "종로구", "서울"]
+
+
 def test_pick_cover_image_without_keyword_skips_network(monkeypatch):
     def _fail(*args, **kwargs):
         raise AssertionError("키워드가 없으면 호출하면 안 된다")

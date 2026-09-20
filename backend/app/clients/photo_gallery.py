@@ -92,13 +92,13 @@ def search_image_urls(keyword: str, *, num_of_rows: int = 20) -> list[str]:
 
 
 def pick_cover_image(city: str | None, district: str | None) -> str | None:
-    """시·구에 맞는 관광사진 중 랜덤 1장. 구가 없으면 시만으로 재시도한다."""
+    """일정 장소 사진이 없을 때 쓰는 표지 폴백. 다수 구 → 시 순이다."""
     city_name = city.strip() if city else ""
     district_name = district.strip() if district else ""
     keywords: list[str] = []
-    if city_name and district_name:
-        keywords.append(f"{city_name} {district_name}")
     if district_name:
+        if city_name:
+            keywords.append(f"{city_name} {district_name}")
         keywords.append(district_name)
     if city_name:
         keywords.append(city_name)
