@@ -39,7 +39,13 @@ describe("GuidebookBook", () => {
     )
 
     expect(screen.getByLabelText("일정으로")).toBeInTheDocument()
+    expect(screen.getByTestId("guidebook-cover-sheet")).toHaveStyle({
+      transform: "rotateY(0deg)",
+    })
     await user.click(screen.getByLabelText("일정으로"))
+    expect(screen.getByTestId("guidebook-cover-sheet")).toHaveStyle({
+      transform: "rotateY(-180deg)",
+    })
     expect(screen.getByLabelText("표지로")).toBeInTheDocument()
     expect(screen.queryByLabelText("일정으로")).not.toBeInTheDocument()
   })
