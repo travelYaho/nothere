@@ -16,11 +16,13 @@ from app.api.router import api_router
 from app.core.config import settings
 from app.core.exceptions import AppError, ErrorCode
 from app.core.logging_setup import suppress_third_party_request_logging
+from app.core.perf import PerfLogMiddleware, install_db_listeners
 from app.db.session import check_db_connection
 
 logger = logging.getLogger("yeogimalgo")
 logging.basicConfig(level=logging.INFO)
 suppress_third_party_request_logging()
+install_db_listeners()
 
 
 @asynccontextmanager
@@ -48,6 +50,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(PerfLogMiddleware)
 
 app.include_router(api_router, prefix="/api")
 

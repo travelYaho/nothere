@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.exceptions import AppError, ErrorCode
+from app.core.perf import timed_external
 
 KAKAO_API_BASE_URL = "https://dapi.kakao.com/v2/local/search/address.json"
 _TIMEOUT_SECONDS = 5.0
@@ -63,12 +64,13 @@ def geocode_address(address: str) -> GeocodedAddress | None:
         )
 
     try:
-        response = httpx.get(
-            KAKAO_API_BASE_URL,
-            params={"query": address},
-            headers={"Authorization": f"KakaoAK {settings.KAKAO_REST_API_KEY}"},
-            timeout=_TIMEOUT_SECONDS,
-        )
+        with timed_external("kakao_geocode"):
+            response = httpx.get(
+                KAKAO_API_BASE_URL,
+                params={"query": address},
+                headers={"Authorization": f"KakaoAK {settings.KAKAO_REST_API_KEY}"},
+                timeout=_TIMEOUT_SECONDS,
+            )
         response.raise_for_status()
         payload = response.json()
     except (httpx.HTTPError, ValueError) as exc:

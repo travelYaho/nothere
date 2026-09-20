@@ -1,7 +1,9 @@
 """추천 경로 점수·교체·확정·가이드 서비스."""
 from __future__ import annotations
 
+import logging
 import secrets
+import time
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -32,6 +34,8 @@ from app.repositories.place_repository import PlaceRepository
 from app.repositories.recommendation_repository import RecommendationRepository
 from app.schemas.user import CurrentUser
 from app.utils.geo import get_place_coords
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationService:
@@ -100,6 +104,7 @@ class RecommendationService:
         final_mode = requested_mode
         for mode in modes_to_try:
             final_mode = mode
+            mode_started = time.monotonic()
             radius_km = candidate_pipeline.RADIUS_KM_BY_MODE[mode]
             generated = candidate_pipeline.generate_candidates(
                 origin_lat,
@@ -120,6 +125,10 @@ class RecommendationService:
             )
             survivors, excluded_count = candidate_pipeline.filter_candidates(
                 enriched, duplicate_names, experience_threshold
+            )
+            logger.info(
+                "추천 후보 탐색(mode=%s): 생성 %d, 통과 %d, %.2fs",
+                mode, len(generated), len(survivors), time.monotonic() - mode_started,
             )
             if len(survivors) >= candidate_pipeline.MIN_CANDIDATES or mode == modes_to_try[-1]:
                 break
