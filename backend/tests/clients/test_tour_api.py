@@ -472,3 +472,54 @@ def test_fetch_nearby_places_fills_area_cd_and_signgu_cd(monkeypatch):
     assert len(result) == 1
     assert result[0].area_cd == "11"
     assert result[0].signgu_cd == "11290"
+
+
+def test_fetch_place_image_returns_firstimage(monkeypatch):
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "dummy-key")
+
+    def _fake_get(*args, **kwargs):
+        return httpx.Response(
+            200,
+            json={
+                "response": {
+                    "header": {"resultCode": "0000"},
+                    "body": {
+                        "totalCount": 1,
+                        "items": {
+                            "item": {
+                                "firstimage": "https://tong.visitkorea.or.kr/place.jpg",
+                                "firstimage2": "https://tong.visitkorea.or.kr/thumb.jpg",
+                            }
+                        },
+                    },
+                }
+            },
+            request=httpx.Request("GET", "https://example.com"),
+        )
+
+    monkeypatch.setattr(httpx, "get", _fake_get)
+
+    assert tour_api.fetch_place_image("123") == "https://tong.visitkorea.or.kr/place.jpg"
+
+
+def test_fetch_place_image_returns_none_on_failure(monkeypatch):
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "dummy-key")
+
+    def _raise(*args, **kwargs):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(httpx, "get", _raise)
+
+    assert tour_api.fetch_place_image("123") is None
+
+
+def test_fetch_place_image_skips_network_without_key(monkeypatch):
+    monkeypatch.setattr(settings, "TOUR_API_KEY", "")
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("키가 없으면 HTTP 호출을 하면 안 된다")
+
+    monkeypatch.setattr(httpx, "get", _fail_if_called)
+
+    assert tour_api.fetch_place_image("123") is None
+

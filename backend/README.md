@@ -45,6 +45,11 @@ source .venv/bin/activate
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+요청 횟수 제한(rate limit)은 IP 기준이다(전역 120/분, 회원가입 5/분, 장소 검색 30/분).
+프록시/로드밸런서 뒤에 배포하면 모든 요청이 프록시 IP 로 보여 사용자가 한도를 공유하므로,
+`--proxy-headers --forwarded-allow-ips=<프록시 IP>` 옵션으로 실행해야 한다.
+로컬에서 끄려면 `.env` 에 `RATE_LIMIT_ENABLED=false` 를 둔다.
+
 서버 실행 후 다음 주소에서 상태 및 API 문서를 확인할 수 있습니다.
 
 * Health Check: `http://localhost:8000/health`
@@ -53,7 +58,10 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ## 인증
 
 * 회원가입: `POST /api/auth/signup`
+* OAuth 프로필 보정: `POST /api/auth/ensure-profile` (카카오 등 소셜 첫 로그인)
 * 로그인 / 로그아웃 / 토큰 갱신: 프론트엔드에서 Supabase Auth 사용
+* 카카오 로그인 키는 백엔드 env가 아니라 Supabase Dashboard > Authentication > Providers > Kakao
+* 카카오 연결 해제 웹훅: `GET|POST /api/auth/kakao/unlink` (카카오가 직접 호출, `KAKAO_ADMIN_KEY` 필요)
 * 보호 API는 `Authorization: Bearer <access_token>` 필요
 
 ## 주요 API

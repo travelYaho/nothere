@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.clients import photo_gallery, tour_api
 from app.core.config import settings
 from app.core.exceptions import AppError, ErrorCode
 from app.db.models.recommendation import (
@@ -32,6 +33,7 @@ from app.repositories.place_repository import PlaceRepository
 from app.repositories.recommendation_repository import RecommendationRepository
 from app.schemas.user import CurrentUser
 from app.utils.geo import get_place_coords
+from app.utils.region_display import district_from_text, majority_district, short_city_name
 
 
 class RecommendationService:
@@ -774,10 +776,11 @@ class RecommendationService:
                 replace_reason = "혼잡 개선 및 유사 경험 제공"
 
             visit = tp.visit_time.strftime("%H:%M") if tp.visit_time else None
+            place_name = place.name if place else ""
             stops.append(
                 {
                     "position": tp.position,
-                    "placeName": place.name if place else "",
+                    "placeName": place_name,
                     "visitTime": visit,
                     "stayMinutes": tp.stay_minutes,
                     "wasReplaced": replaced_from is not None,
@@ -787,6 +790,7 @@ class RecommendationService:
                     "beforeLevel": before_level,
                     "afterLevel": after_level,
                     "travelToNext": travel_to_next,
+                    "imageUrl": self._resolve_stop_image(place),
                 }
             )
 
@@ -800,9 +804,38 @@ class RecommendationService:
             for e in entries
             if e.content or e.image_url
         ]
-        cover_image_url = next((e.image_url for e in entries if e.image_url), None)
+        memo_entry = next(
+            (e for e in entries if getattr(e, "trip_place_id", None) is None),
+            None,
+        )
+        memo = memo_entry.content if memo_entry is not None else None
+        if memo is None:
+            memo = next((e.content for e in entries if e.content), None)
+
         region = getattr(trip, "region", None)
         region_name = region.name if region is not None else None
+        city_name = short_city_name(region_name)
+        district_name = majority_district(
+            [getattr(places_by_id.get(tp.place_id), "address", None) for tp in places_sorted]
+        ) or district_from_text(region_name)
+
+        cover_image_url = next((stop["imageUrl"] for stop in stops if stop.get("imageUrl")), None)
+        if not cover_image_url:
+            cover_image_url = next((e.image_url for e in entries if e.image_url), None)
+        if not cover_image_url:
+            fetched_cover = photo_gallery.pick_cover_image(city_name, district_name)
+            if fetched_cover:
+                cover_image_url = fetched_cover
+                self.repo.cache_cover_image(trip.id, fetched_cover)
+                self.db.commit()
+
+        total_travel_min = sum(
+            (stop["travelToNext"]["durationMin"] if stop["travelToNext"] else 0)
+            for stop in stops
+        )
+        tags = self.repo.trip_tag_names(trip.id)
+        if not isinstance(tags, list):
+            tags = []
 
         share_link = self.repo.get_active_share_link(trip.id)
         visibility = (
@@ -816,6 +849,11 @@ class RecommendationService:
             "title": trip.title,
             "travelDate": trip.travel_date.isoformat() if trip.travel_date else None,
             "regionName": region_name,
+            "cityName": city_name,
+            "districtName": district_name,
+            "totalTravelMin": total_travel_min,
+            "tags": tags,
+            "memo": memo,
             "status": trip.status,
             "coverImageUrl": cover_image_url,
             "stops": stops,
@@ -823,6 +861,33 @@ class RecommendationService:
             "visibility": visibility,
             "shareToken": share_link.token if share_link is not None else None,
         }
+
+    def _resolve_stop_image(self, place) -> str | None:
+        """장소 썸네일: TourAPI firstimage → 관광사진 키워드. 없으면 None."""
+        if place is None:
+            return None
+        content_id = getattr(place, "tour_content_id", None)
+        if content_id:
+            url = tour_api.fetch_place_image(str(content_id))
+            if url:
+                return url
+        name = getattr(place, "name", None)
+        if name:
+            return photo_gallery.first_image_for_place(str(name))
+        return None
+
+    def update_guide_memo(self, trip_id: UUID, user: CurrentUser, content: str | None) -> dict:
+        trip = self.repo.get_trip_owned(trip_id, user.id)
+        if trip is None:
+            raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정을 찾을 수 없습니다.", 404)
+        if trip.status != "confirmed":
+            raise AppError(ErrorCode.CONFLICT, "확정된 일정만 메모를 저장할 수 있습니다.", 409)
+        text = content.strip() if isinstance(content, str) else None
+        if not text:
+            text = None
+        self.repo.upsert_trip_memo(trip.id, text)
+        self.db.commit()
+        return {"memo": text}
 
     def get_guide(self, trip_id: UUID, user: CurrentUser) -> dict:
         trip = self.repo.get_trip_owned(trip_id, user.id)

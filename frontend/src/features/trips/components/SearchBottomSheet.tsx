@@ -51,6 +51,7 @@ export function SearchBottomSheet({
               value={keyword}
               onChange={(e) => onKeywordChange(e.target.value)}
               placeholder="관광지 검색"
+              maxLength={50}
               className="w-full bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-ghost"
             />
             {keyword && (

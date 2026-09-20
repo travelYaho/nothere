@@ -49,6 +49,11 @@ export function useSession(): SessionState {
   return useSyncExternalStore(subscribe, getSnapshot)
 }
 
+/** 재설정 메일 링크의 code를 교환한 뒤, PASSWORD_RECOVERY 이벤트가 오기 전에 폼을 연다. */
+export function markPasswordRecovery() {
+  setState({ isRecovery: true, isLoading: false })
+}
+
 export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
   return data.session?.access_token ?? null

@@ -102,6 +102,7 @@ export type GuideStop = {
   beforeLevel?: string | null
   afterLevel?: string | null
   travelToNext: { distanceM: number; durationMin: number } | null
+  imageUrl?: string | null
 }
 
 export type GuideResponse = {
@@ -109,6 +110,11 @@ export type GuideResponse = {
   title: string
   travelDate: string | null
   regionName?: string | null
+  cityName?: string | null
+  districtName?: string | null
+  totalTravelMin?: number | null
+  tags?: string[]
+  memo?: string | null
   status: string
   coverImageUrl?: string | null
   stops: GuideStop[]

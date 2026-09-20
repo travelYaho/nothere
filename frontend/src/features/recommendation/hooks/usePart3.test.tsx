@@ -30,6 +30,7 @@ vi.mock("../api/part3Api", () => ({
   fetchRemainingCongested: vi.fn(),
   fetchReplacementPreview: vi.fn(),
   fetchTripGuide: vi.fn(),
+  saveGuideMemo: vi.fn(),
 }))
 
 import { fetchScoredCandidates, scoreRoutes } from "../api/part3Api"

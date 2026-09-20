@@ -32,6 +32,9 @@ import type { CompanionType, PlaceSearchItem, TripDetailResponse, TripPlaceDetai
 import { ApiError } from "@/types/api"
 
 const SEARCH_DEBOUNCE_MS = 350
+// 백엔드 검색어 상한(50자)과 맞춘다. 한글 조합 중에는 input maxLength 가 1자 넘게 통과해
+// 422 가 나므로, 요청 직전에도 잘라서 보낸다(입력 state 를 자르면 조합이 끊긴다).
+const SEARCH_KEYWORD_MAX_LENGTH = 50
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"]
 
 function toErrorMessage(err: unknown): string {
@@ -112,7 +115,7 @@ export function TripPlacesForm() {
     let cancelled = false
     setSearching(true)
     const handle = setTimeout(() => {
-      searchPlaces(keyword.trim(), trip?.regionId)
+      searchPlaces(keyword.trim().slice(0, SEARCH_KEYWORD_MAX_LENGTH), trip?.regionId)
         .then((items) => {
           if (cancelled) return
           setResults(items)

@@ -1,10 +1,11 @@
 """TourAPI(한국관광공사 국문관광정보서비스) 연동 클라이언트다.
 
-두 가지 용도로 쓴다:
+세 가지 용도로 쓴다:
 - ``search_places``: STEP3 장소 검색. 서비스키가 없거나 호출이 실패해도 500 이 아니라
   EXTERNAL_API_UNAVAILABLE(503) 로 명확히 실패하도록 감싼다.
 - ``fetch_nearby_places``: STEP6 대안 후보 탐색. 이쪽은 실패해도 예외를 던지지 않고 빈
   리스트를 반환해서, 후보 생성 쪽이 DB 후보 풀로 조용히 대체하게 한다.
+- ``fetch_place_image``: 가이드북 장소 썸네일(detailCommon2 firstimage). 실패해도 None.
 
 두 함수 다 lDongRegnCd/lDongSignguCd(구 단위 코드)를 응답에서 읽어 place.area_cd/signgu_cd로
 쓸 값을 만드는데, 그 변환은 ``to_signgu_cd()`` 하나로 공유한다.
@@ -171,6 +172,75 @@ def _to_place(item: dict) -> TourApiPlace:
         area_cd=l_dong_regn,
         signgu_cd=to_signgu_cd(l_dong_regn, item.get("lDongSignguCd") or None),
     )
+
+
+def fetch_place_image(content_id: str) -> str | None:
+    """TourAPI detailCommon2 의 firstimage. 가이드북 썸네일용이라 실패해도 None 만 돌려준다."""
+    if not content_id or not settings.TOUR_API_KEY:
+        return None
+
+    params: dict[str, Any] = {
+        "serviceKey": unquote(settings.TOUR_API_KEY),
+        "MobileOS": "ETC",
+        "MobileApp": "yeogimalgo",
+        "_type": "json",
+        "contentId": content_id,
+    }
+
+    try:
+        response = httpx.get(
+            f"{TOUR_API_BASE_URL}/detailCommon2",
+            params=params,
+            timeout=_TIMEOUT_SECONDS,
+            follow_redirects=True,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("TourAPI detailCommon2 호출 실패: %s", redact_service_key(str(exc)))
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+    header = payload.get("response", {}).get("header", {})
+    if header.get("resultCode") not in (None, "0000"):
+        logger.warning(
+            "TourAPI detailCommon2 resultCode=%s msg=%s",
+            header.get("resultCode"),
+            header.get("resultMsg"),
+        )
+        return None
+
+    items = _silent_items(payload)
+    if not items:
+        return None
+    item = items[0]
+    if not isinstance(item, dict):
+        return None
+    url = item.get("firstimage") or item.get("firstimage2") or ""
+    if not isinstance(url, str):
+        return None
+    url = url.strip()
+    if url.startswith("http://tong.visitkorea.or.kr"):
+        url = "https://" + url[len("http://") :]
+    return url or None
+
+
+def _silent_items(payload: dict) -> list[dict]:
+    """가이드북 이미지 조회용 — 형식이 이상해도 예외 대신 빈 리스트."""
+    try:
+        body = payload["response"]["body"]
+        total_count = body.get("totalCount", 0)
+        if not total_count:
+            return []
+        items = body["items"]["item"]
+    except (KeyError, TypeError):
+        return []
+    if isinstance(items, dict):
+        return [items]
+    if isinstance(items, list):
+        return [item for item in items if isinstance(item, dict)]
+    return []
 
 
 def _to_float(value: Any) -> float | None:
