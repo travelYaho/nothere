@@ -15,6 +15,7 @@ import type { FeaturedGuide, ScheduleSummary } from "@/features/trips/types"
 import { useLocationPermission } from "@/features/users/hooks/useLocationPermission"
 import { useSession } from "@/store/sessionStore"
 import { ApiError } from "@/types/api"
+import brandMark from "@/assets/icons/logo.svg"
 
 const FALLBACK_BANNER =
   "https://images.unsplash.com/photo-1543039625-14cbd3802e7d?w=680&h=420&fit=crop&auto=format"
@@ -61,7 +62,10 @@ export default function Home() {
   return (
     <div className="relative flex flex-1 flex-col">
       <div className="flex items-center justify-between px-5 pb-3.5 pt-2">
-        <h1 className="text-[24px] font-extrabold tracking-[-0.63px] text-ink">여기말고</h1>
+        <h1 className="flex items-center gap-2 text-[24px] font-extrabold tracking-[-0.63px] text-ink">
+          <img src={brandMark} alt="" className="h-8 w-auto" />
+          여기말고
+        </h1>
         <div className="flex items-center gap-3.5">
           <button
             type="button"

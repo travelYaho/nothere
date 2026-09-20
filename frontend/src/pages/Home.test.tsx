@@ -62,9 +62,7 @@ describe("Home featured banner", () => {
   it("TODAY'S RECOMMENDATION 배너에 선정된 일정의 표지 이미지를 보여준다", async () => {
     const { container } = renderHome()
     await waitFor(() => {
-      expect(container.querySelector("img")?.getAttribute("src")).toBe(
-        "https://img.example/cover.jpg",
-      )
+      expect(container.querySelector(`img[src="${featured.coverImageUrl}"]`)).toBeTruthy()
     })
     expect(screen.getByText("2026.09.24 친구 여행")).toBeInTheDocument()
   })
@@ -77,7 +75,9 @@ describe("Home featured banner", () => {
     await waitFor(() => {
       expect(screen.getByText("2026.09.24 친구 여행")).toBeInTheDocument()
     })
-    expect(container.querySelector("img")?.getAttribute("src")).toContain("unsplash.com")
+    expect(container.querySelector("img[src*='unsplash.com']")).toBeTruthy()
+    expect(screen.getByRole("heading", { name: "여기말고" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "여기말고" }).querySelector("img")).toBeTruthy()
   })
 
   it("위치 아이콘을 누르면 브라우저 위치 권한을 요청한다", async () => {
