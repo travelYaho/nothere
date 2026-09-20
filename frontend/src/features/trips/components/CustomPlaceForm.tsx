@@ -156,6 +156,7 @@ export function CustomPlaceForm() {
       await addCustomPlaceToTrip(tripId, {
         name: name.trim(),
         address,
+        baseAddress,
         visitTime: visitTime || null,
       })
       navigate(`/trips/${tripId}/places`)

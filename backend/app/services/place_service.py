@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.clients import tour_api
+from app.clients.kakao_api import geocode_address
 from app.core.exceptions import AppError, ErrorCode
 from app.repositories.place_repository import PlaceRepository
 from app.repositories.region_repository import RegionRepository
@@ -173,15 +174,16 @@ class PlaceService:
     ) -> CustomPlaceAddResponse:
         """검색 결과에 없는 장소를 이름/주소로 직접 등록한다(Figma node 48:3842).
 
-        커스텀 장소는 집중도 분석 대상이 아니므로(is_recommendable=False)
-        방문 시간도 검색 결과 등록(add_place_to_trip)과 동일하게 선택 입력이다.
-        위경도는 Kakao 지오코딩("카카오맵" 제품 비활성화로 당장 못 씀)이 가능해지면
-        나중에 배치로 채우기로 하고, 지금은 주소 원문만 텍스트로 저장한다(Place.address).
+        주소는 Kakao 로컬 API로 위경도를 조회해 함께 저장한다 — 좌표가 없으면 이 장소와
+        이어지는 이동 구간을 계산할 수 없어 인접 장소의 대안 교체가 막힌다. 조회는 DB 쓰기를
+        시작하기 전에 하므로, 조회가 실패하면 아무것도 쓰지 않는다. 좌표를 채워도 지역코드(area_cd/signgu_cd)는 채워지지 않아 혼잡도 분석은 여전히
+        불가하다.
 
-        경험태그(분류) 선택은 받지 않는다 — is_recommendable=False 라 추천 후보
-        조회에서 애초에 제외되어 저장해도 쓰이지 않았고, STEP3 완료 직후
-        "방문 목적" 화면(TripPurposeForm)에서 같은 태그 목록을 다시 물어봐서
-        중복 입력으로만 느껴졌다.
+        방문 시간은 검색 결과 등록(add_place_to_trip)과 동일하게 선택 입력이다.
+        경험태그(분류) 선택은 받지 않는다 — 추천 후보 조회는 is_recommendable=True 인
+        장소만 대상으로 하므로 커스텀 장소(False)는 후보로 뽑히지 않아 저장해도 쓰이지
+        않았고, STEP3 완료 직후 "방문 목적" 화면(TripPurposeForm)에서 같은 태그 목록을
+        다시 물어봐서 중복 입력으로만 느껴졌다.
         """
         trip = self.trips.get_owned_by_id(trip_id, current_user.id)
         if trip is None:
@@ -199,13 +201,21 @@ class PlaceService:
                 status_code=400,
             )
 
+        geocoded = geocode_address(payload.base_address or payload.address.strip())
+        if geocoded is None:
+            raise AppError(
+                ErrorCode.ADDRESS_NOT_FOUND,
+                "입력한 주소의 위치를 찾을 수 없어요. 주소를 다시 확인해 주세요.",
+                status_code=400,
+            )
+
         place = self.places.create(
             source_type="custom",
             tour_content_id=None,
             region_id=trip.region_id,
             name=payload.name,
-            longitude=None,
-            latitude=None,
+            longitude=geocoded.longitude,
+            latitude=geocoded.latitude,
             is_recommendable=False,
             address=payload.address,
         )
