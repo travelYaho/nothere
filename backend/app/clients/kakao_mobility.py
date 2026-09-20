@@ -8,6 +8,7 @@ import httpx
 
 from app.core.config import settings
 from app.core.exceptions import AppError, ErrorCode
+from app.core.perf import timed_external
 
 logger = logging.getLogger(__name__)
 
@@ -50,12 +51,13 @@ class KakaoMobilityClient:
             "destination": f"{dest_lng},{dest_lat}",
         }
         try:
-            response = httpx.get(
-                DIRECTIONS_URL,
-                headers=headers,
-                params=params,
-                timeout=self.timeout,
-            )
+            with timed_external("kakao_directions"):
+                response = httpx.get(
+                    DIRECTIONS_URL,
+                    headers=headers,
+                    params=params,
+                    timeout=self.timeout,
+                )
         except httpx.RequestError as exc:
             logger.warning("Kakao Directions 요청 실패: %s", exc)
             return None

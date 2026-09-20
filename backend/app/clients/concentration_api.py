@@ -12,6 +12,7 @@ import httpx
 
 from app.clients._redact import redact_service_key
 from app.core.config import settings
+from app.core.perf import timed_external
 
 logger = logging.getLogger("yeogimalgo.concentration_api")
 
@@ -75,7 +76,8 @@ def _fetch_page(
         params["tAtsNm"] = tourist_name
 
     try:
-        response = httpx.get(BASE_URL, params=params, timeout=10.0)
+        with timed_external("concentration_page"):
+            response = httpx.get(BASE_URL, params=params, timeout=10.0)
         response.raise_for_status()
         payload = response.json()
     except httpx.HTTPError as exc:
