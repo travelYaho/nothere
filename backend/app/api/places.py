@@ -1,9 +1,10 @@
 """STEP3 장소 검색/추가/삭제/순서변경/방문시간수정 엔드포인트를 정의한다."""
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import SEARCH_LIMIT, limiter
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.schemas.common import ApiResponse
@@ -25,8 +26,10 @@ router = APIRouter(tags=["places"])
 
 
 @router.get("/places/search", response_model=ApiResponse[PlaceSearchResponse])
+@limiter.limit(SEARCH_LIMIT)
 def search_places(
-    keyword: str,
+    request: Request,
+    keyword: str = Query(min_length=1, max_length=50),
     region_id: int | None = Query(default=None, alias="regionId"),
     current_user: CurrentUser = Depends(get_current_user),
     db: Session = Depends(get_db),

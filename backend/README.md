@@ -45,6 +45,11 @@ source .venv/bin/activate
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+요청 횟수 제한(rate limit)은 IP 기준이다(전역 120/분, 회원가입 5/분, 장소 검색 30/분).
+프록시/로드밸런서 뒤에 배포하면 모든 요청이 프록시 IP 로 보여 사용자가 한도를 공유하므로,
+`--proxy-headers --forwarded-allow-ips=<프록시 IP>` 옵션으로 실행해야 한다.
+로컬에서 끄려면 `.env` 에 `RATE_LIMIT_ENABLED=false` 를 둔다.
+
 서버 실행 후 다음 주소에서 상태 및 API 문서를 확인할 수 있습니다.
 
 * Health Check: `http://localhost:8000/health`

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # 없어도 서버는 뜨고, 실제 호출 시점에 EXTERNAL_API_UNAVAILABLE 로 방어한다.
     KAKAO_REST_API_KEY: str = ""
     ROUTE_CACHE_TTL_HOURS: int = 24
+    # 요청 횟수 제한(IP 기준) 스위치. 테스트에서만 끈다.
+    RATE_LIMIT_ENABLED: bool = True
     FRONTEND_PUBLIC_ORIGIN: str = "http://localhost:5173"
     CONCENTRATION_API_KEY: str = ""
     TOUR_API_KEY: str = ""

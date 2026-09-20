@@ -78,6 +78,7 @@ export default function ForgotPassword() {
               placeholder="이메일"
               type="email"
               required
+              maxLength={254}
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}

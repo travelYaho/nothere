@@ -1,9 +1,10 @@
 """STEP3 장소 검색/추가/삭제/순서변경/방문시간수정 API 의 요청/응답 스키마를 정의한다."""
 import re
 from datetime import datetime, time
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import field_validator
+from pydantic import StringConstraints, field_validator
 
 from app.schemas.common import APIModel
 
@@ -12,6 +13,11 @@ from app.schemas.common import APIModel
 # 강제하므로 이 휴리스틱이 필요 없지만, 여기서는 그 UI를 거치지 않은 직접
 # API 호출까지 막기 위한 최소한의 방어선으로 유지한다.
 _ADDRESS_MIN_SEGMENTS = 3
+
+# 직접 입력 장소 필드 길이 상한. 프론트 입력 제한과 맞춘다. 앞뒤 공백을 먼저 제거한 뒤
+# 길이를 재므로 공백만 보낸 값은 min_length 에서 걸린다.
+PlaceName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+PlaceAddress = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
 
 def _is_complete_address(value: str) -> bool:
@@ -59,8 +65,8 @@ class CustomPlaceAddRequest(APIModel):
     STEP3 완료 직후 "방문 목적" 화면에서 같은 경험태그 목록을 다시 물어봐서
     사용자 입장에선 같은 선택을 두 번 하는 것으로 보였다(TripPurposeForm.tsx).
     """
-    name: str
-    address: str
+    name: PlaceName
+    address: PlaceAddress
     visit_time: time | None = None
 
     @field_validator("address")
