@@ -2,7 +2,12 @@
 
 지연 원인을 추측이 아니라 수치로 좁히기 위한 측정용이다. 남기는 것은 라우트 경로(템플릿),
 상태코드, 시간, DB 왕복 수, 외부 호출 이름별 횟수·시간뿐이고 SQL·파라미터·쿼리스트링·토큰은
-남기지 않는다.
+남기지 않는다. 라우트에 매칭되지 않은 요청(404, CORS 사전 요청 등)은 실제 경로 대신 고정
+문자열을 남긴다.
+
+값의 범위: db_calls는 성공한 SQL 실행 횟수, db는 그 실행 시간의 합이고 커넥션 대기·커밋·결과
+읽기는 포함하지 않는다. ext는 계측한 HTTP 호출(httpx.get)의 시간이고 응답 파싱은 제외한다.
+other는 total에서 db와 ext를 뺀 잔여 시간이라 원인을 하나로 단정할 수 없다.
 """
 from __future__ import annotations
 
@@ -27,6 +32,7 @@ class RequestStats:
 
 _current: ContextVar[RequestStats | None] = ContextVar("request_stats", default=None)
 _listeners_installed = False
+_UNMATCHED_ROUTE = "<unmatched>"
 
 
 @contextmanager
@@ -82,6 +88,7 @@ class PerfLogMiddleware:
         token = _current.set(stats)
         started = time.monotonic()
         status: int | None = None
+        unhandled = False
 
         async def send_wrapper(message) -> None:
             nonlocal status
@@ -91,17 +98,22 @@ class PerfLogMiddleware:
 
         try:
             await self.app(scope, receive, send_wrapper)
+        except Exception:
+            unhandled = True
+            raise
         finally:
             _current.reset(token)
             total = time.monotonic() - started
             external_seconds = sum(sum(durations) for durations in stats.external.values())
-            route = getattr(scope.get("route"), "path", None) or scope["path"]
+            # 바깥 오류 처리 계층이 500을 만드는 예외는 이 미들웨어가 응답 시작을 보지 못한다.
+            result = status if status is not None else ("unhandled_exception" if unhandled else "no_response")
+            route = getattr(scope.get("route"), "path", None) or _UNMATCHED_ROUTE
             # other = DB 커넥션 수립·핑, 앱 처리 등 위 항목에 잡히지 않는 시간.
             logger.info(
                 "perf %s %s status=%s total=%.2fs db_calls=%d db=%.2fs ext=[%s] other=%.2fs",
                 scope["method"],
                 route,
-                status,
+                result,
                 total,
                 stats.db_calls,
                 stats.db_seconds,
