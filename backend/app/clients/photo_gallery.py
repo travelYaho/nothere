@@ -110,6 +110,23 @@ def pick_cover_image(city: str | None, district: str | None) -> str | None:
     return None
 
 
+def image_for_place(place: object | None) -> str | None:
+    """장소 썸네일: TourAPI firstimage → 관광사진 키워드. DB에 저장하지 않고 호출 시점에만 받는다."""
+    if place is None:
+        return None
+    from app.clients import tour_api
+
+    content_id = getattr(place, "tour_content_id", None)
+    if isinstance(content_id, str) and content_id:
+        url = tour_api.fetch_place_image(content_id)
+        if url:
+            return url
+    name = getattr(place, "name", None)
+    if isinstance(name, str) and name:
+        return first_image_for_place(name)
+    return None
+
+
 def first_image_for_place(place_name: str) -> str | None:
     """장소명 키워드 검색 첫 장. 매칭이 애매하면 없는 것과 같아서 1건만 본다."""
     for keyword in _place_keywords(place_name):

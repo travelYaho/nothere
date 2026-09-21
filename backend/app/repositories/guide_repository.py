@@ -7,9 +7,10 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.clients.photo_gallery import image_for_place
 from app.db.models.experience_tag import ExperienceTag
-from app.db.models.guide_entry import GuideEntry
 from app.db.models.guide_like import GuideLike
+from app.db.models.place import Place
 from app.db.models.profile import Profile
 from app.db.models.region import Region
 from app.db.models.share_link import ShareLink, ShareLinkVisibility
@@ -241,18 +242,15 @@ class GuideRepository:
         return nickname or ""
 
     def cover_image_url(self, trip_id: UUID) -> str | None:
-        """공개 가이드 카드·홈 추천 배너에 쓰는 대표 이미지."""
-        return (
-            self.db.query(GuideEntry.image_url)
-            .filter(
-                GuideEntry.trip_id == trip_id,
-                GuideEntry.is_public.is_(True),
-                GuideEntry.image_url.isnot(None),
-            )
-            .order_by(GuideEntry.display_order.asc().nulls_last(), GuideEntry.created_at.asc())
-            .limit(1)
-            .scalar()
+        """공개 가이드 카드·홈 추천 배너에 쓰는 대표 이미지. DB에 저장하지 않고 관광 API에서 바로 가져온다."""
+        place = (
+            self.db.query(Place)
+            .join(TripPlace, TripPlace.place_id == Place.id)
+            .filter(TripPlace.trip_id == trip_id)
+            .order_by(TripPlace.position.asc())
+            .first()
         )
+        return image_for_place(place)
 
     def count_likes(self, share_link_id: UUID) -> int:
         return (

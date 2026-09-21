@@ -584,23 +584,6 @@ class RecommendationRepository:
         self.db.flush()
         return entry
 
-    def cache_cover_image(self, trip_id: UUID, image_url: str) -> None:
-        """표지 사진을 트립 단위 entry 에 저장한다. 이미 있으면 덮지 않는다."""
-        entry = self.get_trip_memo_entry(trip_id)
-        if entry is None:
-            self.db.add(
-                GuideEntry(
-                    trip_id=trip_id,
-                    image_url=image_url,
-                    is_public=True,
-                    trip_place_id=None,
-                )
-            )
-        elif not entry.image_url:
-            entry.image_url = image_url
-            entry.is_public = True
-        self.db.flush()
-
     def log_interaction(
         self,
         *,

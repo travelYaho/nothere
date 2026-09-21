@@ -99,29 +99,7 @@ def test_get_home_includes_top_liked_public_guide_as_featured_guide():
     assert response.featured_guide.cover_image_url is None
 
 
-def test_get_home_featured_guide_uses_cached_cover_image():
-    service = HomeService(db=MagicMock())
-    service.trips = MagicMock()
-    service.trips.get_in_progress.return_value = None
-    service.trips.get_recent.return_value = []
-    service.trip_places = MagicMock()
-    service.trip_places.count_by_trips.return_value = {}
-    link = MagicMock(token="tok123")
-    trip = _fake_trip(title="대전 여행")
-    region = MagicMock()
-    region.name = "대전"
-    service.guides = MagicMock()
-    service.guides.get_top_public.return_value = (link, trip, region, 7)
-    service.guides.cover_image_url.return_value = "https://img.example/cover.jpg"
-
-    response = service.get_home(CurrentUser(id=uuid4(), email="t@example.com", nickname="t"))
-
-    assert response.featured_guide is not None
-    assert response.featured_guide.cover_image_url == "https://img.example/cover.jpg"
-    service.trip_places.first_place.assert_not_called()
-
-
-def test_get_home_featured_guide_falls_back_to_first_place_image(monkeypatch):
+def test_get_home_featured_guide_uses_first_place_image(monkeypatch):
     service = HomeService(db=MagicMock())
     service.trips = MagicMock()
     service.trips.get_in_progress.return_value = None
@@ -138,16 +116,17 @@ def test_get_home_featured_guide_falls_back_to_first_place_image(monkeypatch):
     region.name = "대전"
     service.guides = MagicMock()
     service.guides.get_top_public.return_value = (link, trip, region, 7)
-    service.guides.cover_image_url.return_value = None
     monkeypatch.setattr(
-        "app.services.home_service.tour_api.fetch_place_image",
-        lambda _content_id: "https://img.example/place.jpg",
+        "app.services.home_service.photo_gallery.image_for_place",
+        lambda _place: "https://img.example/place.jpg",
     )
 
     response = service.get_home(CurrentUser(id=uuid4(), email="t@example.com", nickname="t"))
 
     assert response.featured_guide is not None
     assert response.featured_guide.cover_image_url == "https://img.example/place.jpg"
+    service.guides.cover_image_url.assert_not_called()
+    service.trip_places.first_place.assert_called_once_with(trip.id)
 
 
 def test_get_home_featured_guide_is_none_without_public_guides():

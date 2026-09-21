@@ -115,3 +115,31 @@ def test_pick_cover_image_without_keyword_skips_network(monkeypatch):
     monkeypatch.setattr(photo_gallery, "search_image_urls", _fail)
 
     assert photo_gallery.pick_cover_image(None, None) is None
+
+
+def test_image_for_place_prefers_tour_api_firstimage(monkeypatch):
+    monkeypatch.setattr(
+        "app.clients.tour_api.fetch_place_image",
+        lambda content_id: "https://img.example/first.jpg" if content_id == "123" else None,
+    )
+
+    class Place:
+        tour_content_id = "123"
+        name = "경복궁"
+
+    assert photo_gallery.image_for_place(Place()) == "https://img.example/first.jpg"
+
+
+def test_image_for_place_falls_back_to_gallery_keyword(monkeypatch):
+    monkeypatch.setattr("app.clients.tour_api.fetch_place_image", lambda _content_id: None)
+    monkeypatch.setattr(photo_gallery, "first_image_for_place", lambda name: f"https://img.example/{name}.jpg")
+
+    class Place:
+        tour_content_id = None
+        name = "통인시장"
+
+    assert photo_gallery.image_for_place(Place()) == "https://img.example/통인시장.jpg"
+
+
+def test_image_for_place_returns_none_without_place():
+    assert photo_gallery.image_for_place(None) is None

@@ -1,9 +1,7 @@
 """가이드북 사용자 콘텐츠(guide_entry) ORM — Part3.
 
-`is_public` 은 share_link.visibility 와는 다른 층위의 공개 여부다 — 일정
-자체는 공개 갤러리에 노출되더라도, 그림일기처럼 개인 기록 성격이 강한
-콘텐츠는 작성자가 별도로 공개 동의한 것만(is_public=true) 갤러리 카드
-대표 이미지 등으로 사용한다.
+메모처럼 사용자가 직접 적은 텍스트를 일정에 붙이는 용도다.
+관광사진 URL은 여기에 저장하지 않고, 가이드북을 열 때 관광 API에서 바로 받는다.
 """
 from datetime import date, datetime
 from uuid import UUID, uuid4

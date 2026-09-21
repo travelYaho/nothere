@@ -81,7 +81,7 @@ class TripPlaceRepository:
         )
 
     def first_place(self, trip_id: UUID) -> Place | None:
-        """일정 첫 장소. 홈 추천 배너가 캐시된 표지가 없을 때 폴백 이미지를 고르는 데 쓴다."""
+        """일정 첫 장소. 홈 추천 배너 표지를 관광 API에서 고를 때 쓴다."""
         return (
             self.db.query(Place)
             .join(TripPlace, TripPlace.place_id == Place.id)
