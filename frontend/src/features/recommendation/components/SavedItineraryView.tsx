@@ -117,12 +117,6 @@ export function SavedItineraryView({
             </div>
           )}
 
-          <div className="pt-3">
-            <div className="flex h-20 w-full items-center justify-center rounded-2xl border-[0.667px] border-dashed border-[#D3DBE6] bg-surface-sunken">
-              <span className="text-[12px] font-medium leading-[18px] text-ink-ghost">MAP AREA</span>
-            </div>
-          </div>
-
           <p className="px-1 pt-5 text-[15px] font-extrabold leading-[22.5px] tracking-[-0.3px] text-ink">
             변경 기록
           </p>
@@ -168,9 +162,11 @@ export function SavedItineraryView({
             <button
               type="button"
               onClick={onMakeGuidebook}
-              className="inline-flex h-[54px] min-w-0 flex-1 items-center justify-center rounded-[var(--radius-field)] bg-primary px-3 text-[15px] font-extrabold tracking-[-0.16px] text-primary-foreground shadow-[var(--shadow-primary)] transition-[transform,filter,opacity] hover:brightness-[1.05] active:scale-[0.99]"
+              className="inline-flex h-[54px] min-w-0 flex-1 items-center justify-center rounded-[var(--radius-field)] bg-primary px-3 text-center text-[15px] font-extrabold leading-[19px] tracking-[-0.16px] text-primary-foreground shadow-[var(--shadow-primary)] transition-[transform,filter,opacity] hover:brightness-[1.05] active:scale-[0.99]"
             >
-              가이드북 만들기
+              가이드북
+              <br />
+              만들기
             </button>
           )}
           <Button

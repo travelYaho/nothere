@@ -217,12 +217,6 @@ export default function ConfirmTrip() {
               </div>
             )}
 
-            <div className="relative mt-3 flex h-[86px] w-full items-center justify-center rounded-2xl border-[0.667px] border-dashed border-[#D3DBE6] bg-[#EEF1F6]">
-              <span className="text-[12px] font-medium leading-[18px] text-ink-ghost">
-                MAP AREA — 최종 경로
-              </span>
-            </div>
-
             {places.length === 0 ? (
               <p className="py-10 text-center text-[13px] text-ink-muted">등록된 장소가 없어요.</p>
             ) : (

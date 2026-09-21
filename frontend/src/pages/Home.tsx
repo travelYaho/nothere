@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowRight, Bell, Heart, MapPin, Plus } from "@/components/common/icons"
+import { ArrowRight, Heart, MapPin, Plus } from "@/components/common/icons"
 import { Button, Spinner } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
 import { AlertDialog } from "@/components/feedback/modals"
@@ -78,7 +78,6 @@ export default function Home() {
               className={geo.state === "granted" ? "text-primary" : "text-ink-soft"}
             />
           </button>
-          <Bell size={20} className="text-ink-soft" />
         </div>
       </div>
 
