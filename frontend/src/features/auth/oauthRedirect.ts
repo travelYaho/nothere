@@ -1,8 +1,6 @@
 /** 카카오 OAuth 가 앱으로 돌아올 콜백 경로. */
 export const OAUTH_CALLBACK_PATH = "/auth/callback"
 
-const RECOVERY_PATH = "/reset-password"
-
 export function resolveOAuthRedirectUrl(
   envValue: string | undefined = import.meta.env.VITE_OAUTH_REDIRECT_URL,
   origin: string = window.location.origin,
@@ -22,7 +20,7 @@ export function resolveOAuthRedirectUrl(
 }
 
 export function shouldForwardOAuthCode(pathname: string, search: string): boolean {
-  if (pathname === OAUTH_CALLBACK_PATH || pathname === RECOVERY_PATH) return false
+  if (pathname === OAUTH_CALLBACK_PATH) return false
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
   return Boolean(params.get("code"))
 }

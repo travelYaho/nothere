@@ -101,7 +101,7 @@ export default function HomeGuest() {
         </div>
         <div className="mt-auto pt-6">
           <Button block onClick={() => navigate("/login")}>
-            로그인 / 회원가입
+            로그인
           </Button>
         </div>
       </div>

@@ -5,7 +5,7 @@
  *
  * "이동 X분"/"예상 이동 OO분" 처럼 장소 간 이동시간을 보여주는 부분은 구현하지
  * 않았다 — 그건 경로 계산(Part3 담당, STEP4~6)이 필요한 값이라 지금은 낼 수
- * 있는 실제 데이터가 없다. 지도 영역도 Figma 원본 주석 그대로 "준비 중" placeholder다.
+ * 있는 실제 데이터가 없다.
  */
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
@@ -367,9 +367,6 @@ export function TripPlacesForm() {
           + 목록에 없는 장소 직접 추가
         </button>
 
-        <div className="mt-3 flex h-[74px] items-center justify-center rounded-[var(--radius-field)] border-[0.667px] border-dashed border-line bg-surface-sunken">
-          <p className="text-[12px] font-medium text-ink-ghost">지도 영역 (준비 중)</p>
-        </div>
         <div className="h-3" />
       </div>
 

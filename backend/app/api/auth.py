@@ -1,6 +1,6 @@
 """인증 관련 HTTP 엔드포인트를 정의한다.
 
-회원가입(signup)과 OAuth 직후 profile 보정만 FastAPI 가 처리한다.
+소셜(카카오) 로그인만 지원한다. OAuth 직후 profile 보정만 FastAPI 가 처리하고,
 로그인/로그아웃/토큰 갱신은 프론트엔드가 Supabase Auth 를 직접 사용한다.
 카카오 연결 해제 웹훅은 카카오가 서버로 직접 POST/GET 한다.
 """
@@ -12,10 +12,8 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError, ErrorCode
-from app.core.rate_limit import SIGNUP_LIMIT, limiter
 from app.core.security import AuthUser, get_auth_user
 from app.db.session import get_db
-from app.schemas.auth import SignupRequest, SignupResponse
 from app.schemas.common import ApiResponse
 from app.schemas.user import UserResponse
 from app.services.auth_service import AuthService
@@ -24,21 +22,6 @@ from app.services.kakao_webhook_service import KakaoWebhookService, kakao_admin_
 logger = logging.getLogger("yeogimalgo")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-@router.post(
-    "/signup",
-    response_model=ApiResponse[SignupResponse],
-    response_model_exclude_none=True,
-)
-@limiter.limit(SIGNUP_LIMIT)
-def signup(
-    request: Request,
-    payload: SignupRequest,
-    db: Session = Depends(get_db),
-) -> ApiResponse[SignupResponse]:
-    """이메일·비밀번호 회원가입 후 서비스용 profile 생성을 연결한다."""
-    return ApiResponse(data=AuthService(db).signup(payload))
 
 
 @router.post("/ensure-profile", response_model=ApiResponse[UserResponse])

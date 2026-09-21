@@ -112,15 +112,3 @@ def test_missing_auth_token_returns_error_envelope(client):
     assert res.status_code == 401
     body = res.json()
     assert body["error"]["code"] == ErrorCode.AUTH_TOKEN_MISSING
-
-
-def test_signup_validation_error_returns_error_envelope(client):
-    res = client.post(
-        "/api/auth/signup",
-        json={"email": "not-an-email", "password": "123", "nickname": ""},
-    )
-
-    assert res.status_code == 422
-    body = res.json()
-    assert "error" in body
-    assert body["error"]["code"] == ErrorCode.VALIDATION_ERROR
