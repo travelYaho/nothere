@@ -214,9 +214,6 @@ export default function Login() {
               className="block h-auto w-full"
             />
           </button>
-          <Button variant="ghost" block>
-            소셜 B로 계속하기
-          </Button>
         </div>
       </div>
 
