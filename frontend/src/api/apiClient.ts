@@ -8,7 +8,7 @@
  * apiClient.get/post/patch/put/delete 인터페이스만 알면 되게 분리했다.
  */
 import { API_BASE_URL } from "@/lib/apiBaseUrl"
-import { getAccessToken } from "@/store/sessionStore"
+import { clearInvalidSession, getAccessToken, refreshAccessToken } from "@/store/sessionStore"
 import { ApiError, NetworkError, type ApiErrorBody, type ApiSuccessBody } from "@/types/api"
 
 const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api` : "/api"
@@ -34,17 +34,18 @@ function buildUrl(path: string, params?: QueryParams): string {
   return url.toString()
 }
 
-async function request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
-  const url = buildUrl(path, options.params)
-  const token = await getAccessToken()
-
+async function send(
+  method: string,
+  url: string,
+  token: string | null,
+  options: RequestOptions,
+): Promise<Response> {
   const headers: Record<string, string> = { Accept: "application/json" }
   if (token) headers.Authorization = `Bearer ${token}`
   if (options.body !== undefined) headers["Content-Type"] = "application/json"
 
-  let response: Response
   try {
-    response = await fetch(url, {
+    return await fetch(url, {
       method,
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -52,6 +53,21 @@ async function request<T>(method: string, path: string, options: RequestOptions 
     })
   } catch (cause) {
     throw new NetworkError(cause)
+  }
+}
+
+async function request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
+  const url = buildUrl(path, options.params)
+  const token = await getAccessToken()
+
+  let response = await send(method, url, token, options)
+
+  // 토큰을 보냈는데 401이면 세션을 한 번 갱신해 재시도하고, 그래도 안 되면 로컬 세션을 지워
+  // RequireAuth 가 로그인 화면으로 보내게 한다. 토큰 없이 받은 401은 세션이 원래 없는 것이라 그대로 둔다.
+  if (response.status === 401 && token) {
+    const refreshed = await refreshAccessToken()
+    if (refreshed) response = await send(method, url, refreshed, options)
+    if (response.status === 401) await clearInvalidSession()
   }
 
   if (response.status === 204) {

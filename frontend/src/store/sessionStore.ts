@@ -58,3 +58,28 @@ export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
   return data.session?.access_token ?? null
 }
+
+let refreshing: Promise<string | null> | null = null
+
+/**
+ * 서버가 토큰을 거부(401)했을 때 세션을 한 번 갱신해 새 토큰을 받는다. 실패하면 null.
+ * 동시에 여러 요청이 401을 받아도 갱신은 한 번만 하도록 진행 중인 요청을 공유한다.
+ */
+export function refreshAccessToken(): Promise<string | null> {
+  refreshing ??= supabase.auth
+    .refreshSession()
+    .then(({ data, error }) => (error ? null : (data.session?.access_token ?? null)))
+    .catch(() => null)
+    .finally(() => {
+      refreshing = null
+    })
+  return refreshing
+}
+
+/**
+ * 갱신해도 서버가 토큰을 거부하면 로컬 세션을 지운다. 세션이 null이 되면
+ * RequireAuth 가 /login 으로 보낸다. 토큰이 이미 무효라 서버 로그아웃 호출은 하지 않는다.
+ */
+export async function clearInvalidSession(): Promise<void> {
+  await supabase.auth.signOut({ scope: "local" }).catch(() => undefined)
+}
