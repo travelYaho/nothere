@@ -8,9 +8,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import Login from "./Login"
 
 vi.mock("@/features/auth", () => ({
-  signIn: vi.fn(),
-  signUp: vi.fn(),
-  establishSession: vi.fn(),
   signInWithKakao: vi.fn(),
   toKakaoLoginErrorMessage: (err: unknown) => {
     const raw = err instanceof Error ? err.message : String(err ?? "")

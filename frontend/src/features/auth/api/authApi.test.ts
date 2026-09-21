@@ -12,9 +12,7 @@ vi.mock("@/api/supabaseClient", () => ({
   supabase: {
     auth: {
       signInWithOAuth: vi.fn(),
-      signInWithPassword: vi.fn(),
       signOut: vi.fn(),
-      setSession: vi.fn(),
       exchangeCodeForSession,
     },
   },
@@ -23,7 +21,7 @@ vi.mock("@/api/apiClient", () => ({
   apiClient: { post: apiPost },
 }))
 
-import { completeOAuthCallback, completePasswordRecovery, toKakaoLoginErrorMessage } from "./authApi"
+import { completeOAuthCallback, toKakaoLoginErrorMessage } from "./authApi"
 
 describe("toKakaoLoginErrorMessage", () => {
   it("provider 미활성 JSON을 안내 문구로 바꾼다", () => {
@@ -73,20 +71,4 @@ describe("PKCE code 교환", () => {
     expect(apiPost).toHaveBeenCalledTimes(1)
   })
 
-  it("같은 재설정 링크는 code 교환을 한 번만 한다", async () => {
-    let resolveExchange: (value: { error: null }) => void = () => undefined
-    exchangeCodeForSession.mockReturnValue(
-      new Promise((resolve) => {
-        resolveExchange = resolve
-      }),
-    )
-
-    const first = completePasswordRecovery("?code=recov")
-    const second = completePasswordRecovery("?code=recov")
-    resolveExchange({ error: null })
-
-    await Promise.all([first, second])
-    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1)
-    expect(exchangeCodeForSession).toHaveBeenCalledWith("recov")
-  })
 })

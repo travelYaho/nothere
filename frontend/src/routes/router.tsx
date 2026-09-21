@@ -23,8 +23,6 @@ import SavedTrip from "@/pages/SavedTrip"
 import Guidebook from "@/pages/Guidebook"
 import SharedGuide from "@/pages/SharedGuide"
 import MyPage from "@/pages/MyPage"
-import ForgotPassword from "@/pages/ForgotPassword"
-import ResetPassword from "@/pages/ResetPassword"
 
 /**
  * 예전엔 STEP3 완료 후 이 경로에서 모든 장소의 방문 목적을 먼저 물어봤다(TripPurposeForm).
@@ -48,8 +46,6 @@ export const router = createBrowserRouter([
           { path: "/", element: <HomeGuest /> },
           { path: "/login", element: <Login /> },
           { path: "/auth/callback", element: <AuthCallback /> },
-          { path: "/forgot-password", element: <ForgotPassword /> },
-          { path: "/reset-password", element: <ResetPassword /> },
           { path: "/guide/:token", element: <SharedGuide /> },
           {
             element: <RequireAuth />,

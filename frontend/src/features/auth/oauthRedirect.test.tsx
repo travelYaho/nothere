@@ -34,9 +34,8 @@ describe("shouldForwardOAuthCode", () => {
     expect(shouldForwardOAuthCode("/login", "?code=abc")).toBe(true)
   })
 
-  it("콜백·비밀번호 재설정 경로는 다시 보내지 않는다", () => {
+  it("콜백 경로는 다시 보내지 않는다", () => {
     expect(shouldForwardOAuthCode("/auth/callback", "?code=abc")).toBe(false)
-    expect(shouldForwardOAuthCode("/reset-password", "?code=abc")).toBe(false)
     expect(shouldForwardOAuthCode("/", "")).toBe(false)
   })
 

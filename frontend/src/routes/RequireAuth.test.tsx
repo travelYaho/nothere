@@ -7,7 +7,6 @@ let sessionState = {
   session: null as { access_token: string } | null,
   user: null,
   isLoading: false,
-  isRecovery: false,
 }
 
 vi.mock("@/store/sessionStore", () => ({
@@ -30,14 +29,14 @@ function renderGuard(path = "/home") {
 
 describe("RequireAuth", () => {
   it("세션을 확인하는 동안 회원 화면을 그리지 않는다", () => {
-    sessionState = { session: null, user: null, isLoading: true, isRecovery: false }
+    sessionState = { session: null, user: null, isLoading: true }
     renderGuard()
     expect(screen.queryByText("member-home")).not.toBeInTheDocument()
     expect(screen.queryByText("login-screen")).not.toBeInTheDocument()
   })
 
   it("비회원은 로그인 화면으로 보낸다", () => {
-    sessionState = { session: null, user: null, isLoading: false, isRecovery: false }
+    sessionState = { session: null, user: null, isLoading: false }
     renderGuard()
     expect(screen.getByText("login-screen")).toBeInTheDocument()
     expect(screen.queryByText("member-home")).not.toBeInTheDocument()
@@ -48,7 +47,6 @@ describe("RequireAuth", () => {
       session: { access_token: "token" },
       user: null,
       isLoading: false,
-      isRecovery: false,
     }
     renderGuard()
     expect(screen.getByText("member-home")).toBeInTheDocument()
