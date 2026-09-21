@@ -1,15 +1,18 @@
 """가이드북 공개 갤러리/좋아요 관련 SQLAlchemy 접근을 모아 둔 repository 이다."""
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import UUID
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.clients.photo_gallery import image_for_place
 from app.db.models.experience_tag import ExperienceTag
-from app.db.models.guide_entry import GuideEntry
 from app.db.models.guide_like import GuideLike
+from app.db.models.place import Place
 from app.db.models.profile import Profile
 from app.db.models.region import Region
 from app.db.models.share_link import ShareLink, ShareLinkVisibility
@@ -257,7 +260,7 @@ class GuideRepository:
         return result
 
     def cover_image_url(self, trip_id: UUID) -> str | None:
-        """공개 가이드 카드·홈 추천 배너에 쓰는 대표 이미지."""
+        """공개 가이드 카드·홈 추천 배너에 쓰는 대표 이미지. DB에 저장하지 않고 관광 API에서 바로 가져온다."""
         return self._cover_image_urls([trip_id]).get(trip_id)
 
     def _author_nicknames(self, user_ids: list[UUID]) -> dict[UUID, str]:
@@ -265,24 +268,43 @@ class GuideRepository:
         return dict(rows)
 
     def _cover_image_urls(self, trip_ids: list[UUID]) -> dict[UUID, str]:
+        """트립별 첫 장소 사진을 관광 API에서 바로 가져온다. URL은 DB에 저장하지 않는다."""
+        if not trip_ids:
+            return {}
         rows = (
-            self.db.query(GuideEntry.trip_id, GuideEntry.image_url)
-            .filter(
-                GuideEntry.trip_id.in_(trip_ids),
-                GuideEntry.is_public.is_(True),
-                GuideEntry.image_url.isnot(None),
-            )
-            .order_by(
-                GuideEntry.trip_id,
-                GuideEntry.display_order.asc().nulls_last(),
-                GuideEntry.created_at.asc(),
-            )
+            self.db.query(TripPlace.trip_id, Place.tour_content_id, Place.name)
+            .join(Place, Place.id == TripPlace.place_id)
+            .filter(TripPlace.trip_id.in_(trip_ids))
+            .order_by(TripPlace.trip_id, TripPlace.position.asc())
             .all()
         )
-        result: dict[UUID, str] = {}
-        for trip_id, image_url in rows:
-            result.setdefault(trip_id, image_url)  # 트립 내 정렬상 첫 값이 커버
-        return result
+        first: dict[UUID, tuple[str | None, str | None]] = {}
+        for trip_id, content_id, name in rows:
+            first.setdefault(trip_id, (content_id, name))
+        if not first:
+            return {}
+
+        items = list(first.items())
+        executor = ThreadPoolExecutor(max_workers=min(len(items), 8))
+        try:
+            futures = {
+                trip_id: executor.submit(
+                    image_for_place,
+                    SimpleNamespace(tour_content_id=content_id, name=name),
+                )
+                for trip_id, (content_id, name) in items
+            }
+            wait(list(futures.values()), timeout=4.0)
+            result: dict[UUID, str] = {}
+            for trip_id, fut in futures.items():
+                if not (fut.done() and fut.exception() is None):
+                    continue
+                url = fut.result()
+                if isinstance(url, str) and url:
+                    result[trip_id] = url
+            return result
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
 
     def _like_counts(self, share_link_ids: list[UUID]) -> dict[UUID, int]:
         if not share_link_ids:

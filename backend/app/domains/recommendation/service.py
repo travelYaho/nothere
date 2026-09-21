@@ -56,6 +56,7 @@ def _fetch_stop_image(content_id, name) -> str | None:
         return photo_gallery.first_image_for_place(str(name))
     return None
 
+
 class RecommendationService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -827,11 +828,11 @@ class RecommendationService:
         ugc = [
             {
                 "content": e.content,
-                "imageUrl": e.image_url,
+                "imageUrl": None,
                 "displayOrder": e.display_order,
             }
             for e in entries
-            if e.content or e.image_url
+            if e.content
         ]
         memo_entry = next(
             (e for e in entries if getattr(e, "trip_place_id", None) is None),
@@ -848,15 +849,10 @@ class RecommendationService:
             [getattr(places_by_id.get(tp.place_id), "address", None) for tp in places_sorted]
         ) or district_from_text(region_name)
 
+        # 관광사진 URL은 DB에 저장하지 않는다 — 표지도 장소 썸네일·시·구 검색을 그때그때 받는다.
         cover_image_url = next((stop["imageUrl"] for stop in stops if stop.get("imageUrl")), None)
         if not cover_image_url:
-            cover_image_url = next((e.image_url for e in entries if e.image_url), None)
-        if not cover_image_url:
-            fetched_cover = photo_gallery.pick_cover_image(city_name, district_name)
-            if fetched_cover:
-                cover_image_url = fetched_cover
-                self.repo.cache_cover_image(trip.id, fetched_cover)
-                self.db.commit()
+            cover_image_url = photo_gallery.pick_cover_image(city_name, district_name)
 
         total_travel_min = sum(
             (stop["travelToNext"]["durationMin"] if stop["travelToNext"] else 0)

@@ -265,7 +265,7 @@ def test_enrich_candidates_auto_matches_when_place_exists_without_mapping(monkey
 
 def test_enrich_candidates_db_pool_candidate_respects_own_mapping(monkeypatch):
     """DB 후보 풀 항목(from_tour_api=False)은 candidate.id 자체가 place_id다 —
-    get_by_sources()가 아니라 get_by_id()로 조회되고, 그 place의 검수 결과를 따라야 한다."""
+    get_by_sources()가 아니라 get_by_ids()로 조회되고, 그 place의 검수 결과를 따라야 한다."""
     place_id = uuid4()
     existing_place = _place(place_id)
     approved_spot = _spot(name="DB후보장소")
@@ -283,7 +283,7 @@ def test_enrich_candidates_db_pool_candidate_respects_own_mapping(monkeypatch):
 
     place_repo = MagicMock()
     place_repo.get_by_sources.return_value = {}
-    place_repo.get_by_id.return_value = existing_place
+    place_repo.get_by_ids.return_value = {place_id: existing_place}
     analysis_repo = MagicMock()
     analysis_repo.get_mapping.return_value = mapping
     analysis_repo.get_spot.return_value = approved_spot
@@ -298,7 +298,42 @@ def test_enrich_candidates_db_pool_candidate_respects_own_mapping(monkeypatch):
     )
 
     assert result[0].congestion_level == candidate_pipeline.ConcentrationLevel.LOW
-    place_repo.get_by_id.assert_called_once_with(place_id)
+    place_repo.get_by_ids.assert_called_once_with([place_id])
+    place_repo.get_by_id.assert_not_called()
+    place_repo.get_by_sources.assert_called_once_with([])
+
+
+def test_enrich_candidates_db_pool_candidates_batch_get_by_ids(monkeypatch):
+    """DB fallback 후보 10개는 get_by_id() 10회가 아니라 get_by_ids() 1회로 묶인다."""
+    monkeypatch.setattr(
+        candidate_pipeline,
+        "get_spots_and_items_for_codes",
+        lambda repo, area_cd, signgu_cd, travel_date: ([], {}, False),
+    )
+
+    place_ids = [uuid4() for _ in range(10)]
+    places_by_id = {place_id: _place(place_id) for place_id in place_ids}
+    place_repo = MagicMock()
+    place_repo.get_by_sources.return_value = {}
+    place_repo.get_by_ids.return_value = places_by_id
+    analysis_repo = MagicMock()
+    analysis_repo.get_mapping.return_value = None
+
+    candidates = [
+        candidate_pipeline.CandidateSource(
+            id=str(place_id), name=f"DB후보{i}", latitude=37.5, longitude=127.0,
+            area_cd="11", signgu_cd="11110", from_tour_api=False,
+        )
+        for i, place_id in enumerate(place_ids)
+    ]
+
+    result = candidate_pipeline.enrich_candidates(
+        candidates, None, [], analysis_repo, place_repo, _no_tags_repo(), _EMPTY_TAG_CODE_BY_ID
+    )
+
+    assert len(result) == 10
+    place_repo.get_by_ids.assert_called_once_with(place_ids)
+    place_repo.get_by_id.assert_not_called()
     place_repo.get_by_sources.assert_called_once_with([])
 
 
