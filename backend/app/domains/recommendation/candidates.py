@@ -357,18 +357,20 @@ def enrich_candidates(
     STEP4까지 포함해 같이 정한다 — 과소 확신이 과대 확신보다 안전하다고 판단해 여기서는
     보수적인 쪽을 택한다.
     """
-    # 기존 place 일괄 조회 — TourAPI 후보는 (source_type, tour_content_id)로, DB 후보 풀
-    # 항목은 candidate.id 자체가 이미 place_id라 별도 조회가 필요 없다. 후보마다
-    # get_by_source()를 부르면 후보 수만큼 쿼리가 나가므로 일괄 조회로 묶는다.
+    # 기존 place 일괄 조회 — TourAPI 후보는 (source_type, tour_content_id)로,
+    # get_by_source()를 후보마다 부르면 그만큼 쿼리가 나가므로 IN 절로 묶는다.
+    # DB 후보 풀 항목은 candidate.id 자체가 place_id라 get_by_ids()로 한 번에 읽는다.
     existing_by_source = place_repo.get_by_sources(
         [("tour_api", c.id) for c in candidates if c.from_tour_api]
     )
+    fallback_ids = [UUID(c.id) for c in candidates if not c.from_tour_api]
+    existing_by_id = place_repo.get_by_ids(fallback_ids)
     # 후보별 existing place를 먼저 전부 확정해야 place_experience_tag도 한 번에 조회할 수
     # 있다 — 아래 본 루프에서 다시 조회하지 않고 이 결과를 그대로 쓴다.
     existing_places: list = [
         existing_by_source.get(("tour_api", c.id))
         if c.from_tour_api
-        else place_repo.get_by_id(UUID(c.id))
+        else existing_by_id.get(UUID(c.id))
         for c in candidates
     ]
     tags_by_place = recommendation_repo.list_experience_tags_for_places(
