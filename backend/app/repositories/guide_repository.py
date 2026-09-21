@@ -145,10 +145,7 @@ class GuideRepository:
             query = query.order_by(like_count_subq.desc(), ShareLink.created_at.desc())
 
         rows = query.offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).all()
-        cards = [
-            self._build_card(share_link, trip, region, viewer_id=viewer_id)
-            for share_link, trip, region in rows
-        ]
+        cards = self._build_cards(rows, viewer_id=viewer_id)
         return cards, total_count
 
     def list_owned(self, *, owner_id: UUID, page: int) -> tuple[list[GuideCard], int]:
@@ -190,69 +187,123 @@ class GuideRepository:
             .limit(PAGE_SIZE)
             .all()
         )
-        cards = [
-            self._build_card(share_link, trip, region, viewer_id=owner_id)
-            for trip, region, share_link in rows
-        ]
+        cards = self._build_cards(
+            [(share_link, trip, region) for trip, region, share_link in rows],
+            viewer_id=owner_id,
+        )
         return cards, total_count
 
-    def _build_card(
-        self, share_link: ShareLink | None, trip: Trip, region: Region, *, viewer_id: UUID
-    ) -> GuideCard:
-        return GuideCard(
-            trip_id=trip.id,
-            token=share_link.token if share_link else None,
-            title=trip.title,
-            region_name=region.name,
-            place_count=self._place_count(trip.id),
-            tag_names=self._top_tag_names(trip.id),
-            author_nickname=self._author_nickname(trip.user_id),
-            cover_image_url=self.cover_image_url(trip.id),
-            like_count=self.count_likes(share_link.id) if share_link else 0,
-            is_liked_by_me=self.is_liked(share_link.id, viewer_id) if share_link else False,
-        )
+    def _build_cards(
+        self,
+        rows: list[tuple[ShareLink | None, Trip, Region]],
+        *,
+        viewer_id: UUID,
+    ) -> list[GuideCard]:
+        """카드 목록을 조립한다. 카드마다 장소 수/태그/작성자/커버/좋아요를 따로 조회하면
+        페이지당 (카드 수 × 6) 번 DB 왕복이 나서(원격 DB라 수 초), 항목별로 IN 절 한 번씩
+        모아 조회한 뒤 메모리에서 붙인다 — 카드 수와 무관하게 쿼리 수가 고정된다.
+        """
+        if not rows:
+            return []
+        trip_ids = [trip.id for _, trip, _ in rows]
+        user_ids = list({trip.user_id for _, trip, _ in rows})
+        link_ids = [link.id for link, _, _ in rows if link is not None]
 
-    def _place_count(self, trip_id: UUID) -> int:
-        return (
-            self.db.query(func.count(TripPlace.id))
-            .filter(TripPlace.trip_id == trip_id)
-            .scalar()
-            or 0
-        )
+        place_counts = self._place_counts(trip_ids)
+        tag_names = self._top_tag_names_map(trip_ids)
+        nicknames = self._author_nicknames(user_ids)
+        covers = self._cover_image_urls(trip_ids)
+        like_counts = self._like_counts(link_ids)
+        liked = self._liked_link_ids(link_ids, viewer_id)
 
-    def _top_tag_names(self, trip_id: UUID) -> list[str]:
-        rows = (
-            self.db.query(ExperienceTag.name)
-            .join(
-                TripPreferredExperience,
-                TripPreferredExperience.experience_tag_id == ExperienceTag.id,
+        return [
+            GuideCard(
+                trip_id=trip.id,
+                token=link.token if link else None,
+                title=trip.title,
+                region_name=region.name,
+                place_count=place_counts.get(trip.id, 0),
+                tag_names=tag_names.get(trip.id, []),
+                author_nickname=nicknames.get(trip.user_id) or "",
+                cover_image_url=covers.get(trip.id),
+                like_count=like_counts.get(link.id, 0) if link else 0,
+                is_liked_by_me=link.id in liked if link else False,
             )
-            .filter(TripPreferredExperience.trip_id == trip_id)
-            .order_by(TripPreferredExperience.weight.desc())
-            .limit(_CARD_TAG_LIMIT)
+            for link, trip, region in rows
+        ]
+
+    def _place_counts(self, trip_ids: list[UUID]) -> dict[UUID, int]:
+        rows = (
+            self.db.query(TripPlace.trip_id, func.count(TripPlace.id))
+            .filter(TripPlace.trip_id.in_(trip_ids))
+            .group_by(TripPlace.trip_id)
             .all()
         )
-        return [name for (name,) in rows]
+        return dict(rows)
 
-    def _author_nickname(self, user_id: UUID) -> str:
-        nickname = (
-            self.db.query(Profile.nickname).filter(Profile.id == user_id).scalar()
+    def _top_tag_names_map(self, trip_ids: list[UUID]) -> dict[UUID, list[str]]:
+        rows = (
+            self.db.query(TripPreferredExperience.trip_id, ExperienceTag.name)
+            .join(ExperienceTag, TripPreferredExperience.experience_tag_id == ExperienceTag.id)
+            .filter(TripPreferredExperience.trip_id.in_(trip_ids))
+            .order_by(TripPreferredExperience.trip_id, TripPreferredExperience.weight.desc())
+            .all()
         )
-        return nickname or ""
+        result: dict[UUID, list[str]] = {}
+        for trip_id, name in rows:
+            names = result.setdefault(trip_id, [])
+            if len(names) < _CARD_TAG_LIMIT:
+                names.append(name)
+        return result
 
     def cover_image_url(self, trip_id: UUID) -> str | None:
         """공개 가이드 카드·홈 추천 배너에 쓰는 대표 이미지."""
-        return (
-            self.db.query(GuideEntry.image_url)
+        return self._cover_image_urls([trip_id]).get(trip_id)
+
+    def _author_nicknames(self, user_ids: list[UUID]) -> dict[UUID, str]:
+        rows = self.db.query(Profile.id, Profile.nickname).filter(Profile.id.in_(user_ids)).all()
+        return dict(rows)
+
+    def _cover_image_urls(self, trip_ids: list[UUID]) -> dict[UUID, str]:
+        rows = (
+            self.db.query(GuideEntry.trip_id, GuideEntry.image_url)
             .filter(
-                GuideEntry.trip_id == trip_id,
+                GuideEntry.trip_id.in_(trip_ids),
                 GuideEntry.is_public.is_(True),
                 GuideEntry.image_url.isnot(None),
             )
-            .order_by(GuideEntry.display_order.asc().nulls_last(), GuideEntry.created_at.asc())
-            .limit(1)
-            .scalar()
+            .order_by(
+                GuideEntry.trip_id,
+                GuideEntry.display_order.asc().nulls_last(),
+                GuideEntry.created_at.asc(),
+            )
+            .all()
         )
+        result: dict[UUID, str] = {}
+        for trip_id, image_url in rows:
+            result.setdefault(trip_id, image_url)  # 트립 내 정렬상 첫 값이 커버
+        return result
+
+    def _like_counts(self, share_link_ids: list[UUID]) -> dict[UUID, int]:
+        if not share_link_ids:
+            return {}
+        rows = (
+            self.db.query(GuideLike.share_link_id, func.count(GuideLike.id))
+            .filter(GuideLike.share_link_id.in_(share_link_ids))
+            .group_by(GuideLike.share_link_id)
+            .all()
+        )
+        return dict(rows)
+
+    def _liked_link_ids(self, share_link_ids: list[UUID], user_id: UUID) -> set[UUID]:
+        if not share_link_ids:
+            return set()
+        rows = (
+            self.db.query(GuideLike.share_link_id)
+            .filter(GuideLike.share_link_id.in_(share_link_ids), GuideLike.user_id == user_id)
+            .all()
+        )
+        return {share_link_id for (share_link_id,) in rows}
 
     def count_likes(self, share_link_id: UUID) -> int:
         return (

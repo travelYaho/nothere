@@ -111,8 +111,9 @@ class RouteService:
         d_lat, d_lng = dest
 
         result: RouteResult | None = None
-        # Kakao Directions 는 자동차 기준. walk/transit 도 거리 참고용으로 호출 후 필요 시 보정
-        if transport_mode in ("car", "public_transit", "walk"):
+        # Kakao Directions 는 자동차 기준. transit 은 거리 참고용으로 호출하고, walk 는 어차피
+        # 아래에서 직선거리로 재추정하므로 외부 호출(구간당 수백 ms) 없이 바로 fallback 한다.
+        if transport_mode in ("car", "public_transit"):
             result = self.client.directions(o_lng, o_lat, d_lng, d_lat)
 
         if result is None:
@@ -124,16 +125,6 @@ class RouteService:
             result = RouteResult(
                 distance_m=distance,
                 duration_seconds=duration,
-                provider="haversine",
-                is_estimated=True,
-                route_source="fallback_haversine",
-            )
-        elif transport_mode == "walk" and not result.is_estimated:
-            # 자동차 경로를 받았더라도 도보면 직선 기반 재추정
-            distance = int(haversine_m(o_lat, o_lng, d_lat, d_lng) * 1.3)
-            result = RouteResult(
-                distance_m=distance,
-                duration_seconds=estimate_duration_seconds(distance, "walk"),
                 provider="haversine",
                 is_estimated=True,
                 route_source="fallback_haversine",
