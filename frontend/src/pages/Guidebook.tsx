@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { GuidebookBook } from "@/features/guidebook"
+import { GUIDEBOOK_HOME_PATH } from "@/features/guidebook/GuideActionBar"
 import { useConfirmGuide } from "@/features/recommendation"
 import { markGuidebookMade } from "@/features/recommendation/utils/guidebookMade"
 
@@ -23,7 +24,7 @@ export default function Guidebook() {
   }, [tripId, guide])
 
   function handleHome() {
-    navigate("/home")
+    navigate(GUIDEBOOK_HOME_PATH)
   }
 
   const onShare = async () => {
@@ -71,7 +72,6 @@ export default function Guidebook() {
       <GuidebookBook
         guide={guide}
         onShare={() => void onShare()}
-        onHome={handleHome}
         onSaveMemo={saveMemo}
         boast={
           <div className="border-t border-line-soft bg-white px-4 py-2 print:hidden">

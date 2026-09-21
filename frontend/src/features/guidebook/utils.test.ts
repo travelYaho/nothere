@@ -1,14 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { circledIndex, coverMetaLine, displayGuideTitle, guideKicker, shortPlaceLabel } from "./utils"
+import { coverMetaLine, displayGuideTitle, guideKicker, shortPlaceLabel } from "./utils"
 import type { GuideResponse } from "@/features/recommendation/types/part3"
 
 describe("guidebook utils", () => {
-  it("circledIndex uses unicode badges up to 20", () => {
-    expect(circledIndex(1)).toBe("①")
-    expect(circledIndex(4)).toBe("④")
-    expect(circledIndex(21)).toBe("21")
-  })
-
   it("guideKicker strips 구 and uppercases latin", () => {
     expect(guideKicker("종로구", "서울")).toBe("종로 GUIDE")
     expect(guideKicker("", "서울")).toBe("서울 GUIDE")

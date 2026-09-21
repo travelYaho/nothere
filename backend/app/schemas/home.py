@@ -30,6 +30,7 @@ class FeaturedGuideResponse(APIModel):
     title: str
     region_name: str
     like_count: int
+    cover_image_url: str | None = None
 
 
 class HomeResponse(APIModel):

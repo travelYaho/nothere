@@ -1,13 +1,6 @@
 import type { GuideResponse } from "@/features/recommendation/types/part3"
 import { formatDottedDate, formatDottedDateWithWeekday } from "@/utils/date"
 
-const CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
-
-export function circledIndex(index: number): string {
-  if (index >= 1 && index <= 20) return CIRCLED[index - 1] ?? String(index)
-  return String(index)
-}
-
 export function shortPlaceLabel(region: {
   cityName?: string | null
   districtName?: string | null

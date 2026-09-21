@@ -1,16 +1,20 @@
+import { useNavigate } from "react-router-dom"
 import { Share, Home, Doc } from "@/components/common/icons"
+
+/** 가이드북 홈 버튼은 항상 로그인 홈으로 간다. 공개 가이드(`/guide/:token`)에서도 게스트 홈으로 보내지 않는다. */
+export const GUIDEBOOK_HOME_PATH = "/home"
 
 export function GuideActionBar({
   onShare,
   onPrint,
-  onHome,
   shareBusy,
 }: {
   onShare: () => void
   onPrint: () => void
-  onHome: () => void
   shareBusy?: boolean
 }) {
+  const navigate = useNavigate()
+
   return (
     <div className="guidebook-actions border-t border-line-soft bg-white/95 px-4 py-3 print:hidden">
       <div className="flex items-center gap-2">
@@ -35,7 +39,7 @@ export function GuideActionBar({
         </button>
         <button
           type="button"
-          onClick={onHome}
+          onClick={() => navigate(GUIDEBOOK_HOME_PATH)}
           aria-label="홈"
           className="flex size-[52px] shrink-0 items-center justify-center rounded-[16px] border border-line-chip bg-white text-ink-soft"
         >

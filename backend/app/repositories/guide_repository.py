@@ -207,7 +207,7 @@ class GuideRepository:
             place_count=self._place_count(trip.id),
             tag_names=self._top_tag_names(trip.id),
             author_nickname=self._author_nickname(trip.user_id),
-            cover_image_url=self._cover_image_url(trip.id),
+            cover_image_url=self.cover_image_url(trip.id),
             like_count=self.count_likes(share_link.id) if share_link else 0,
             is_liked_by_me=self.is_liked(share_link.id, viewer_id) if share_link else False,
         )
@@ -240,7 +240,8 @@ class GuideRepository:
         )
         return nickname or ""
 
-    def _cover_image_url(self, trip_id: UUID) -> str | None:
+    def cover_image_url(self, trip_id: UUID) -> str | None:
+        """공개 가이드 카드·홈 추천 배너에 쓰는 대표 이미지."""
         return (
             self.db.query(GuideEntry.image_url)
             .filter(

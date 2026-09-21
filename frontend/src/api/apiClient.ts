@@ -7,11 +7,11 @@
  * 라이브러리(axios 등) 추가는 팀 합의 후 나중에 교체해도 되도록, 호출부는
  * apiClient.get/post/patch/put/delete 인터페이스만 알면 되게 분리했다.
  */
+import { API_BASE_URL } from "@/lib/apiBaseUrl"
 import { getAccessToken } from "@/store/sessionStore"
 import { ApiError, NetworkError, type ApiErrorBody, type ApiSuccessBody } from "@/types/api"
 
-// VITE_API_BASE_URL 은 "/api" 없는 원본 도메인이다(lib/api.ts 와 공유하는 컨벤션).
-const BASE_URL = `${import.meta.env.VITE_API_BASE_URL}/api`
+const BASE_URL = API_BASE_URL ? `${API_BASE_URL}/api` : "/api"
 
 type QueryParams = Record<string, string | number | boolean | undefined | null>
 
@@ -24,7 +24,8 @@ interface RequestOptions {
 function buildUrl(path: string, params?: QueryParams): string {
   const base = BASE_URL.replace(/\/+$/, "")
   const cleanPath = path.replace(/^\/+/, "")
-  const url = new URL(`${base}/${cleanPath}`)
+  const origin = typeof window === "undefined" ? "http://localhost" : window.location.origin
+  const url = new URL(`${base}/${cleanPath}`, origin)
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null) url.searchParams.set(key, String(value))

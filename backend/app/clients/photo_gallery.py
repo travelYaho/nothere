@@ -25,7 +25,7 @@ _PAREN_SUFFIX = re.compile(r"\([^)]*\)")
 
 
 def _gallery_key() -> str:
-    return unquote(settings.PHOTO_GALLERY_API_KEY or settings.TOUR_API_KEY or "")
+    return unquote(settings.TOUR_GALLERY_KEY or settings.TOUR_API_KEY or "")
 
 
 def search_image_urls(keyword: str, *, num_of_rows: int = 20) -> list[str]:

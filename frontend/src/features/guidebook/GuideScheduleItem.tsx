@@ -1,4 +1,3 @@
-import { circledIndex } from "./utils"
 import { formatVisitTime } from "@/features/trips/utils/placeOrder"
 import type { GuideStop } from "@/features/recommendation/types/part3"
 
@@ -20,7 +19,7 @@ export function GuideScheduleItem({
         />
       )}
       <div className="relative z-[1] flex size-7 shrink-0 items-center justify-center rounded-[14px] bg-[#1f8a56] text-[11px] font-extrabold text-white">
-        {circledIndex(index)}
+        {index}
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[12px] font-semibold text-[#1f8a56]">

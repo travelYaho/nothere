@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./supabase";
+import { API_BASE_URL } from "./apiBaseUrl";
 
 export type HomeResponse = {
   user: { id: string; nickname: string };

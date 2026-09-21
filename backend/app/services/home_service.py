@@ -2,6 +2,7 @@
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.clients import photo_gallery, tour_api
 from app.core.exceptions import AppError, ErrorCode
 from app.repositories.guide_repository import GuideRepository
 from app.repositories.trip_place_repository import TripPlaceRepository
@@ -9,6 +10,21 @@ from app.repositories.trip_repository import TripRepository
 from app.schemas.home import FeaturedGuideResponse, HomeResponse, HomeUserResponse
 from app.schemas.user import CurrentUser
 from app.services.trip_summary import build_schedule_summary
+
+
+def _cover_from_place(place: object | None) -> str | None:
+    """가이드북 표지와 같이 첫 장소 사진(TourAPI → 관광사진)을 고른다."""
+    if place is None:
+        return None
+    content_id = getattr(place, "tour_content_id", None)
+    if isinstance(content_id, str) and content_id:
+        url = tour_api.fetch_place_image(content_id)
+        if url:
+            return url
+    name = getattr(place, "name", None)
+    if isinstance(name, str) and name:
+        return photo_gallery.first_image_for_place(name)
+    return None
 
 
 # HomeResponse 필드명(schedule_id/draft_schedule/recent_schedules)은 이미 프론트에
@@ -51,6 +67,7 @@ class HomeService:
                 title=trip.title,
                 region_name=region.name,
                 like_count=like_count,
+                cover_image_url=self._featured_cover_url(trip),
             )
 
         return HomeResponse(
@@ -63,3 +80,11 @@ class HomeService:
             recent_schedules=recent_schedules,
             featured_guide=featured_guide,
         )
+
+    def _featured_cover_url(self, trip: object) -> str | None:
+        """선정된 일정의 가이드북 표지. 캐시된 공개 이미지 → 첫 장소 사진 순이다."""
+        trip_id = getattr(trip, "id", None)
+        cached = self.guides.cover_image_url(trip_id)
+        if isinstance(cached, str) and cached:
+            return cached
+        return _cover_from_place(self.trip_places.first_place(trip_id))

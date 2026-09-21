@@ -7,11 +7,18 @@ import { useNavigate } from "react-router-dom"
 import { ArrowRight, Bell, Heart, MapPin, Plus } from "@/components/common/icons"
 import { Button, Spinner } from "@/components/common/primitives"
 import { BannerCard, ScheduleCard } from "@/components/common/cards"
+import { AlertDialog } from "@/components/feedback/modals"
 import { BottomTab, useBottomTabNav } from "@/components/layout/navigation"
 import { getHomeSummary } from "@/features/trips/api/tripsApi"
 import { formatScheduleMeta } from "@/features/trips/utils/scheduleMeta"
 import type { FeaturedGuide, ScheduleSummary } from "@/features/trips/types"
+import { useLocationPermission } from "@/features/users/hooks/useLocationPermission"
+import { useSession } from "@/store/sessionStore"
 import { ApiError } from "@/types/api"
+import brandMark from "@/assets/icons/logo.svg"
+
+const FALLBACK_BANNER =
+  "https://images.unsplash.com/photo-1543039625-14cbd3802e7d?w=680&h=420&fit=crop&auto=format"
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message
@@ -21,6 +28,8 @@ function toErrorMessage(err: unknown): string {
 export default function Home() {
   const navigate = useNavigate()
   const handleTabChange = useBottomTabNav()
+  const { isLoading: sessionLoading } = useSession()
+  const geo = useLocationPermission()
 
   const [draftSchedule, setDraftSchedule] = useState<ScheduleSummary | null>(null)
   const [recentSchedules, setRecentSchedules] = useState<ScheduleSummary[]>([])
@@ -29,7 +38,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (sessionLoading) return
     let cancelled = false
+    setLoading(true)
     getHomeSummary()
       .then((res) => {
         if (cancelled) return
@@ -46,21 +57,34 @@ export default function Home() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [sessionLoading])
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="relative flex flex-1 flex-col">
       <div className="flex items-center justify-between px-5 pb-3.5 pt-2">
-        <h1 className="text-[24px] font-extrabold tracking-[-0.63px] text-ink">여기말고</h1>
+        <h1 className="flex items-center gap-2 text-[24px] font-extrabold tracking-[-0.63px] text-ink">
+          <img src={brandMark} alt="" className="h-8 w-auto" />
+          여기말고
+        </h1>
         <div className="flex items-center gap-3.5">
-          <MapPin size={20} className="text-ink-soft" />
+          <button
+            type="button"
+            aria-label="위치 권한 설정"
+            onClick={geo.request}
+            className="p-0.5"
+          >
+            <MapPin
+              size={20}
+              className={geo.state === "granted" ? "text-primary" : "text-ink-soft"}
+            />
+          </button>
           <Bell size={20} className="text-ink-soft" />
         </div>
       </div>
 
       <div className="px-4 pb-3.5">
         <BannerCard
-          imageUrl="https://images.unsplash.com/photo-1543039625-14cbd3802e7d?w=680&h=420&fit=crop&auto=format"
+          imageUrl={featuredGuide?.coverImageUrl || FALLBACK_BANNER}
           title={
             <>
               새로운 장소에서
@@ -169,6 +193,22 @@ export default function Home() {
       </div>
 
       <BottomTab active="home" onChange={handleTabChange} />
+
+      <AlertDialog
+        open={Boolean(geo.message)}
+        title={
+          geo.state === "granted"
+            ? "위치 권한이 허용되었어요"
+            : geo.state === "denied"
+              ? "위치 권한을 허용해 주세요"
+              : "위치를 확인할 수 없어요"
+        }
+        description={geo.state === "granted" ? undefined : (geo.message ?? undefined)}
+        confirmLabel="확인"
+        hideCancel
+        onConfirm={geo.clearMessage}
+        onCancel={geo.clearMessage}
+      />
     </div>
   )
 }
