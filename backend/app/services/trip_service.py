@@ -189,7 +189,13 @@ class TripService:
 
     def get_trip_detail(self, current_user: CurrentUser, trip_id: UUID) -> TripDetailResponse:
         """GET /trips/{tripId} — STEP3 화면 진입/새로고침 시 기존 상태를 복원한다."""
-        trip = self._get_owned_trip_or_404(current_user, trip_id)
+        trip = self.trips.get_owned_detail(trip_id, current_user.id)
+        if trip is None:
+            raise AppError(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "여행 일정을 찾을 수 없습니다.",
+                status_code=404,
+            )
 
         # weight 내림차순 = 1/2/3순위 클릭 순서 복원(1.0/0.7/0.5).
         preferred_tag_ids = [

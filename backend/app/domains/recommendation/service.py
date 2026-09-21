@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import secrets
 import time
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -39,6 +40,21 @@ from app.utils.region_display import district_from_text, majority_district, shor
 
 logger = logging.getLogger(__name__)
 
+
+
+_STOP_IMAGE_MAX_WORKERS = 8
+_STOP_IMAGE_DEADLINE_SECONDS = 4.0
+
+
+def _fetch_stop_image(content_id, name) -> str | None:
+    """장소 썸네일: TourAPI firstimage → 관광사진 키워드. 없으면 None."""
+    if content_id:
+        url = tour_api.fetch_place_image(str(content_id))
+        if url:
+            return url
+    if name:
+        return photo_gallery.first_image_for_place(str(name))
+    return None
 
 class RecommendationService:
     def __init__(self, db: Session) -> None:
@@ -754,6 +770,10 @@ class RecommendationService:
         ]
         legs = self.routes.get_legs(leg_pairs, mode)
 
+        stop_images = self._resolve_stop_images(
+            [places_by_id.get(tp.place_id) for tp in places_sorted]
+        )
+
         stops = []
         for i, tp in enumerate(places_sorted):
             place = places_by_id.get(tp.place_id)
@@ -799,7 +819,7 @@ class RecommendationService:
                     "beforeLevel": before_level,
                     "afterLevel": after_level,
                     "travelToNext": travel_to_next,
-                    "imageUrl": self._resolve_stop_image(place),
+                    "imageUrl": stop_images[i],
                 }
             )
 
@@ -871,19 +891,37 @@ class RecommendationService:
             "shareToken": share_link.token if share_link is not None else None,
         }
 
-    def _resolve_stop_image(self, place) -> str | None:
-        """장소 썸네일: TourAPI firstimage → 관광사진 키워드. 없으면 None."""
-        if place is None:
-            return None
-        content_id = getattr(place, "tour_content_id", None)
-        if content_id:
-            url = tour_api.fetch_place_image(str(content_id))
-            if url:
-                return url
-        name = getattr(place, "name", None)
-        if name:
-            return photo_gallery.first_image_for_place(str(name))
-        return None
+    def _resolve_stop_images(self, places: list) -> list[str | None]:
+        """정류장 썸네일을 동시에 조회한다.
+
+        정류장마다 외부 API(TourAPI/관광사진)를 차례로 부르면 대기 시간이 정류장 수만큼
+        더해져서, 스레드로 한꺼번에 보내 가장 느린 호출 하나 정도만 기다리게 한다. 캐싱 없이
+        매번 실시간 호출한다(공모전 운영 정책). 썸네일은 부가 정보라 _STOP_IMAGE_DEADLINE_SECONDS
+        안에 못 받은 건 None 으로 두고 응답을 먼저 보낸다.
+        """
+        if not places:
+            return []
+        # ORM 객체를 다른 스레드에서 만지지 않도록 필요한 값만 먼저 꺼내 둔다.
+        keys = [
+            (getattr(place, "tour_content_id", None), getattr(place, "name", None))
+            if place is not None
+            else None
+            for place in places
+        ]
+        executor = ThreadPoolExecutor(max_workers=min(len(keys), _STOP_IMAGE_MAX_WORKERS))
+        try:
+            futures = [
+                executor.submit(_fetch_stop_image, key[0], key[1]) if key is not None else None
+                for key in keys
+            ]
+            wait([f for f in futures if f is not None], timeout=_STOP_IMAGE_DEADLINE_SECONDS)
+            return [
+                f.result() if f is not None and f.done() and f.exception() is None else None
+                for f in futures
+            ]
+        finally:
+            # 마감 시간을 넘긴 호출은 기다리지 않는다(백그라운드에서 끝나고 버려진다).
+            executor.shutdown(wait=False, cancel_futures=True)
 
     def update_guide_memo(self, trip_id: UUID, user: CurrentUser, content: str | None) -> dict:
         trip = self.repo.get_trip_owned(trip_id, user.id)
@@ -902,7 +940,14 @@ class RecommendationService:
         trip = self.repo.get_trip_owned(trip_id, user.id)
         if trip is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정을 찾을 수 없습니다.", 404)
-        return self.build_guide(trip)
+        return self._build_guide_and_persist_routes(trip)
+
+    def _build_guide_and_persist_routes(self, trip: Trip) -> dict:
+        """조회 API 라도 build_guide() 중 새로 구한 구간 거리(route_cache)는 커밋해 둔다 —
+        안 그러면 세션 종료 때 롤백돼 매 조회마다 캐시 미스로 경로를 다시 계산한다."""
+        guide = self.build_guide(trip)
+        self.db.commit()
+        return guide
 
     def create_share_link(
         self, trip_id: UUID, user: CurrentUser, visibility: str | None
@@ -952,4 +997,4 @@ class RecommendationService:
         trip = self.repo.get_trip(link.trip_id)
         if trip is None:
             raise AppError(ErrorCode.RESOURCE_NOT_FOUND, "일정을 찾을 수 없습니다.", 404)
-        return self.build_guide(trip)
+        return self._build_guide_and_persist_routes(trip)

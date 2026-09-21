@@ -55,7 +55,7 @@ def test_get_trip_detail_returns_conditions_and_places_in_order():
         _trip_place(position=1, place_name="경복궁", visit_time=time(10, 0), stay_minutes=90),
         _trip_place(position=2, place_name="통인시장", stay_minutes=60),
     ]
-    service.trips.get_owned_by_id.return_value = trip
+    service.trips.get_owned_detail.return_value = trip
 
     result = service.get_trip_detail(_current_user(), trip.id)
 
@@ -70,7 +70,7 @@ def test_get_trip_detail_returns_conditions_and_places_in_order():
 def test_get_trip_detail_unknown_trip_returns_404():
     service = TripService(db=MagicMock())
     service.trips = MagicMock()
-    service.trips.get_owned_by_id.return_value = None
+    service.trips.get_owned_detail.return_value = None
 
     with pytest.raises(AppError) as exc_info:
         service.get_trip_detail(_current_user(), uuid4())
@@ -91,7 +91,7 @@ def test_get_trip_detail_with_no_places_returns_empty_list():
     trip.region.name = "서울특별시"
     trip.preferred_experiences = []
     trip.trip_places = []
-    service.trips.get_owned_by_id.return_value = trip
+    service.trips.get_owned_detail.return_value = trip
 
     result = service.get_trip_detail(_current_user(), trip.id)
 
