@@ -663,13 +663,10 @@ def test_build_guide_includes_saved_itinerary_fields(monkeypatch):
         ]
     )
     monkeypatch.setattr(
-        "app.domains.recommendation.service.photo_gallery.image_for_place",
-        lambda _place: None,
-    )
-    monkeypatch.setattr(
         "app.domains.recommendation.service.photo_gallery.pick_cover_image",
         lambda _city, _district: None,
     )
+    svc._resolve_stop_images = MagicMock(return_value=[None])
 
     result = svc.build_guide(trip)
 
@@ -738,10 +735,7 @@ def test_build_guide_resolves_photos_and_memo(monkeypatch):
         ]
     )
     svc.repo.trip_tag_names = MagicMock(return_value=["한옥산책", "감성맛집"])
-    monkeypatch.setattr(
-        "app.domains.recommendation.service.photo_gallery.image_for_place",
-        lambda _place: "https://img.example/place.jpg",
-    )
+    svc._resolve_stop_images = MagicMock(return_value=["https://img.example/place.jpg"])
     monkeypatch.setattr(
         "app.domains.recommendation.service.photo_gallery.pick_cover_image",
         lambda city, district: "https://img.example/cover.jpg",
@@ -792,10 +786,7 @@ def test_build_guide_cover_falls_back_to_district_gallery(monkeypatch):
     svc.repo.get_active_share_link = MagicMock(return_value=None)
     svc.repo.guide_entries = MagicMock(return_value=[])
     svc.repo.trip_tag_names = MagicMock(return_value=[])
-    monkeypatch.setattr(
-        "app.domains.recommendation.service.photo_gallery.image_for_place",
-        lambda _place: None,
-    )
+    svc._resolve_stop_images = MagicMock(return_value=[None])
     monkeypatch.setattr(
         "app.domains.recommendation.service.photo_gallery.pick_cover_image",
         lambda city, district: "https://img.example/jongno.jpg"

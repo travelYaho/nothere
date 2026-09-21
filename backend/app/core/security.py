@@ -1,17 +1,23 @@
 """보호 API 에서 공통으로 쓰는 JWT 인증 의존성 모듈이다.
 
-Bearer 토큰을 Supabase Auth 로 검증한 뒤,
-서비스 프로필 테이블에서 현재 사용자 정보를 다시 조회한다.
-OAuth 첫 로그인처럼 profile 이 아직 없는 경우는 get_auth_user 만 쓴다.
+Bearer 토큰을 검증한 뒤, 서비스 프로필 테이블에서 현재 사용자 정보를 다시 조회한다.
+
+- get_current_user: 보호 API 전반. 토큰 서명을 Supabase JWKS 공개키로 로컬 검증한다.
+  매 요청 Supabase Auth(/auth/v1/user)를 네트워크로 부르면 요청마다 수백 ms 가 붙어서다.
+- get_auth_user: OAuth 첫 로그인(ensure-profile)처럼 identities 등 JWT 에 없는 정보가
+  필요한 곳에서만 쓴다. Supabase Auth 에 직접 물어본다.
 """
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 from uuid import UUID
 
+import jwt
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.exceptions import AppError, ErrorCode
 from app.core.supabase import get_anon_client
 from app.db.session import get_db
@@ -19,6 +25,10 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.user import CurrentUser
 
 http_bearer = HTTPBearer(auto_error=False)
+
+# 서버와 Supabase Auth 시계가 조금만 어긋나도 막 발급된 토큰의 iat 가 "미래"로 보여
+# 거부되지 않도록 허용 오차를 둔다.
+_JWT_LEEWAY_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -43,18 +53,80 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
-def get_auth_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
-) -> AuthUser:
-    """Authorization 헤더의 JWT 만 검사하고 Auth 사용자를 반환한다."""
+def _bearer_token(credentials: HTTPAuthorizationCredentials | None) -> str:
     if credentials is None or not credentials.credentials:
         raise AppError(
             ErrorCode.AUTH_TOKEN_MISSING,
             "인증 토큰이 없습니다.",
             status_code=401,
         )
+    return credentials.credentials
 
-    token = credentials.credentials
+
+def _invalid_token() -> AppError:
+    return AppError(
+        ErrorCode.AUTH_TOKEN_INVALID,
+        "인증 토큰이 유효하지 않습니다.",
+        status_code=401,
+    )
+
+
+@lru_cache
+def _jwks_client() -> jwt.PyJWKClient:
+    """Supabase 프로젝트의 JWT 서명 공개키(JWKS). 키 세트는 lifespan 동안 캐시된다."""
+    base = settings.SUPABASE_URL.rstrip("/")
+    return jwt.PyJWKClient(f"{base}/auth/v1/.well-known/jwks.json", lifespan=600, timeout=5)
+
+
+def _verify_locally(token: str) -> AuthUser | None:
+    """비대칭 키(ES256/RS256)로 서명된 토큰을 JWKS 로 검증한다.
+
+    레거시 HS256 토큰이거나 JWKS 조회/키 매칭이 안 되면 None 을 돌려 호출부가
+    Supabase Auth 네트워크 검증으로 넘어가게 한다.
+    """
+    try:
+        alg = jwt.get_unverified_header(token).get("alg")
+    except jwt.InvalidTokenError as exc:
+        raise _invalid_token() from exc
+    if alg not in ("ES256", "RS256"):
+        return None
+
+    try:
+        signing_key = _jwks_client().get_signing_key_from_jwt(token)
+    except jwt.PyJWKClientError:
+        return None
+
+    try:
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=[alg],
+            audience="authenticated",
+            leeway=_JWT_LEEWAY_SECONDS,
+            issuer=f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1",
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise AppError(
+            ErrorCode.AUTH_TOKEN_EXPIRED,
+            "인증 토큰이 만료되었습니다.",
+            status_code=401,
+        ) from exc
+    except jwt.InvalidTokenError as exc:
+        raise _invalid_token() from exc
+
+    try:
+        user_id = UUID(str(claims["sub"]))
+    except (KeyError, ValueError) as exc:
+        raise _invalid_token() from exc
+    return AuthUser(
+        id=user_id,
+        email=claims.get("email") or "",
+        user_metadata=_as_dict(claims.get("user_metadata")),
+    )
+
+
+def _verify_with_supabase(token: str) -> AuthUser:
+    """Supabase Auth 에 토큰 검증을 위임하고 identities 까지 포함한 사용자 정보를 받는다."""
     try:
         # publishable key 클라이언트 로 Supabase Auth 에 토큰 유효성을 위임한다.
         response = get_anon_client().auth.get_user(token)
@@ -66,19 +138,11 @@ def get_auth_user(
                 "인증 토큰이 만료되었습니다.",
                 status_code=401,
             ) from exc
-        raise AppError(
-            ErrorCode.AUTH_TOKEN_INVALID,
-            "인증 토큰이 유효하지 않습니다.",
-            status_code=401,
-        ) from exc
+        raise _invalid_token() from exc
 
     auth_user = response.user
     if auth_user is None or not auth_user.id:
-        raise AppError(
-            ErrorCode.AUTH_TOKEN_INVALID,
-            "인증 토큰이 유효하지 않습니다.",
-            status_code=401,
-        )
+        raise _invalid_token()
 
     return AuthUser(
         id=UUID(str(auth_user.id)),
@@ -88,8 +152,23 @@ def get_auth_user(
     )
 
 
+def get_auth_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
+) -> AuthUser:
+    """Supabase Auth 로 토큰을 검증하고 identities 를 포함한 Auth 사용자를 반환한다."""
+    return _verify_with_supabase(_bearer_token(credentials))
+
+
+def get_token_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
+) -> AuthUser:
+    """JWT 를 로컬에서 검증한다(불가하면 Supabase Auth 로 폴백). identities 는 비어 있다."""
+    token = _bearer_token(credentials)
+    return _verify_locally(token) or _verify_with_supabase(token)
+
+
 def get_current_user(
-    auth_user: AuthUser = Depends(get_auth_user),
+    auth_user: AuthUser = Depends(get_token_user),
     db: Session = Depends(get_db),
 ) -> CurrentUser:
     """JWT 사용자를 서비스 profile 과 연결해 현재 로그인 사용자 정보를 반환한다."""

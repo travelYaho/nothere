@@ -3,7 +3,7 @@ from datetime import date
 from uuid import UUID
 
 from sqlalchemy import desc, func, nulls_last, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.db.models.preference import TripPreferredExperience
 from app.db.models.trip import IN_PROGRESS_STATUSES, Trip
@@ -82,6 +82,21 @@ class TripRepository:
         """PATCH/DELETE 전, 해당 사용자 소유의 Trip 인지까지 함께 확인한다."""
         return (
             self.db.query(Trip)
+            .filter(Trip.id == trip_id, Trip.user_id == user_id)
+            .first()
+        )
+
+    def get_owned_detail(self, trip_id: UUID, user_id: UUID) -> Trip | None:
+        """GET /trips/{id} 용. 응답이 region/선호경험/장소(+장소명)를 모두 읽으므로 한 번에
+        가져온다 — 지연 로딩이면 장소 수만큼 place 조회가 따로 나간다(원격 DB라 건당 ~100ms+).
+        """
+        return (
+            self.db.query(Trip)
+            .options(
+                joinedload(Trip.region),
+                selectinload(Trip.preferred_experiences),
+                selectinload(Trip.trip_places).joinedload(TripPlace.place),
+            )
             .filter(Trip.id == trip_id, Trip.user_id == user_id)
             .first()
         )
@@ -187,12 +202,12 @@ class TripRepository:
 
     # 마이페이지 통계: (일정 생성을 시작한 전체 Trip 수, 확정까지 간 적 있는 Trip 수)
     def count_stats(self, user_id: UUID) -> tuple[int, int]:
-        total = (
-            self.db.query(func.count(Trip.id)).filter(Trip.user_id == user_id).scalar()
-        )
-        confirmed = (
-            self.db.query(func.count(Trip.id))
-            .filter(Trip.user_id == user_id, Trip.confirmed_at.isnot(None))
-            .scalar()
+        total, confirmed = (
+            self.db.query(
+                func.count(Trip.id),
+                func.count(Trip.id).filter(Trip.confirmed_at.isnot(None)),
+            )
+            .filter(Trip.user_id == user_id)
+            .one()
         )
         return total or 0, confirmed or 0

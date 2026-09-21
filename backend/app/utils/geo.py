@@ -29,7 +29,9 @@ def get_place_coords_map(db: Session, place_ids: list[UUID]) -> dict[str, tuple[
     get_place_coords()를 장소 수만큼 반복하면 그만큼 DB 왕복이 나서, WHERE id = ANY(:ids)로
     한 번에 모아 온다. 파라미터는 문자열 리스트로 넘기므로 psycopg2가 이를 text[]로
     바인딩한다 — uuid 컬럼과 비교 시 Postgres가 uuid = text 연산자를 못 찾아 실패하므로
-    ``::uuid[]``로 명시 캐스팅한다(코드 리뷰로 발견). 반환 키도 UUID가 아니라 str이다 —
+    ``CAST(:ids AS uuid[])``로 명시 캐스팅한다(코드 리뷰로 발견). ``:ids::uuid[]``처럼
+    쓰면 SQLAlchemy text()가 ``:ids``를 바인드 파라미터로 인식하지 못해 매번 문법 오류 →
+    rollback 이 나므로 반드시 CAST 형태로 쓴다. 반환 키도 UUID가 아니라 str이다 —
     드라이버가 원시 SQL의 id 컬럼을 uuid.UUID로 캐스팅해준다는 보장이 없어(register_uuid()
     여부에 좌우됨) id::text로 직접 캐스팅해 받는다. 호출부는 str(place_id)로 조회해야 한다.
     """
@@ -40,7 +42,7 @@ def get_place_coords_map(db: Session, place_ids: list[UUID]) -> dict[str, tuple[
             db.execute(
                 text(
                     "SELECT id::text AS id, ST_Y(location::geometry) AS lat, "
-                    "ST_X(location::geometry) AS lng FROM place WHERE id = ANY(:ids::uuid[])"
+                    "ST_X(location::geometry) AS lng FROM place WHERE id = ANY(CAST(:ids AS uuid[]))"
                 ),
                 {"ids": [str(pid) for pid in place_ids]},
             )
