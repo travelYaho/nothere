@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     SUPABASE_PUBLISHABLE_KEY: str
     SUPABASE_SECRET_KEY: str
     DATABASE_URL: str
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://nothere-3b9c.vercel.app"
     # 키 발급 전까지는 빈 문자열로 두고, TourAPI 클라이언트가 그 상태를
     # EXTERNAL_API_UNAVAILABLE(503) 로 방어적으로 처리한다. Supabase 키와
     # 달리 필수값 검증을 걸지 않아 키 없이도 서버는 정상 기동한다.
@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     ROUTE_CACHE_TTL_HOURS: int = 24
     # 요청 횟수 제한(IP 기준) 스위치. 테스트에서만 끈다.
     RATE_LIMIT_ENABLED: bool = True
-    FRONTEND_PUBLIC_ORIGIN: str = "http://localhost:5173"
+    FRONTEND_PUBLIC_ORIGIN: str = "https://nothere-3b9c.vercel.app"
     CONCENTRATION_API_KEY: str = ""
     # 관광사진(PhotoGalleryService1). KorService2 키와 활용신청이 다르다.
     # .env 의 PHOTO_GALLERY_API_KEY 도 그대로 읽는다.
