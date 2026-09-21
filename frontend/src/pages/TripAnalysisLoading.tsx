@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { FlowLoadingView } from "@/components/layout/FlowLoadingView"
+import { useTripRegionName } from "@/features/loadingTips/useTripRegionName"
 import { useRunAnalysis } from "@/features/recommendation"
 import { useSession } from "@/store/sessionStore"
 
@@ -30,6 +31,7 @@ export default function TripAnalysisLoading() {
   const { run, error, loading } = useRunAnalysis(tripId)
   const { isLoading: sessionLoading } = useSession()
   const [stepIndex, setStepIndex] = useState(0)
+  const regionName = useTripRegionName(tripId, !sessionLoading)
 
   useEffect(() => {
     if (!loading) return
@@ -82,6 +84,7 @@ export default function TripAnalysisLoading() {
       missingIdMessage={tripId ? undefined : "tripId 를 찾을 수 없습니다."}
       error={error}
       loading={loading}
+      tipRegionName={regionName}
       onRetry={start}
       onBack={() => navigate(-1)}
     />

@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import { FlowLoadingView } from "@/components/layout/FlowLoadingView"
+import { useTripRegionName } from "@/features/loadingTips/useTripRegionName"
 import { scoreRoutes, useAccessToken, useCreateRecommendationRequest } from "@/features/recommendation"
 import { useSession } from "@/store/sessionStore"
 
@@ -28,6 +29,7 @@ export default function AlternativeSearchLoading() {
   const { isLoading: sessionLoading } = useSession()
   const { create } = useCreateRecommendationRequest(tripPlaceId)
   const [stepIndex, setStepIndex] = useState(0)
+  const regionName = useTripRegionName(tripId, !sessionLoading)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // 후보 0건은 오류가 아니라 정상적인 검색 결과다 — 같은 태그로 "다시 시도"해도 결과가
@@ -124,6 +126,7 @@ export default function AlternativeSearchLoading() {
       noticeActionLabel="다른 목적 선택하기"
       onNoticeAction={goToPurpose}
       loading={loading}
+      tipRegionName={regionName}
       onRetry={start}
       onBack={goToPurpose}
     />
