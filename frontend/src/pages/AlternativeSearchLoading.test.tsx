@@ -39,16 +39,22 @@ vi.mock("@/features/recommendation", async (importOriginal) => {
   }
 })
 
+vi.mock("@/features/trips", () => ({ getTripDetail: vi.fn() }))
+
 import { scoreRoutes, useCreateRecommendationRequest } from "@/features/recommendation"
+import { getTripDetail } from "@/features/trips"
 
 const useCreateRecommendationRequestMock = vi.mocked(useCreateRecommendationRequest)
 const scoreRoutesMock = vi.mocked(scoreRoutes)
+const getTripDetailMock = vi.mocked(getTripDetail)
 
 beforeEach(() => {
   mockNavigate.mockReset()
   mockLocationState = { purposeTagIds: [1] }
   useCreateRecommendationRequestMock.mockReset()
   scoreRoutesMock.mockReset()
+  getTripDetailMock.mockReset()
+  getTripDetailMock.mockResolvedValue({ regionName: "부산광역시" } as never)
 })
 
 describe("AlternativeSearchLoading", () => {
@@ -166,5 +172,51 @@ describe("AlternativeSearchLoading", () => {
       replace: true,
       state: { purposeTagIds: [1, 2] },
     })
+  })
+})
+
+describe("AlternativeSearchLoading 대기 문구", () => {
+  it("대기 중에는 여행 문구를 보여주고, 일정의 지역을 한 번만 조회한다", async () => {
+    const create = vi.fn().mockReturnValue(new Promise(() => {}))
+    useCreateRecommendationRequestMock.mockReturnValue({ create, loading: false, error: null })
+
+    render(<AlternativeSearchLoading />)
+
+    await waitFor(() => expect(getTripDetailMock).toHaveBeenCalledWith("trip-1"))
+    expect(getTripDetailMock).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toMatch(/심심풀이 퀴즈|여행 팁|알고 계셨나요\?/)
+  })
+
+  it("지역 조회가 실패해도 검색은 그대로 진행되고 화면 이동도 정상이다", async () => {
+    getTripDetailMock.mockRejectedValue(new Error("401"))
+    const create = vi.fn().mockResolvedValue({
+      requestId: "req-3",
+      tripPlaceId: "tp-1",
+      searchMode: "default",
+      status: "success",
+      candidateCount: 2,
+      excludedCount: 0,
+    })
+    useCreateRecommendationRequestMock.mockReturnValue({ create, loading: false, error: null })
+    scoreRoutesMock.mockResolvedValue({ requestId: "req-3", scoredCount: 2, candidates: [] })
+
+    render(<AlternativeSearchLoading />)
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(
+        "/trips/trip-1/places/tp-1/compare?requestId=req-3",
+        { state: { scored: true }, replace: true },
+      )
+    })
+  })
+
+  it("오류로 끝나면 문구는 사라지고 오류 안내만 보인다", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("서버 오류"))
+    useCreateRecommendationRequestMock.mockReturnValue({ create, loading: false, error: null })
+
+    render(<AlternativeSearchLoading />)
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("서버 오류"))
+    expect(document.body.textContent).not.toMatch(/심심풀이 퀴즈|여행 팁|알고 계셨나요\?/)
   })
 })

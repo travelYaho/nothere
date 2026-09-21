@@ -4,6 +4,7 @@
 import { Search } from "@/components/common/icons"
 import { Button } from "@/components/common/primitives"
 import { FlowHeader } from "@/components/layout/navigation"
+import { LoadingTipCard } from "@/features/loadingTips/LoadingTipCard"
 
 export type FlowLoadingStep = {
   label: string
@@ -22,6 +23,7 @@ export function FlowLoadingView({
   noticeActionLabel = "돌아가기",
   onNoticeAction,
   loading,
+  tipRegionName,
   onRetry,
   onBack,
 }: {
@@ -40,6 +42,8 @@ export function FlowLoadingView({
   noticeActionLabel?: string
   onNoticeAction?: () => void
   loading: boolean
+  /** 대기 중에 보여줄 지역 문구용 지역명. 지역을 몰라도(null) 공통 문구는 보인다. */
+  tipRegionName?: string | null
   onRetry?: () => void
   onBack?: () => void
 }) {
@@ -80,6 +84,7 @@ export function FlowLoadingView({
             {stepIndex + 1} / {steps.length}
           </p>
         </div>
+        {loading && !missingIdMessage && <LoadingTipCard regionName={tipRegionName} />}
         {missingIdMessage && (
           <p className="pt-8 text-[12px] text-congestion-high">{missingIdMessage}</p>
         )}
